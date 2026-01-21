@@ -38,8 +38,10 @@ export const useSearch = ({ onError, onLoadSession }: UseSearchOptions) => {
         if (requestId !== latestRequestId.current || latestQuery.current !== trimmedQuery) return
         onError?.(error?.message || 'Search failed.')
       } finally {
-        if (requestId !== latestRequestId.current || latestQuery.current !== trimmedQuery) return
-        setSearchLoading(false)
+        const isStale = requestId !== latestRequestId.current || latestQuery.current !== trimmedQuery
+        if (!isStale) {
+          setSearchLoading(false)
+        }
       }
     }, 350)
 

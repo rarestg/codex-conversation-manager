@@ -1,3 +1,5 @@
+import { useEffect } from 'react'
+
 interface SettingsModalProps {
   open: boolean
   sessionsRoot: string
@@ -25,14 +27,32 @@ export const SettingsModal = ({
   onClearIndex,
   onClose,
 }: SettingsModalProps) => {
+  useEffect(() => {
+    if (!open) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [open, onClose])
+
   if (!open) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4">
-      <div className="w-full max-w-lg rounded-3xl border border-white/70 bg-white p-6 shadow-soft">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-modal-title"
+        className="w-full max-w-lg rounded-3xl border border-white/70 bg-white p-6 shadow-soft"
+      >
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-xl text-slate-900">Settings</h3>
+            <h3 id="settings-modal-title" className="text-xl text-slate-900">
+              Settings
+            </h3>
             <p className="text-xs text-slate-500">Manage session root and indexing.</p>
           </div>
           <button

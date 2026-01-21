@@ -54,6 +54,7 @@ export const useSessions = ({ onError }: UseSessionsOptions = {}) => {
   const reindex = useCallback(async () => {
     try {
       setReindexing(true)
+      onError?.(null)
       const summary = await reindexSessions()
       setIndexSummary(
         `Scanned ${summary.scanned} files · Updated ${summary.updated} · Removed ${summary.removed} · ${summary.messageCount} messages`,

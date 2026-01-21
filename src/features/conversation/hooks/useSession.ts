@@ -17,6 +17,15 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
   const [loadingSession, setLoadingSession] = useState(false)
   const [scrollToTurnId, setScrollToTurnId] = useState<number | null>(null)
 
+  const clearSession = useCallback(() => {
+    setActiveSession(null)
+    setTurns([])
+    setParseErrors([])
+    setSessionDetails({})
+    setScrollToTurnId(null)
+    setLoadingSession(false)
+  }, [])
+
   const findSessionById = useCallback(
     (sessionId: string) => {
       if (!sessionsTree) return null
@@ -77,5 +86,6 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
     sessionDetails,
     loadingSession,
     loadSession,
+    clearSession,
   }
 }

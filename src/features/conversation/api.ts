@@ -1,6 +1,6 @@
 import type { IndexSummary, SearchResult, SessionTree } from './types'
 
-const parseError = async (res: Response, fallback: string) => {
+const parseError = async (res: Response, fallback: string): Promise<never> => {
   let message = fallback
   try {
     const data = await res.json()
@@ -50,28 +50,28 @@ export const saveConfig = async (sessionsRoot: string) => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ sessionsRoot }),
   })
-  const data = await res.json()
   if (!res.ok) {
-    throw new Error(data?.error || 'Unable to update config.')
+    await parseError(res, 'Unable to update config.')
   }
+  const data = await res.json()
   return data as { value?: string; source?: string }
 }
 
 export const reindexSessions = async () => {
   const res = await fetch('/api/reindex', { method: 'POST' })
-  const data = await res.json()
   if (!res.ok) {
-    throw new Error(data?.error || 'Reindex failed.')
+    await parseError(res, 'Reindex failed.')
   }
+  const data = await res.json()
   return data.summary as IndexSummary
 }
 
 export const clearIndex = async () => {
   const res = await fetch('/api/clear-index', { method: 'POST' })
-  const data = await res.json()
   if (!res.ok) {
-    throw new Error(data?.error || 'Clear index failed.')
+    await parseError(res, 'Clear index failed.')
   }
+  const data = await res.json()
   return data.summary as IndexSummary
 }
 
