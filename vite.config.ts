@@ -30,6 +30,11 @@ let cachedRoot: { value: string; source: 'env' | 'config' | 'default' } | null =
 let db: Database.Database | null = null
 
 const toPosix = (value: string) => value.split(path.sep).join('/')
+const DEBUG_ENABLED = ['1', 'true', 'yes', 'on'].includes(String(process.env.CODEX_DEBUG).toLowerCase())
+const logDebug = (...args: unknown[]) => {
+  if (!DEBUG_ENABLED) return
+  console.log('[debug]', ...args)
+}
 
 const ensureDir = async (dir: string) => {
   await fsp.mkdir(dir, { recursive: true })
@@ -72,15 +77,8 @@ const setSessionsRoot = async (root: string) => {
   await writeConfigFile({ sessionsRoot: root })
 }
 
-const ensureDb = () => {
-  if (db) return db
-  if (!fs.existsSync(CONFIG_DIR)) {
-    fs.mkdirSync(CONFIG_DIR, { recursive: true })
-  }
-  db = new Database(DB_PATH)
-  db.pragma('journal_mode = WAL')
-  db.pragma('synchronous = NORMAL')
-  db.exec(`
+const initSchema = (database: Database.Database) => {
+  database.exec(`
     CREATE TABLE IF NOT EXISTS schema_version (
       version INTEGER NOT NULL
     );
@@ -88,6 +86,8 @@ const ensureDb = () => {
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       path TEXT UNIQUE NOT NULL,
+      session_id TEXT,
+      session_id_checked INTEGER,
       timestamp TEXT,
       cwd TEXT,
       git_branch TEXT,
@@ -120,20 +120,21 @@ const ensureDb = () => {
       role UNINDEXED,
       tokenize = 'porter'
     );
+    DROP TRIGGER IF EXISTS messages_ai;
+    DROP TRIGGER IF EXISTS messages_ad;
+    DROP TRIGGER IF EXISTS messages_au;
 
-    CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
+    CREATE TRIGGER messages_ai AFTER INSERT ON messages BEGIN
       INSERT INTO messages_fts(rowid, content, session_id, turn_id, role)
       VALUES (new.id, new.content, new.session_id, new.turn_id, new.role);
     END;
 
-    CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
-      INSERT INTO messages_fts(messages_fts, rowid, content, session_id, turn_id, role)
-      VALUES ('delete', old.id, old.content, old.session_id, old.turn_id, old.role);
+    CREATE TRIGGER messages_ad AFTER DELETE ON messages BEGIN
+      DELETE FROM messages_fts WHERE rowid = old.id;
     END;
 
-    CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages BEGIN
-      INSERT INTO messages_fts(messages_fts, rowid, content, session_id, turn_id, role)
-      VALUES ('delete', old.id, old.content, old.session_id, old.turn_id, old.role);
+    CREATE TRIGGER messages_au AFTER UPDATE ON messages BEGIN
+      DELETE FROM messages_fts WHERE rowid = old.id;
       INSERT INTO messages_fts(rowid, content, session_id, turn_id, role)
       VALUES (new.id, new.content, new.session_id, new.turn_id, new.role);
     END;
@@ -142,7 +143,46 @@ const ensureDb = () => {
     CREATE INDEX IF NOT EXISTS idx_messages_turn ON messages(session_id, turn_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_timestamp ON sessions(timestamp);
   `)
+  const sessionColumns = database.prepare('PRAGMA table_info(sessions)').all() as Array<{ name: string }>
+  const hasSessionId = sessionColumns.some((column) => column.name === 'session_id')
+  if (!hasSessionId) {
+    database.exec('ALTER TABLE sessions ADD COLUMN session_id TEXT')
+  }
+  const hasSessionIdChecked = sessionColumns.some((column) => column.name === 'session_id_checked')
+  if (!hasSessionIdChecked) {
+    database.exec('ALTER TABLE sessions ADD COLUMN session_id_checked INTEGER')
+    database.exec(
+      'UPDATE sessions SET session_id_checked = CASE WHEN session_id IS NOT NULL THEN 1 ELSE 0 END WHERE session_id_checked IS NULL',
+    )
+  }
+  database.exec('CREATE INDEX IF NOT EXISTS idx_sessions_session_id ON sessions(session_id)')
+}
+
+const ensureDb = () => {
+  if (db) return db
+  if (!fs.existsSync(CONFIG_DIR)) {
+    fs.mkdirSync(CONFIG_DIR, { recursive: true })
+  }
+  db = new Database(DB_PATH)
+  db.pragma('journal_mode = WAL')
+  db.pragma('synchronous = NORMAL')
+  db.pragma('trusted_schema = ON')
+  logDebug('db open', DB_PATH)
+  initSchema(db)
   return db
+}
+
+const clearDbSchema = (database: Database.Database) => {
+  database.exec(`
+    DROP TRIGGER IF EXISTS messages_ai;
+    DROP TRIGGER IF EXISTS messages_ad;
+    DROP TRIGGER IF EXISTS messages_au;
+    DROP TABLE IF EXISTS messages_fts;
+    DROP TABLE IF EXISTS messages;
+    DROP TABLE IF EXISTS files;
+    DROP TABLE IF EXISTS sessions;
+    DROP TABLE IF EXISTS schema_version;
+  `)
 }
 
 const scanSessionFiles = async (root: string): Promise<FileEntry[]> => {
@@ -207,6 +247,45 @@ const formatToolOutput = (item: any) => {
   return parts.join('\n')
 }
 
+const SESSION_ID_REGEX =
+  /\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/
+const SESSION_ID_PREFIX_REGEX = /\b(?:sess(?:ion)?[_-])[a-zA-Z0-9_-]{6,}\b/
+
+const normalizeSessionId = (value: string) => {
+  const trimmed = value.trim()
+  const uuidMatch = trimmed.match(SESSION_ID_REGEX)
+  if (uuidMatch) return uuidMatch[0]
+  const prefixMatch = trimmed.match(SESSION_ID_PREFIX_REGEX)
+  if (prefixMatch) return prefixMatch[0]
+  return trimmed
+}
+
+const extractSessionIdFromObject = (value: unknown, depth = 0): string | null => {
+  if (!value || typeof value !== 'object' || depth > 2) return null
+  const obj = value as Record<string, unknown>
+  const direct =
+    obj.session_id ??
+    obj.sessionId ??
+    obj.conversation_id ??
+    obj.conversationId ??
+    obj.resume_session_id ??
+    obj.resumeSessionId
+  if (typeof direct === 'string' && direct.trim()) return normalizeSessionId(direct)
+  if (typeof obj.session === 'string' && obj.session.trim()) return normalizeSessionId(obj.session)
+  if (obj.session && typeof obj.session === 'object') {
+    const nestedId = (obj.session as Record<string, unknown>).id
+    if (typeof nestedId === 'string' && nestedId.trim()) return normalizeSessionId(nestedId)
+    const nested = extractSessionIdFromObject(obj.session, depth + 1)
+    if (nested) return nested
+  }
+  const containers = [obj.session_info, obj.sessionInfo, obj.metadata, obj.context, obj.payload]
+  for (const container of containers) {
+    const nested = extractSessionIdFromObject(container, depth + 1)
+    if (nested) return nested
+  }
+  return null
+}
+
 const parseJsonlFile = async (filePath: string) => {
   const messages: Array<{
     turnId: number
@@ -215,8 +294,23 @@ const parseJsonlFile = async (filePath: string) => {
     content: string
   }> = []
   let firstUserMessage = ''
-  let sessionMeta: { cwd?: string; git_branch?: string; git_repo?: string; timestamp?: string } = {}
+  let sessionMeta: {
+    cwd?: string
+    git_branch?: string
+    git_repo?: string
+    timestamp?: string
+    session_id?: string
+  } = {}
   let currentTurn = 0
+  let sessionIdRank = 0
+
+  const updateSessionId = (value: unknown, rank: number) => {
+    const extracted = extractSessionIdFromObject(value)
+    if (extracted && rank >= sessionIdRank) {
+      sessionMeta.session_id = extracted
+      sessionIdRank = rank
+    }
+  }
 
   const stream = fs.createReadStream(filePath, { encoding: 'utf-8' })
   const rl = readline.createInterface({ input: stream, crlfDelay: Infinity })
@@ -232,7 +326,15 @@ const parseJsonlFile = async (filePath: string) => {
           git_branch: payload?.git_branch ?? payload?.gitBranch ?? sessionMeta.git_branch,
           git_repo: payload?.git_repo ?? payload?.gitRepo ?? sessionMeta.git_repo,
           timestamp: payload?.timestamp ?? entry.timestamp ?? sessionMeta.timestamp,
+          session_id: sessionMeta.session_id,
         }
+        updateSessionId(payload, 2)
+        continue
+      }
+
+      if (entry.type === 'turn_context') {
+        const payload = entry.payload ?? entry
+        updateSessionId(payload, 1)
         continue
       }
 
@@ -296,21 +398,80 @@ const parseJsonlFile = async (filePath: string) => {
   return { messages, firstUserMessage, sessionMeta }
 }
 
+const readSessionIdFromFile = async (filePath: string) => {
+  let sessionId: string | null = null
+  let sessionIdRank = 0
+
+  const updateSessionId = (value: unknown, rank: number) => {
+    const extracted = extractSessionIdFromObject(value)
+    if (extracted && rank >= sessionIdRank) {
+      sessionId = extracted
+      sessionIdRank = rank
+    }
+  }
+
+  const stream = fs.createReadStream(filePath, { encoding: 'utf-8' })
+  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity })
+
+  for await (const line of rl) {
+    if (!line.trim()) continue
+    try {
+      const entry = JSON.parse(line)
+      if (entry.type === 'session_meta') {
+        const payload = entry.payload ?? entry
+        updateSessionId(payload, 2)
+        if (sessionId && sessionIdRank >= 2) break
+        continue
+      }
+      if (entry.type === 'turn_context') {
+        const payload = entry.payload ?? entry
+        updateSessionId(payload, 1)
+      }
+    } catch (error) {
+      continue
+    }
+  }
+
+  rl.close()
+  stream.close()
+
+  return sessionId
+}
+
 const indexSessions = async (root: string) => {
+  const startedAt = Date.now()
   const database = ensureDb()
   const files = await scanSessionFiles(root)
-  const existingFiles = database.prepare('SELECT path, size, mtime FROM files').all() as Array<{
+  const existingFiles = database
+    .prepare(
+      `
+        SELECT files.path AS path,
+          files.size AS size,
+          files.mtime AS mtime,
+          sessions.session_id AS session_id,
+          sessions.session_id_checked AS session_id_checked,
+          sessions.id IS NOT NULL AS has_session
+        FROM files
+        LEFT JOIN sessions ON sessions.id = files.path
+      `,
+    )
+    .all() as Array<{
     path: string
     size: number
     mtime: number
+    session_id?: string | null
+    session_id_checked?: number | null
+    has_session?: number | null
   }>
   const existingMap = new Map(existingFiles.map((row) => [row.path, row]))
   const currentPaths = new Set(files.map((file) => file.relPath))
 
   const insertSession = database.prepare(`
-    INSERT INTO sessions (id, path, timestamp, cwd, git_branch, git_repo, first_user_message)
-    VALUES (@id, @path, @timestamp, @cwd, @git_branch, @git_repo, @first_user_message)
+    INSERT INTO sessions (id, path, session_id, session_id_checked, timestamp, cwd, git_branch, git_repo, first_user_message)
+    VALUES (@id, @path, @session_id, @session_id_checked, @timestamp, @cwd, @git_branch, @git_repo, @first_user_message)
     ON CONFLICT(id) DO UPDATE SET
+      session_id = excluded.session_id,
+      session_id_checked = excluded.session_id_checked,
       timestamp = excluded.timestamp,
       cwd = excluded.cwd,
       git_branch = excluded.git_branch,
@@ -332,51 +493,103 @@ const indexSessions = async (root: string) => {
   const insertMessage = database.prepare(
     'INSERT INTO messages (session_id, turn_id, role, timestamp, content) VALUES (?, ?, ?, ?, ?)',
   )
+  const updateSessionId = database.prepare(
+    'UPDATE sessions SET session_id = ?, session_id_checked = 1 WHERE id = ?',
+  )
+  const markSessionChecked = database.prepare(
+    'UPDATE sessions SET session_id_checked = 1 WHERE id = ?',
+  )
 
   let scanned = 0
   let updated = 0
   let removed = 0
   let messageCount = 0
+  let skipped = 0
+  let metadataChecked = 0
 
   const indexTransaction = database.transaction(
     (file: FileEntry, parsed: Awaited<ReturnType<typeof parseJsonlFile>>) => {
-      deleteMessages.run(file.relPath)
-
-      insertSession.run({
-        id: file.relPath,
-        path: file.relPath,
-        timestamp: parsed.sessionMeta.timestamp ?? null,
-        cwd: parsed.sessionMeta.cwd ?? null,
-        git_branch: parsed.sessionMeta.git_branch ?? null,
-        git_repo: parsed.sessionMeta.git_repo ?? null,
-        first_user_message: parsed.firstUserMessage || null,
-      })
-
-      for (const message of parsed.messages) {
-        insertMessage.run(
-          file.relPath,
-          message.turnId,
-          message.role,
-          message.timestamp ?? null,
-          message.content,
-        )
-        messageCount += 1
+      try {
+        deleteMessages.run(file.relPath)
+      } catch (error) {
+        console.error('[reindex] deleteMessages failed', file.relPath, error)
+        throw error
       }
 
-      insertFile.run(
-        file.relPath,
-        file.size,
-        Math.floor(file.mtimeMs),
-        null,
-        new Date().toISOString(),
-      )
+      try {
+        insertSession.run({
+          id: file.relPath,
+          path: file.relPath,
+          session_id: parsed.sessionMeta.session_id ?? null,
+          session_id_checked: 1,
+          timestamp: parsed.sessionMeta.timestamp ?? null,
+          cwd: parsed.sessionMeta.cwd ?? null,
+          git_branch: parsed.sessionMeta.git_branch ?? null,
+          git_repo: parsed.sessionMeta.git_repo ?? null,
+          first_user_message: parsed.firstUserMessage || null,
+        })
+      } catch (error) {
+        console.error('[reindex] insertSession failed', file.relPath, error)
+        throw error
+      }
+
+      for (const [index, message] of parsed.messages.entries()) {
+        try {
+          insertMessage.run(
+            file.relPath,
+            message.turnId,
+            message.role,
+            message.timestamp ?? null,
+            message.content,
+          )
+          messageCount += 1
+        } catch (error) {
+          console.error('[reindex] insertMessage failed', {
+            file: file.relPath,
+            index,
+            turnId: message.turnId,
+            role: message.role,
+            contentPreview: message.content?.slice(0, 120),
+            error,
+          })
+          throw error
+        }
+      }
+
+      try {
+        insertFile.run(
+          file.relPath,
+          file.size,
+          Math.floor(file.mtimeMs),
+          null,
+          new Date().toISOString(),
+        )
+      } catch (error) {
+        console.error('[reindex] insertFile failed', file.relPath, error)
+        throw error
+      }
     },
   )
 
   for (const file of files) {
     scanned += 1
     const existing = existingMap.get(file.relPath)
-    if (existing && existing.size === file.size && existing.mtime === Math.floor(file.mtimeMs)) {
+    const sameFile =
+      existing &&
+      existing.size === file.size &&
+      existing.mtime === Math.floor(file.mtimeMs)
+    if (sameFile && existing?.has_session && existing.session_id_checked) {
+      skipped += 1
+      continue
+    }
+    if (sameFile && existing?.has_session && !existing.session_id_checked) {
+      metadataChecked += 1
+      const resolvedSessionId = await readSessionIdFromFile(file.absPath)
+      if (resolvedSessionId) {
+        updateSessionId.run(resolvedSessionId, file.relPath)
+      } else {
+        markSessionChecked.run(file.relPath)
+      }
       continue
     }
     updated += 1
@@ -398,7 +611,13 @@ const indexSessions = async (root: string) => {
     }
   }
 
-  return { scanned, updated, removed, messageCount }
+  const summary = { scanned, updated, removed, messageCount, skipped, metadataChecked }
+  logDebug('index complete', {
+    root,
+    ...summary,
+    durationMs: Date.now() - startedAt,
+  })
+  return summary
 }
 
 const getSessionsPreviewMap = (database: Database.Database) => {
@@ -625,8 +844,62 @@ const apiPlugin = (): Plugin => {
                 error: `Sessions root not found: ${rootInfo.value}. Set CODEX_SESSIONS_ROOT or update ~/.codex-formatter/config.json`,
               })
             }
+            logDebug('reindex start', { root: rootInfo.value })
             const summary = await indexSessions(rootInfo.value)
+            logDebug('reindex done', summary)
             return sendJson(res, 200, { ok: true, summary })
+          }
+
+          if (pathname === '/api/clear-index' && req.method === 'POST') {
+            const rootInfo = await resolveSessionsRoot()
+            const rootExists = await ensureRootExists(rootInfo.value)
+            if (!rootExists) {
+              return sendJson(res, 404, {
+                error: `Sessions root not found: ${rootInfo.value}. Set CODEX_SESSIONS_ROOT or update ~/.codex-formatter/config.json`,
+              })
+            }
+            const database = ensureDb()
+            const clearTransaction = database.transaction(() => {
+              clearDbSchema(database)
+              initSchema(database)
+            })
+            logDebug('clear-index start', { root: rootInfo.value })
+            clearTransaction()
+            const summary = await indexSessions(rootInfo.value)
+            logDebug('clear-index done', summary)
+            return sendJson(res, 200, { ok: true, summary })
+          }
+
+          if (pathname === '/api/resolve-session' && req.method === 'GET') {
+            const id = url.searchParams.get('id')?.trim()
+            if (!id) return sendJson(res, 400, { error: 'id is required.' })
+            const database = ensureDb()
+            const escaped = id.replace(/[\\%_]/g, '\\$&')
+            const likePattern = `%${escaped}%`
+            const row = database
+              .prepare(
+                `
+                  SELECT id
+                  FROM sessions
+                  WHERE session_id = ? OR path = ? OR path LIKE ? ESCAPE '\\\\'
+                  ORDER BY
+                    CASE
+                      WHEN session_id = ? THEN 0
+                      WHEN path = ? THEN 1
+                      ELSE 2
+                    END,
+                    LENGTH(path) ASC,
+                    path ASC
+                  LIMIT 1
+                `,
+              )
+              .get(id, id, likePattern, id, id) as { id?: string } | undefined
+            if (!row?.id) {
+              logDebug('resolve-session miss', { id })
+              return sendJson(res, 404, { error: 'Session not found.' })
+            }
+            logDebug('resolve-session hit', { id, resolved: row.id })
+            return sendJson(res, 200, { id: row.id })
           }
 
           if (pathname === '/api/search' && req.method === 'GET') {
@@ -660,6 +933,7 @@ const apiPlugin = (): Plugin => {
 
           return sendJson(res, 404, { error: 'Not found' })
         } catch (error: any) {
+          console.error('[api]', req.method, pathname, error)
           return sendJson(res, 500, { error: error?.message || 'Server error' })
         }
       })

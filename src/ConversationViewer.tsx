@@ -1,4 +1,4 @@
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
@@ -69,6 +69,11 @@ interface SessionTree {
   }>
 }
 
+interface SessionDetails {
+  sessionId?: string
+  cwd?: string
+}
+
 interface SearchResult {
   id: number
   content: string
@@ -81,6 +86,12 @@ interface SearchResult {
   git_branch?: string | null
   git_repo?: string | null
   snippet?: string | null
+}
+
+type HistoryMode = 'replace' | 'push'
+
+interface LoadSessionOptions {
+  historyMode?: HistoryMode
 }
 
 const copyText = async (text: string) => {
@@ -171,6 +182,129 @@ const formatToolOutput = (item: any) => {
   return { callId, content: parts.join('\n') }
 }
 
+const SESSION_ID_REGEX = /\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/
+const SESSION_ID_PREFIX_REGEX = /\b(?:sess(?:ion)?[_-])[a-zA-Z0-9_-]{6,}\b/
+
+const normalizeSessionId = (value: string) => {
+  const trimmed = value.trim()
+  const uuidMatch = trimmed.match(SESSION_ID_REGEX)
+  if (uuidMatch) return uuidMatch[0]
+  const prefixMatch = trimmed.match(SESSION_ID_PREFIX_REGEX)
+  if (prefixMatch) return prefixMatch[0]
+  return trimmed
+}
+
+const extractSessionIdFromObject = (value: unknown, depth = 0): string | null => {
+  if (!value || typeof value !== 'object' || depth > 2) return null
+  const obj = value as Record<string, unknown>
+  const direct =
+    obj.session_id ??
+    obj.sessionId ??
+    obj.conversation_id ??
+    obj.conversationId ??
+    obj.resume_session_id ??
+    obj.resumeSessionId
+  if (typeof direct === 'string' && direct.trim()) return normalizeSessionId(direct)
+  if (typeof obj.session === 'string' && obj.session.trim()) return normalizeSessionId(obj.session)
+  if (obj.session && typeof obj.session === 'object') {
+    const nestedId = (obj.session as Record<string, unknown>).id
+    if (typeof nestedId === 'string' && nestedId.trim()) return normalizeSessionId(nestedId)
+    const nested = extractSessionIdFromObject(obj.session, depth + 1)
+    if (nested) return nested
+  }
+  const containers = [obj.session_info, obj.sessionInfo, obj.metadata, obj.context, obj.payload]
+  for (const container of containers) {
+    const nested = extractSessionIdFromObject(container, depth + 1)
+    if (nested) return nested
+  }
+  return null
+}
+
+const extractCwdFromObject = (value: unknown, depth = 0): string | null => {
+  if (!value || typeof value !== 'object' || depth > 2) return null
+  const obj = value as Record<string, unknown>
+  const direct =
+    obj.cwd ??
+    obj.current_working_directory ??
+    obj.working_dir ??
+    obj.workingDirectory ??
+    obj.repo_root ??
+    obj.workspace_root ??
+    obj.root_dir
+  if (typeof direct === 'string' && direct.trim()) return direct.trim()
+  if (obj.session && typeof obj.session === 'object') {
+    const nested = extractCwdFromObject(obj.session, depth + 1)
+    if (nested) return nested
+  }
+  const containers = [obj.metadata, obj.context, obj.environment, obj.env, obj.workspace, obj.payload]
+  for (const container of containers) {
+    const nested = extractCwdFromObject(container, depth + 1)
+    if (nested) return nested
+  }
+  return null
+}
+
+const extractSessionDetails = (entry: any): SessionDetails => {
+  const payload = entry?.payload ?? entry
+  return {
+    sessionId: extractSessionIdFromObject(payload) ?? undefined,
+    cwd: extractCwdFromObject(payload) ?? undefined,
+  }
+}
+
+const extractSessionIdFromPath = (value?: string | null) => {
+  if (!value) return null
+  const normalized = value.replace(/\\/g, '/')
+  const filename = normalized.split('/').pop() || normalized
+  const withoutExt = filename.replace(/\.jsonl$/i, '')
+  const uuidMatch = withoutExt.match(SESSION_ID_REGEX)
+  if (uuidMatch) return uuidMatch[0]
+  const prefixMatch = withoutExt.match(SESSION_ID_PREFIX_REGEX)
+  if (prefixMatch) return prefixMatch[0]
+  return null
+}
+
+const getSessionParamsFromLocation = () => {
+  const search = window.location.search
+  if (!search || search.length <= 1) return { sessionId: null as string | null, turnId: null as number | null }
+  const params = new URLSearchParams(search)
+  const sessionId = params.get('session')
+  const turnValue = params.get('turn')
+  let turnId: number | null = null
+  if (turnValue !== null && turnValue !== '') {
+    const numeric = Number(turnValue)
+    if (Number.isFinite(numeric)) {
+      turnId = numeric
+    }
+  }
+  return { sessionId, turnId }
+}
+
+const buildSessionUrl = (sessionId: string, turnId?: number | null) => {
+  const encodedSession = encodeURIComponent(sessionId)
+  const queryParts = [`session=${encodedSession}`]
+  if (typeof turnId === 'number' && Number.isFinite(turnId)) {
+    queryParts.push(`turn=${encodeURIComponent(String(turnId))}`)
+  }
+  const query = queryParts.length ? `?${queryParts.join('&')}` : ''
+  const hash = window.location.hash || ''
+  return `${window.location.pathname}${query}${hash}`
+}
+
+const updateSessionUrl = (sessionId: string, turnId?: number | null, mode: HistoryMode = 'push') => {
+  const nextUrl = buildSessionUrl(sessionId, turnId)
+  const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash || ''}`
+  if (nextUrl === currentUrl && mode === 'push') {
+    window.history.replaceState(null, '', nextUrl)
+    return
+  }
+  if (mode === 'replace') {
+    window.history.replaceState(null, '', nextUrl)
+    return
+  }
+  window.history.pushState(null, '', nextUrl)
+}
+
 const parseJsonl = (raw: string) => {
   const lines = raw.split('\n')
   const errors: string[] = []
@@ -179,6 +313,20 @@ const parseJsonl = (raw: string) => {
   const turnMap = new Map<number, Turn>()
   let currentTurn = 0
   let seq = 0
+  const sessionInfo: SessionDetails = {}
+  let sessionIdRank = 0
+  let cwdRank = 0
+
+  const updateSessionInfo = (details: SessionDetails, rank: number) => {
+    if (details.sessionId && rank >= sessionIdRank) {
+      sessionInfo.sessionId = details.sessionId
+      sessionIdRank = rank
+    }
+    if (details.cwd && rank >= cwdRank) {
+      sessionInfo.cwd = details.cwd
+      cwdRank = rank
+    }
+  }
 
   const ensureTurn = (turnId: number, startedAt?: string) => {
     if (turnMap.has(turnId)) return turnMap.get(turnId)!
@@ -249,6 +397,9 @@ const parseJsonl = (raw: string) => {
       }
 
       if (entry.type === 'turn_context' || entry.type === 'session_meta') {
+        const details = extractSessionDetails(entry)
+        const rank = entry.type === 'session_meta' ? 3 : 2
+        updateSessionInfo(details, rank)
         addItem({
           id: `item-${seq}`,
           type: 'meta',
@@ -302,7 +453,7 @@ const parseJsonl = (raw: string) => {
   }
   output.push(...turns)
 
-  return { turns: output, errors }
+  return { turns: output, errors, sessionInfo }
 }
 
 const generateId = () => {
@@ -337,19 +488,19 @@ const Toggle = ({
 }) => {
   return (
     <label className="flex items-center justify-between gap-3 rounded-xl border border-white/70 bg-white/70 px-4 py-3 text-sm text-slate-700 shadow-sm">
-      <div>
+      <div className="min-w-0 flex-1">
         <div className="font-medium text-slate-900">{label}</div>
         {description && <div className="text-xs text-slate-500">{description}</div>}
       </div>
-      <span className="relative inline-flex h-6 w-11 items-center">
+      <span className="relative inline-flex h-6 w-11 shrink-0 items-center overflow-hidden rounded-full">
         <input
           type="checkbox"
           checked={checked}
           onChange={(event) => onChange(event.target.checked)}
           className="peer sr-only"
         />
-        <span className="absolute inset-0 rounded-full bg-slate-200 transition peer-checked:bg-teal-600" />
-        <span className="absolute left-1 top-1 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
+        <span className="absolute inset-0 rounded-full bg-slate-200 transition-colors peer-checked:bg-teal-600" />
+        <span className="absolute left-1 top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-5" />
       </span>
     </label>
   )
@@ -384,13 +535,16 @@ export default function ConversationViewer() {
   const [loadingSession, setLoadingSession] = useState(false)
   const [apiError, setApiError] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [sessionDetails, setSessionDetails] = useState<SessionDetails>({})
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [sessionsRoot, setSessionsRoot] = useState('')
   const [sessionsRootSource, setSessionsRootSource] = useState<string>('')
   const [reindexing, setReindexing] = useState(false)
+  const [clearingIndex, setClearingIndex] = useState(false)
   const [indexSummary, setIndexSummary] = useState<string>('')
   const [scrollToTurnId, setScrollToTurnId] = useState<number | null>(null)
   const searchTimeout = useRef<number | null>(null)
+  const initialLoadRef = useRef(false)
 
   const filteredTurns = useMemo(() => {
     return turns.map((turn) => {
@@ -475,7 +629,7 @@ export default function ConversationViewer() {
   }, [searchQuery])
 
   useEffect(() => {
-    if (!scrollToTurnId) return
+    if (scrollToTurnId === null) return
     const element = document.getElementById(`turn-${scrollToTurnId}`)
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -483,40 +637,109 @@ export default function ConversationViewer() {
     setScrollToTurnId(null)
   }, [scrollToTurnId, turns])
 
-  const findSessionById = (sessionId: string) => {
-    if (!sessionsTree) return null
-    for (const year of sessionsTree.years) {
-      for (const month of year.months) {
-        for (const day of month.days) {
-          const file = day.files.find((entry) => entry.id === sessionId)
-          if (file) return file
+  const findSessionById = useCallback(
+    (sessionId: string) => {
+      if (!sessionsTree) return null
+      for (const year of sessionsTree.years) {
+        for (const month of year.months) {
+          for (const day of month.days) {
+            const file = day.files.find((entry) => entry.id === sessionId)
+            if (file) return file
+          }
         }
       }
-    }
-    return null
-  }
+      return null
+    },
+    [sessionsTree],
+  )
 
-  const loadSession = async (sessionId: string, turnId?: number) => {
-    try {
-      setLoadingSession(true)
-      setApiError(null)
-      const res = await fetch(`/api/session?path=${encodeURIComponent(sessionId)}`)
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data?.error || 'Unable to load session file.')
+  const loadSession = useCallback(
+    async (sessionId: string, turnId?: number, options?: LoadSessionOptions) => {
+      const historyMode = options?.historyMode ?? 'push'
+      updateSessionUrl(sessionId, turnId ?? null, historyMode)
+      try {
+        setLoadingSession(true)
+        setApiError(null)
+        const res = await fetch(`/api/session?path=${encodeURIComponent(sessionId)}`)
+        if (!res.ok) {
+          const data = await res.json()
+          throw new Error(data?.error || 'Unable to load session file.')
+        }
+        const raw = await res.text()
+        const parsed = parseJsonl(raw)
+        setTurns(parsed.turns)
+        setParseErrors(parsed.errors)
+        const meta =
+          findSessionById(sessionId) ?? ({ id: sessionId, filename: sessionId, size: 0 } as SessionFileEntry)
+        const fallbackSessionId = extractSessionIdFromPath(meta.filename || meta.id)
+        const resolvedSessionId = parsed.sessionInfo.sessionId || fallbackSessionId || undefined
+        const resolvedCwd = parsed.sessionInfo.cwd || meta.cwd || undefined
+        setSessionDetails({ sessionId: resolvedSessionId, cwd: resolvedCwd })
+        setActiveSession(meta)
+        setScrollToTurnId(turnId ?? null)
+      } catch (error: any) {
+        setApiError(error?.message || 'Failed to load session.')
+      } finally {
+        setLoadingSession(false)
       }
-      const raw = await res.text()
-      const parsed = parseJsonl(raw)
-      setTurns(parsed.turns)
-      setParseErrors(parsed.errors)
-      const meta =
-        findSessionById(sessionId) ?? ({ id: sessionId, filename: sessionId, size: 0 } as SessionFileEntry)
-      setActiveSession(meta)
-      setScrollToTurnId(turnId ?? null)
+    },
+    [findSessionById],
+  )
+
+  const clearSession = useCallback(() => {
+    setActiveSession(null)
+    setTurns([])
+    setParseErrors([])
+    setSessionDetails({})
+    setScrollToTurnId(null)
+    setLoadingSession(false)
+  }, [])
+
+  useEffect(() => {
+    if (initialLoadRef.current) return
+    initialLoadRef.current = true
+    const { sessionId, turnId } = getSessionParamsFromLocation()
+    if (!sessionId) {
+      clearSession()
+      return
+    }
+    const parsedTurn = typeof turnId === 'number' && Number.isFinite(turnId) ? turnId : undefined
+    loadSession(sessionId, parsedTurn, { historyMode: 'replace' })
+  }, [clearSession, loadSession])
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const { sessionId, turnId } = getSessionParamsFromLocation()
+      if (!sessionId) {
+        clearSession()
+        return
+      }
+      const parsedTurn = typeof turnId === 'number' && Number.isFinite(turnId) ? turnId : undefined
+      loadSession(sessionId, parsedTurn, { historyMode: 'replace' })
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [clearSession, loadSession])
+
+  const handleSearchKeyDown = async (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter') return
+    const query = searchQuery.trim()
+    if (!query) return
+    event.preventDefault()
+    try {
+      const res = await fetch(`/api/resolve-session?id=${encodeURIComponent(query)}`)
+      if (!res.ok) {
+        if (res.status === 404) return
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data?.error || 'Unable to resolve session.')
+      }
+      const data = await res.json()
+      if (!data?.id) return
+      await loadSession(data.id)
+      setSearchQuery('')
+      setSearchResults([])
     } catch (error: any) {
-      setApiError(error?.message || 'Failed to load session.')
-    } finally {
-      setLoadingSession(false)
+      setApiError(error?.message || 'Unable to resolve session.')
     }
   }
 
@@ -570,6 +793,12 @@ export default function ConversationViewer() {
     setTimeout(() => setCopiedId(null), 1500)
   }
 
+  const handleCopyMeta = async (value: string, id: string) => {
+    await copyText(value)
+    setCopiedId(id)
+    setTimeout(() => setCopiedId(null), 1500)
+  }
+
   const handleSaveRoot = async () => {
     try {
       setApiError(null)
@@ -603,6 +832,27 @@ export default function ConversationViewer() {
       setApiError(error?.message || 'Reindex failed.')
     } finally {
       setReindexing(false)
+    }
+  }
+
+  const handleClearIndex = async () => {
+    const confirmed = window.confirm('This will clear the index and rebuild it from scratch. Continue?')
+    if (!confirmed) return
+    try {
+      setClearingIndex(true)
+      setApiError(null)
+      const res = await fetch('/api/clear-index', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || 'Clear index failed.')
+      const summary = data.summary
+      setIndexSummary(
+        `Cleared index · Scanned ${summary.scanned} files · Updated ${summary.updated} · Removed ${summary.removed} · ${summary.messageCount} messages`,
+      )
+      await loadSessions()
+    } catch (error: any) {
+      setApiError(error?.message || 'Clear index failed.')
+    } finally {
+      setClearingIndex(false)
     }
   }
 
@@ -650,6 +900,7 @@ export default function ConversationViewer() {
                 type="search"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
+                onKeyDown={handleSearchKeyDown}
                 placeholder="Search messages"
                 className="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-200"
               />
@@ -749,12 +1000,45 @@ export default function ConversationViewer() {
           <main className="flex-1 min-w-0 space-y-6">
             <div className="rounded-3xl border border-white/70 bg-white/80 p-6 shadow-card backdrop-blur">
               <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
+                <div className="min-w-0 space-y-2">
                   <h2 className="text-xl text-slate-900">{activeSession ? activeSession.filename : 'Session viewer'}</h2>
                   <p className="text-xs text-slate-500">
-                    {activeSession?.timestamp ? `Session: ${activeSession.timestamp}` : 'Select a session to start.'}
-                    {activeSession?.cwd ? ` · ${activeSession.cwd}` : ''}
+                    {activeSession?.timestamp
+                      ? `Session: ${formatTimestamp(activeSession.timestamp)}`
+                      : 'Select a session to start.'}
                   </p>
+                  {(sessionDetails.sessionId || sessionDetails.cwd) && (
+                    <div className="grid gap-2 text-xs sm:grid-cols-2">
+                      {sessionDetails.sessionId && (
+                        <div className="chip">
+                          <span className="chip-label">Session</span>
+                          <span className="chip-value" title={sessionDetails.sessionId}>
+                            {sessionDetails.sessionId}
+                          </span>
+                          <button
+                            onClick={() => handleCopyMeta(sessionDetails.sessionId!, 'session-id')}
+                            className="chip-action"
+                          >
+                            {copiedId === 'session-id' ? 'Copied' : 'Copy'}
+                          </button>
+                        </div>
+                      )}
+                      {sessionDetails.cwd && (
+                        <div className="chip">
+                          <span className="chip-label">Dir</span>
+                          <span className="chip-value" title={sessionDetails.cwd}>
+                            {sessionDetails.cwd}
+                          </span>
+                          <button
+                            onClick={() => handleCopyMeta(sessionDetails.cwd!, 'session-cwd')}
+                            className="chip-action"
+                          >
+                            {copiedId === 'session-cwd' ? 'Copied' : 'Copy'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
@@ -1036,10 +1320,17 @@ export default function ConversationViewer() {
                 </button>
                 <button
                   onClick={handleReindex}
-                  disabled={reindexing}
+                  disabled={reindexing || clearingIndex}
                   className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm disabled:opacity-60"
                 >
                   {reindexing ? 'Reindexing…' : 'Reindex'}
+                </button>
+                <button
+                  onClick={handleClearIndex}
+                  disabled={clearingIndex || reindexing}
+                  className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 shadow-sm disabled:opacity-60"
+                >
+                  {clearingIndex ? 'Clearing…' : 'Clear & rebuild'}
                 </button>
               </div>
               {indexSummary && (
