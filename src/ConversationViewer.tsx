@@ -874,34 +874,34 @@ export default function ConversationViewer() {
                   {(sessionDetails.sessionId || sessionDetails.cwd) && (
                     <div className="grid gap-2 text-xs sm:grid-cols-2">
                       {sessionDetails.sessionId && (
-                        <div className="flex min-w-0 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-600 shadow-sm">
-                          <span className="text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-400">
-                            Session
-                          </span>
-                          <span className="min-w-0 flex-1 truncate font-mono text-slate-700" title={sessionDetails.sessionId}>
+                        <div className="chip">
+                          <span className="chip-label">Session</span>
+                          <span className="chip-value" title={sessionDetails.sessionId}>
                             {sessionDetails.sessionId}
                           </span>
                           <button
                             onClick={() => handleCopyMeta(sessionDetails.sessionId!, 'session-id')}
-                            className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500"
+                            className="chip-action"
                           >
-                            {copiedId === 'session-id' ? 'Copied' : 'Copy'}
+                            <span className="pill-text">
+                              {copiedId === 'session-id' ? 'Copied' : 'Copy'}
+                            </span>
                           </button>
                         </div>
                       )}
                       {sessionDetails.cwd && (
-                        <div className="flex min-w-0 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-600 shadow-sm">
-                          <span className="text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-400">
-                            Dir
-                          </span>
-                          <span className="min-w-0 flex-1 truncate font-mono text-slate-700" title={sessionDetails.cwd}>
+                        <div className="chip">
+                          <span className="chip-label">Dir</span>
+                          <span className="chip-value" title={sessionDetails.cwd}>
                             {sessionDetails.cwd}
                           </span>
                           <button
                             onClick={() => handleCopyMeta(sessionDetails.cwd!, 'session-cwd')}
-                            className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500"
+                            className="chip-action"
                           >
-                            {copiedId === 'session-cwd' ? 'Copied' : 'Copy'}
+                            <span className="pill-text">
+                              {copiedId === 'session-cwd' ? 'Copied' : 'Copy'}
+                            </span>
                           </button>
                         </div>
                       )}
