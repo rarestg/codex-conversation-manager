@@ -1,0 +1,16 @@
+{
+  // Lint Markdown files with a pragmatic baseline.
+  "globs": ["**/*.md", "**/*.markdown"],
+  "gitignore": true,
+  "ignores": ["**/node_modules/**", "**/dist/**", "**/build/**", "**/coverage/**"],
+  "config": {
+    "default": true,
+    "MD013": false, // line length
+    "MD022": false, // blanks around headings (legacy docs style)
+    "MD031": false, // blanks around fences (legacy docs style)
+    "MD032": false, // blanks around lists (legacy docs style)
+    "MD033": false, // inline HTML
+    "MD034": false, // bare URLs
+    "MD041": false // first line heading (README uses HTML header)
+  }
+}

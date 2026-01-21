@@ -1,14 +1,14 @@
-import type { ParsedItem, SessionFileEntry, Turn } from '../types'
-import { TurnCard } from './TurnCard'
+import type { ParsedItem, SessionFileEntry, Turn } from '../types';
+import { TurnCard } from './TurnCard';
 
 interface TurnListProps {
-  filteredTurns: Turn[]
-  loadingSession: boolean
-  activeSession: SessionFileEntry | null
-  parseErrors: string[]
-  showFullContent: boolean
-  copiedId: string | null
-  onCopyItem: (item: ParsedItem, format: 'text' | 'markdown') => void
+  filteredTurns: Turn[];
+  loadingSession: boolean;
+  activeSession: SessionFileEntry | null;
+  parseErrors: string[];
+  showFullContent: boolean;
+  copiedId: string | null;
+  onCopyItem: (item: ParsedItem, format: 'text' | 'markdown') => void;
 }
 
 export const TurnList = ({
@@ -32,8 +32,8 @@ export const TurnList = ({
         <div className="rounded-3xl border border-amber-200 bg-amber-50 px-6 py-4 text-sm text-amber-800">
           <div className="font-semibold">Parse warnings</div>
           <ul className="mt-2 list-disc space-y-1 pl-4">
-            {parseErrors.slice(0, 6).map((error, index) => (
-              <li key={`error-${index}`}>{error}</li>
+            {parseErrors.slice(0, 6).map((error) => (
+              <li key={error}>{error}</li>
             ))}
             {parseErrors.length > 6 && <li>…and {parseErrors.length - 6} more</li>}
           </ul>
@@ -62,5 +62,5 @@ export const TurnList = ({
         />
       ))}
     </div>
-  )
-}
+  );
+};

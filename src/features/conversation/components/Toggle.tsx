@@ -1,8 +1,8 @@
 interface ToggleProps {
-  label: string
-  description?: string
-  checked: boolean
-  onChange: (checked: boolean) => void
+  label: string;
+  description?: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
 }
 
 export const Toggle = ({ label, description, checked, onChange }: ToggleProps) => {
@@ -23,5 +23,5 @@ export const Toggle = ({ label, description, checked, onChange }: ToggleProps) =
         <span className="absolute left-1 top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-5" />
       </span>
     </label>
-  )
-}
+  );
+};

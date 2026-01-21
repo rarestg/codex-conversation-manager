@@ -1,13 +1,13 @@
-import { formatTimestamp } from '../format'
-import type { SessionDetails, SessionFileEntry } from '../types'
+import { formatTimestamp } from '../format';
+import type { SessionDetails, SessionFileEntry } from '../types';
 
 interface SessionHeaderProps {
-  activeSession: SessionFileEntry | null
-  sessionDetails: SessionDetails
-  visibleItemCount: number
-  copiedId: string | null
-  onCopyConversation: () => void
-  onCopyMeta: (value: string, id: string) => void
+  activeSession: SessionFileEntry | null;
+  sessionDetails: SessionDetails;
+  visibleItemCount: number;
+  copiedId: string | null;
+  onCopyConversation: () => void;
+  onCopyMeta: (value: string, id: string) => void;
 }
 
 export const SessionHeader = ({
@@ -18,33 +18,38 @@ export const SessionHeader = ({
   onCopyConversation,
   onCopyMeta,
 }: SessionHeaderProps) => {
+  const sessionId = sessionDetails.sessionId;
+  const cwd = sessionDetails.cwd;
+
   return (
     <div className="flex flex-wrap items-center justify-between gap-4">
       <div className="min-w-0 space-y-2">
         <h2 className="text-xl text-slate-900">{activeSession ? activeSession.filename : 'Session viewer'}</h2>
         <p className="text-xs text-slate-500">
-          {activeSession?.timestamp ? `Session: ${formatTimestamp(activeSession.timestamp)}` : 'Select a session to start.'}
+          {activeSession?.timestamp
+            ? `Session: ${formatTimestamp(activeSession.timestamp)}`
+            : 'Select a session to start.'}
         </p>
-        {(sessionDetails.sessionId || sessionDetails.cwd) && (
+        {(sessionId || cwd) && (
           <div className="grid gap-2 text-xs sm:grid-cols-2">
-            {sessionDetails.sessionId && (
+            {sessionId && (
               <div className="chip">
                 <span className="chip-label">Session</span>
-                <span className="chip-value" title={sessionDetails.sessionId}>
-                  {sessionDetails.sessionId}
+                <span className="chip-value" title={sessionId}>
+                  {sessionId}
                 </span>
-                <button onClick={() => onCopyMeta(sessionDetails.sessionId!, 'session-id')} className="chip-action">
+                <button type="button" onClick={() => onCopyMeta(sessionId, 'session-id')} className="chip-action">
                   {copiedId === 'session-id' ? 'Copied' : 'Copy'}
                 </button>
               </div>
             )}
-            {sessionDetails.cwd && (
+            {cwd && (
               <div className="chip">
                 <span className="chip-label">Dir</span>
-                <span className="chip-value" title={sessionDetails.cwd}>
-                  {sessionDetails.cwd}
+                <span className="chip-value" title={cwd}>
+                  {cwd}
                 </span>
-                <button onClick={() => onCopyMeta(sessionDetails.cwd!, 'session-cwd')} className="chip-action">
+                <button type="button" onClick={() => onCopyMeta(cwd, 'session-cwd')} className="chip-action">
                   {copiedId === 'session-cwd' ? 'Copied' : 'Copy'}
                 </button>
               </div>
@@ -57,6 +62,7 @@ export const SessionHeader = ({
           {visibleItemCount} visible items
         </span>
         <button
+          type="button"
           onClick={onCopyConversation}
           disabled={!visibleItemCount}
           className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-50"
@@ -65,5 +71,5 @@ export const SessionHeader = ({
         </button>
       </div>
     </div>
-  )
-}
+  );
+};
