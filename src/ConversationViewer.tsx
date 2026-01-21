@@ -867,37 +867,39 @@ export default function ConversationViewer() {
                 <div className="min-w-0 space-y-2">
                   <h2 className="text-xl text-slate-900">{activeSession ? activeSession.filename : 'Session viewer'}</h2>
                   <p className="text-xs text-slate-500">
-                    {activeSession?.timestamp ? `Session: ${activeSession.timestamp}` : 'Select a session to start.'}
+                    {activeSession?.timestamp
+                      ? `Session: ${formatTimestamp(activeSession.timestamp)}`
+                      : 'Select a session to start.'}
                   </p>
                   {(sessionDetails.sessionId || sessionDetails.cwd) && (
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <div className="grid gap-2 text-xs sm:grid-cols-2">
                       {sessionDetails.sessionId && (
-                        <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-600 shadow-sm">
+                        <div className="flex min-w-0 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-600 shadow-sm">
                           <span className="text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-400">
                             Session
                           </span>
-                          <span className="max-w-[260px] truncate font-mono text-slate-700" title={sessionDetails.sessionId}>
+                          <span className="min-w-0 flex-1 truncate font-mono text-slate-700" title={sessionDetails.sessionId}>
                             {sessionDetails.sessionId}
                           </span>
                           <button
                             onClick={() => handleCopyMeta(sessionDetails.sessionId!, 'session-id')}
-                            className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500"
+                            className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500"
                           >
                             {copiedId === 'session-id' ? 'Copied' : 'Copy'}
                           </button>
                         </div>
                       )}
                       {sessionDetails.cwd && (
-                        <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-600 shadow-sm">
+                        <div className="flex min-w-0 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-600 shadow-sm">
                           <span className="text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-400">
                             Dir
                           </span>
-                          <span className="max-w-[320px] truncate font-mono text-slate-700" title={sessionDetails.cwd}>
+                          <span className="min-w-0 flex-1 truncate font-mono text-slate-700" title={sessionDetails.cwd}>
                             {sessionDetails.cwd}
                           </span>
                           <button
                             onClick={() => handleCopyMeta(sessionDetails.cwd!, 'session-cwd')}
-                            className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500"
+                            className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500"
                           >
                             {copiedId === 'session-cwd' ? 'Copied' : 'Copy'}
                           </button>
