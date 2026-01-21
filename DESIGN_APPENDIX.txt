@@ -1,0 +1,149 @@
+Design Appendix: SQLite DDL and UI Wireframes
+
+====================
+SQLite DDL (FTS5)
+====================
+
+-- Recommended pragmas for a local developer tool
+PRAGMA journal_mode = WAL;
+PRAGMA synchronous = NORMAL;
+
+-- Track schema evolution if needed
+CREATE TABLE IF NOT EXISTS schema_version (
+  version INTEGER NOT NULL
+);
+
+-- Session metadata for sidebar previews and search results
+CREATE TABLE IF NOT EXISTS sessions (
+  id TEXT PRIMARY KEY,
+  path TEXT UNIQUE NOT NULL,
+  timestamp TEXT,
+  cwd TEXT,
+  git_branch TEXT,
+  git_repo TEXT,
+  first_user_message TEXT
+);
+
+-- Track file state to enable incremental indexing
+CREATE TABLE IF NOT EXISTS files (
+  path TEXT PRIMARY KEY,
+  size INTEGER,
+  mtime INTEGER,
+  hash TEXT,
+  indexed_at TEXT
+);
+
+-- All indexed message content (user/assistant/thought/tools)
+CREATE TABLE IF NOT EXISTS messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL,
+  turn_id INTEGER,
+  role TEXT NOT NULL, -- 'user' | 'assistant' | 'thought' | 'tool_call' | 'tool_output' | 'meta'
+  timestamp TEXT,
+  content TEXT NOT NULL,
+  FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
+-- FTS5 index for full-text search
+CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+  content,
+  session_id UNINDEXED,
+  turn_id UNINDEXED,
+  role UNINDEXED,
+  tokenize = 'porter'
+);
+
+-- Keep FTS in sync with messages table
+CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
+  INSERT INTO messages_fts(rowid, content, session_id, turn_id, role)
+  VALUES (new.id, new.content, new.session_id, new.turn_id, new.role);
+END;
+
+CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
+  INSERT INTO messages_fts(messages_fts, rowid, content, session_id, turn_id, role)
+  VALUES ('delete', old.id, old.content, old.session_id, old.turn_id, old.role);
+END;
+
+CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages BEGIN
+  INSERT INTO messages_fts(messages_fts, rowid, content, session_id, turn_id, role)
+  VALUES ('delete', old.id, old.content, old.session_id, old.turn_id, old.role);
+  INSERT INTO messages_fts(rowid, content, session_id, turn_id, role)
+  VALUES (new.id, new.content, new.session_id, new.turn_id, new.role);
+END;
+
+-- Optional: useful indexes for filtering
+CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_messages_turn ON messages(session_id, turn_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_timestamp ON sessions(timestamp);
+
+====================
+UI Wireframes (ASCII)
+====================
+
+1) App Layout (Sidebar + Main Viewer)
+
++-----------------------------------------------------------------------------------+
+| Codex Conversation Manager                                                        |
++-----------------------------+-----------------------------------------------------+
+| Search [ react-markdown  ]  | Session: 2026-01-21 16:05 (cwd: /Users/... )         |
+| [Results]                   | [Toggles] Thoughts [on] Tools [on] Full [off]       |
+|  - 2026-01-21 16:05 ...     |                                                     |
+|                             |  +-----------------------------------------------+  |
+| [Sessions]                  |  | Turn 12                                       |  |
+|  2026                       |  |                                               |  |
+|   01                        |  |  [USER] hi how are you                         |  |
+|    21                       |  |                                               |  |
+|     - rollout-...jsonl      |  |  [THOUGHT] (inline)                            |  |
+|     - rollout-...jsonl      |  |  [TOOL] shell_command: touch temporary.txt     |  |
+|                             |  |  [TOOL OUTPUT] Exit code: 0                    |  |
+| [Settings]                  |  |  [ASSISTANT] Hey! I'm doing well...           |  |
+|                             |  +-----------------------------------------------+  |
++-----------------------------+-----------------------------------------------------+
+
+2) Turn Grouping (Inline Items)
+
++---------------------------------------------------------------+
+| Turn 7                                                        |
+|                                                               |
+|  USER                                                        |
+|  "add a small poem to it"                                     |
+|                                                               |
+|  THOUGHT                                                     |
+|  "Preparing to edit file via shell"                          |
+|                                                               |
+|  TOOL CALL                                                   |
+|  shell_command                                               |
+|  command: cat > temporary.txt <<'EOF' ...                     |
+|                                                               |
+|  TOOL OUTPUT                                                 |
+|  Exit code: 0                                                 |
+|                                                               |
+|  ASSISTANT                                                   |
+|  "Added a short poem to temporary.txt"                       |
++---------------------------------------------------------------+
+
+3) Message Block with Copy Buttons
+
++---------------------------------------------------------------+
+| ASSISTANT                                   [Copy Text] [MD]  |
+|---------------------------------------------------------------|
+| Here is the response in **Markdown**.                         |
+| - bullet 1                                                    |
+| - bullet 2                                                    |
+|                                                               |
+| ```js                                                        |
+| console.log('hello');                                         |
+| ```                                                          |
++---------------------------------------------------------------+
+
+4) Settings Modal
+
++----------------------------------------------+
+| Settings                                     |
+|----------------------------------------------|
+| Sessions folder:                             |
+| /Users/<user>/.codex/sessions                |
+| [Change...]  [Reindex]                       |
+|                                              |
+| [Close]                                      |
++----------------------------------------------+

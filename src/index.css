@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --ink-900: #0f172a;
+    --ink-700: #2f3c4f;
+    --ink-500: #5b677a;
+    --sand-50: #f7f4ef;
+    --sand-100: #efe9e1;
+    --sage-200: #d4e2d4;
+    --sage-400: #7ea88d;
+    --clay-300: #d8c5b3;
+    --clay-500: #b58c6e;
+    --sunset-400: #e09b6d;
+    --accent: #1f6f6f;
+  }
+
+  body {
+    font-family: 'Sora', sans-serif;
+    color: var(--ink-900);
+    background-color: var(--sand-50);
+    background-image:
+      radial-gradient(circle at top right, rgba(126, 168, 141, 0.15), transparent 45%),
+      radial-gradient(circle at 20% 30%, rgba(224, 155, 109, 0.2), transparent 40%),
+      linear-gradient(135deg, rgba(239, 233, 225, 0.8), rgba(247, 244, 239, 0.9));
+    min-height: 100vh;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: 'Fraunces', serif;
+    letter-spacing: 0.01em;
+  }
+
+  code, pre, kbd {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer utilities {
+  .animate-rise {
+    animation: rise 0.55s ease-out both;
+  }
+
+  .animate-stagger {
+    animation: rise 0.55s ease-out both;
+    animation-delay: var(--stagger-delay, 0ms);
+  }
+
+  .shadow-soft {
+    box-shadow: 0 24px 60px -40px rgba(15, 23, 42, 0.45);
+  }
+
+  .shadow-card {
+    box-shadow: 0 18px 35px -25px rgba(15, 23, 42, 0.4);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
