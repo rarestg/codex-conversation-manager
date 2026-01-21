@@ -45,6 +45,7 @@ export const Sidebar = ({
           onChange={(event) => onSearchQueryChange(event.target.value)}
           onKeyDown={onSearchKeyDown}
           placeholder="Search messages"
+          aria-label="Search sessions"
           className="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-200"
         />
         {searchResults.length > 0 && (

@@ -5,6 +5,7 @@ import { useSearch } from './hooks/useSearch'
 import { useSession } from './hooks/useSession'
 import { useSessions } from './hooks/useSessions'
 import { useUrlSync } from './hooks/useUrlSync'
+import { useCopyFeedback } from './hooks/useCopyFeedback'
 import { SessionHeader } from './components/SessionHeader'
 import { SettingsModal } from './components/SettingsModal'
 import { Sidebar } from './components/Sidebar'
@@ -18,7 +19,7 @@ export default function ConversationViewer() {
   const [showMeta, setShowMeta] = useState(false)
   const [showFullContent, setShowFullContent] = useState(false)
   const [apiError, setApiError] = useState<string | null>(null)
-  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const { copiedId, showCopied } = useCopyFeedback()
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   const {
@@ -35,7 +36,7 @@ export default function ConversationViewer() {
     indexSummary,
   } = useSessions({ onError: setApiError })
 
-  const { turns, parseErrors, activeSession, sessionDetails, loadingSession, loadSession } = useSession({
+  const { turns, parseErrors, activeSession, sessionDetails, loadingSession, loadSession, clearSession } = useSession({
     sessionsTree,
     onError: setApiError,
   })
@@ -45,7 +46,7 @@ export default function ConversationViewer() {
     onLoadSession: loadSession,
   })
 
-  useUrlSync(loadSession)
+  useUrlSync(loadSession, clearSession)
 
   const filteredTurns = useMemo(() => {
     return turns.map((turn) => {
@@ -66,22 +67,19 @@ export default function ConversationViewer() {
   const handleCopyConversation = async () => {
     const formatted = buildConversationExport(filteredTurns)
     await copyText(formatted)
-    setCopiedId('conversation')
-    setTimeout(() => setCopiedId(null), 2000)
+    showCopied('conversation', 2000)
   }
 
   const handleCopyItem = async (item: ParsedItem, format: 'text' | 'markdown') => {
     const raw = item.content
     const text = format === 'text' ? await markdownToPlainText(raw) : raw
     await copyText(text)
-    setCopiedId(item.id + format)
-    setTimeout(() => setCopiedId(null), 1500)
+    showCopied(item.id + format, 1500)
   }
 
   const handleCopyMeta = async (value: string, id: string) => {
     await copyText(value)
-    setCopiedId(id)
-    setTimeout(() => setCopiedId(null), 1500)
+    showCopied(id, 1500)
   }
 
   const handleClearIndex = async () => {

@@ -63,16 +63,30 @@ export const markdownToPlainText = async (markdown: string) => {
 
 export const renderSnippet = (snippet?: string | null) => {
   if (!snippet) return null
-  const parts = snippet.split(/\[\[|\]\]/g)
-  return parts.map((part, index) =>
-    index % 2 === 1 ? (
-      <mark key={index} className="rounded bg-amber-200/70 px-1 text-slate-900">
-        {part}
-      </mark>
-    ) : (
-      <span key={index}>{part}</span>
-    ),
-  )
+  const nodes: Array<JSX.Element> = []
+  const regex = /\[\[(.+?)\]\]/g
+  let lastIndex = 0
+  let match: RegExpExecArray | null = null
+  let key = 0
+
+  while ((match = regex.exec(snippet))) {
+    const matchStart = match.index
+    if (matchStart > lastIndex) {
+      nodes.push(<span key={`snippet-${key++}`}>{snippet.slice(lastIndex, matchStart)}</span>)
+    }
+    nodes.push(
+      <mark key={`snippet-${key++}`} className="rounded bg-amber-200/70 px-1 text-slate-900">
+        {match[1]}
+      </mark>,
+    )
+    lastIndex = matchStart + match[0].length
+  }
+
+  if (lastIndex < snippet.length) {
+    nodes.push(<span key={`snippet-${key++}`}>{snippet.slice(lastIndex)}</span>)
+  }
+
+  return nodes
 }
 
 export const MarkdownBlock = ({ content }: { content: string }) => {

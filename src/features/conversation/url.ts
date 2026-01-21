@@ -29,7 +29,9 @@ export const getSessionParamsFromLocation = () => {
   let turnId: number | null = null
   for (const pair of pairs) {
     if (!pair) continue
-    const [rawKey, rawValue = ''] = pair.split('=')
+    const eqIndex = pair.indexOf('=')
+    const rawKey = eqIndex === -1 ? pair : pair.slice(0, eqIndex)
+    const rawValue = eqIndex === -1 ? '' : pair.slice(eqIndex + 1)
     if (rawKey === 'session') {
       sessionId = safeDecode(rawValue)
     } else if (rawKey === 'turn') {

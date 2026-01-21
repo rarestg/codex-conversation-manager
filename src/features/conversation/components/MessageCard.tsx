@@ -61,12 +61,14 @@ export const MessageCard = ({ item, itemIndex, showFullContent, copiedId, onCopy
           <div className="flex items-center gap-2">
             <button
               onClick={() => onCopyItem(item, 'text')}
+              aria-label={`Copy ${roleLabel} message as text`}
               className="rounded-full border border-white/70 bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm"
             >
               {copiedId === item.id + 'text' ? 'Copied' : 'Copy text'}
             </button>
             <button
               onClick={() => onCopyItem(item, 'markdown')}
+              aria-label={`Copy ${roleLabel} message as markdown`}
               className="rounded-full border border-white/70 bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm"
             >
               {copiedId === item.id + 'markdown' ? 'Copied' : 'Copy MD'}
@@ -76,6 +78,7 @@ export const MessageCard = ({ item, itemIndex, showFullContent, copiedId, onCopy
         {['tool_call', 'tool_output', 'meta', 'token_count'].includes(item.type) && (
           <button
             onClick={() => onCopyItem(item, 'markdown')}
+            aria-label={`Copy ${roleLabel} content`}
             className="rounded-full border border-white/70 bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm"
           >
             {copiedId === item.id + 'markdown' ? 'Copied' : 'Copy'}

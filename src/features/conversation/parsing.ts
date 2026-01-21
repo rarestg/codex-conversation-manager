@@ -229,6 +229,7 @@ export const parseJsonl = (raw: string) => {
           callId: formatted.callId,
           raw: item,
         })
+        continue
       }
     } catch (error: any) {
       errors.push(`Line ${i + 1}: ${error?.message || 'Parse error'}`)
