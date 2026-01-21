@@ -69,6 +69,11 @@ interface SessionTree {
   }>
 }
 
+interface SessionDetails {
+  sessionId?: string
+  cwd?: string
+}
+
 interface SearchResult {
   id: number
   content: string
@@ -171,6 +176,88 @@ const formatToolOutput = (item: any) => {
   return { callId, content: parts.join('\n') }
 }
 
+const SESSION_ID_REGEX = /\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/
+const SESSION_ID_PREFIX_REGEX = /\b(?:sess(?:ion)?[_-])[a-zA-Z0-9_-]{6,}\b/
+
+const normalizeSessionId = (value: string) => {
+  const trimmed = value.trim()
+  const uuidMatch = trimmed.match(SESSION_ID_REGEX)
+  if (uuidMatch) return uuidMatch[0]
+  const prefixMatch = trimmed.match(SESSION_ID_PREFIX_REGEX)
+  if (prefixMatch) return prefixMatch[0]
+  return trimmed
+}
+
+const extractSessionIdFromObject = (value: unknown, depth = 0): string | null => {
+  if (!value || typeof value !== 'object' || depth > 2) return null
+  const obj = value as Record<string, unknown>
+  const direct =
+    obj.session_id ??
+    obj.sessionId ??
+    obj.conversation_id ??
+    obj.conversationId ??
+    obj.resume_session_id ??
+    obj.resumeSessionId
+  if (typeof direct === 'string' && direct.trim()) return normalizeSessionId(direct)
+  if (typeof obj.session === 'string' && obj.session.trim()) return normalizeSessionId(obj.session)
+  if (obj.session && typeof obj.session === 'object') {
+    const nestedId = (obj.session as Record<string, unknown>).id
+    if (typeof nestedId === 'string' && nestedId.trim()) return normalizeSessionId(nestedId)
+    const nested = extractSessionIdFromObject(obj.session, depth + 1)
+    if (nested) return nested
+  }
+  const containers = [obj.session_info, obj.sessionInfo, obj.metadata, obj.context, obj.payload]
+  for (const container of containers) {
+    const nested = extractSessionIdFromObject(container, depth + 1)
+    if (nested) return nested
+  }
+  return null
+}
+
+const extractCwdFromObject = (value: unknown, depth = 0): string | null => {
+  if (!value || typeof value !== 'object' || depth > 2) return null
+  const obj = value as Record<string, unknown>
+  const direct =
+    obj.cwd ??
+    obj.current_working_directory ??
+    obj.working_dir ??
+    obj.workingDirectory ??
+    obj.repo_root ??
+    obj.workspace_root ??
+    obj.root_dir
+  if (typeof direct === 'string' && direct.trim()) return direct.trim()
+  if (obj.session && typeof obj.session === 'object') {
+    const nested = extractCwdFromObject(obj.session, depth + 1)
+    if (nested) return nested
+  }
+  const containers = [obj.metadata, obj.context, obj.environment, obj.env, obj.workspace, obj.payload]
+  for (const container of containers) {
+    const nested = extractCwdFromObject(container, depth + 1)
+    if (nested) return nested
+  }
+  return null
+}
+
+const extractSessionDetails = (entry: any): SessionDetails => {
+  const payload = entry?.payload ?? entry
+  return {
+    sessionId: extractSessionIdFromObject(payload) ?? undefined,
+    cwd: extractCwdFromObject(payload) ?? undefined,
+  }
+}
+
+const extractSessionIdFromPath = (value?: string | null) => {
+  if (!value) return null
+  const normalized = value.replace(/\\/g, '/')
+  const filename = normalized.split('/').pop() || normalized
+  const withoutExt = filename.replace(/\.jsonl$/i, '')
+  const uuidMatch = withoutExt.match(SESSION_ID_REGEX)
+  if (uuidMatch) return uuidMatch[0]
+  const prefixMatch = withoutExt.match(SESSION_ID_PREFIX_REGEX)
+  if (prefixMatch) return prefixMatch[0]
+  return null
+}
+
 const parseJsonl = (raw: string) => {
   const lines = raw.split('\n')
   const errors: string[] = []
@@ -179,6 +266,20 @@ const parseJsonl = (raw: string) => {
   const turnMap = new Map<number, Turn>()
   let currentTurn = 0
   let seq = 0
+  const sessionInfo: SessionDetails = {}
+  let sessionIdRank = 0
+  let cwdRank = 0
+
+  const updateSessionInfo = (details: SessionDetails, rank: number) => {
+    if (details.sessionId && rank >= sessionIdRank) {
+      sessionInfo.sessionId = details.sessionId
+      sessionIdRank = rank
+    }
+    if (details.cwd && rank >= cwdRank) {
+      sessionInfo.cwd = details.cwd
+      cwdRank = rank
+    }
+  }
 
   const ensureTurn = (turnId: number, startedAt?: string) => {
     if (turnMap.has(turnId)) return turnMap.get(turnId)!
@@ -249,6 +350,9 @@ const parseJsonl = (raw: string) => {
       }
 
       if (entry.type === 'turn_context' || entry.type === 'session_meta') {
+        const details = extractSessionDetails(entry)
+        const rank = entry.type === 'session_meta' ? 3 : 2
+        updateSessionInfo(details, rank)
         addItem({
           id: `item-${seq}`,
           type: 'meta',
@@ -302,7 +406,7 @@ const parseJsonl = (raw: string) => {
   }
   output.push(...turns)
 
-  return { turns: output, errors }
+  return { turns: output, errors, sessionInfo }
 }
 
 const generateId = () => {
@@ -384,6 +488,7 @@ export default function ConversationViewer() {
   const [loadingSession, setLoadingSession] = useState(false)
   const [apiError, setApiError] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [sessionDetails, setSessionDetails] = useState<SessionDetails>({})
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [sessionsRoot, setSessionsRoot] = useState('')
   const [sessionsRootSource, setSessionsRootSource] = useState<string>('')
@@ -511,6 +616,10 @@ export default function ConversationViewer() {
       setParseErrors(parsed.errors)
       const meta =
         findSessionById(sessionId) ?? ({ id: sessionId, filename: sessionId, size: 0 } as SessionFileEntry)
+      const fallbackSessionId = extractSessionIdFromPath(meta.filename || meta.id)
+      const resolvedSessionId = parsed.sessionInfo.sessionId || fallbackSessionId || undefined
+      const resolvedCwd = parsed.sessionInfo.cwd || meta.cwd || undefined
+      setSessionDetails({ sessionId: resolvedSessionId, cwd: resolvedCwd })
       setActiveSession(meta)
       setScrollToTurnId(turnId ?? null)
     } catch (error: any) {
@@ -567,6 +676,12 @@ export default function ConversationViewer() {
     const text = format === 'text' ? await markdownToPlainText(raw) : raw
     await copyText(text)
     setCopiedId(item.id + format)
+    setTimeout(() => setCopiedId(null), 1500)
+  }
+
+  const handleCopyMeta = async (value: string, id: string) => {
+    await copyText(value)
+    setCopiedId(id)
     setTimeout(() => setCopiedId(null), 1500)
   }
 
@@ -749,12 +864,47 @@ export default function ConversationViewer() {
           <main className="flex-1 min-w-0 space-y-6">
             <div className="rounded-3xl border border-white/70 bg-white/80 p-6 shadow-card backdrop-blur">
               <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
+                <div className="min-w-0 space-y-2">
                   <h2 className="text-xl text-slate-900">{activeSession ? activeSession.filename : 'Session viewer'}</h2>
                   <p className="text-xs text-slate-500">
                     {activeSession?.timestamp ? `Session: ${activeSession.timestamp}` : 'Select a session to start.'}
-                    {activeSession?.cwd ? ` · ${activeSession.cwd}` : ''}
                   </p>
+                  {(sessionDetails.sessionId || sessionDetails.cwd) && (
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      {sessionDetails.sessionId && (
+                        <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-600 shadow-sm">
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-400">
+                            Session
+                          </span>
+                          <span className="max-w-[260px] truncate font-mono text-slate-700" title={sessionDetails.sessionId}>
+                            {sessionDetails.sessionId}
+                          </span>
+                          <button
+                            onClick={() => handleCopyMeta(sessionDetails.sessionId!, 'session-id')}
+                            className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500"
+                          >
+                            {copiedId === 'session-id' ? 'Copied' : 'Copy'}
+                          </button>
+                        </div>
+                      )}
+                      {sessionDetails.cwd && (
+                        <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-600 shadow-sm">
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-400">
+                            Dir
+                          </span>
+                          <span className="max-w-[320px] truncate font-mono text-slate-700" title={sessionDetails.cwd}>
+                            {sessionDetails.cwd}
+                          </span>
+                          <button
+                            onClick={() => handleCopyMeta(sessionDetails.cwd!, 'session-cwd')}
+                            className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500"
+                          >
+                            {copiedId === 'session-cwd' ? 'Copied' : 'Copy'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
