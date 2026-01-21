@@ -27,9 +27,8 @@ export const SettingsModal = ({
   onClearIndex,
   onClose,
 }: SettingsModalProps) => {
-  if (!open) return null
-
   useEffect(() => {
+    if (!open) return
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         onClose()
@@ -37,7 +36,9 @@ export const SettingsModal = ({
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
+  }, [open, onClose])
+
+  if (!open) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4">
