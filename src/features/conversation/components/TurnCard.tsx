@@ -1,12 +1,12 @@
-import { MessageCard } from './MessageCard'
-import { formatTimestamp } from '../format'
-import type { ParsedItem, Turn } from '../types'
+import { formatTimestamp } from '../format';
+import type { ParsedItem, Turn } from '../types';
+import { MessageCard } from './MessageCard';
 
 interface TurnCardProps {
-  turn: Turn
-  showFullContent: boolean
-  copiedId: string | null
-  onCopyItem: (item: ParsedItem, format: 'text' | 'markdown') => void
+  turn: Turn;
+  showFullContent: boolean;
+  copiedId: string | null;
+  onCopyItem: (item: ParsedItem, format: 'text' | 'markdown') => void;
 }
 
 export const TurnCard = ({ turn, showFullContent, copiedId, onCopyItem }: TurnCardProps) => {
@@ -38,5 +38,5 @@ export const TurnCard = ({ turn, showFullContent, copiedId, onCopyItem }: TurnCa
         ))}
       </div>
     </section>
-  )
-}
+  );
+};

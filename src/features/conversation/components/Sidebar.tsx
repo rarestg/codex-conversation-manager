@@ -1,18 +1,18 @@
-import { type KeyboardEvent } from 'react'
-import { renderSnippet } from '../markdown'
-import type { SearchResult, SessionFileEntry, SessionTree } from '../types'
+import type { KeyboardEvent } from 'react';
+import { renderSnippet } from '../markdown';
+import type { SearchResult, SessionFileEntry, SessionTree } from '../types';
 
 interface SidebarProps {
-  sessionsTree: SessionTree | null
-  sessionsRoot: string
-  searchQuery: string
-  onSearchQueryChange: (value: string) => void
-  onSearchKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void
-  searchResults: SearchResult[]
-  searchLoading: boolean
-  onLoadSession: (sessionId: string, turnId?: number) => void
-  activeSession: SessionFileEntry | null
-  onRefreshSessions: () => void
+  sessionsTree: SessionTree | null;
+  sessionsRoot: string;
+  searchQuery: string;
+  onSearchQueryChange: (value: string) => void;
+  onSearchKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
+  searchResults: SearchResult[];
+  searchLoading: boolean;
+  onLoadSession: (sessionId: string, turnId?: number) => void;
+  activeSession: SessionFileEntry | null;
+  onRefreshSessions: () => void;
 }
 
 export const Sidebar = ({
@@ -52,6 +52,7 @@ export const Sidebar = ({
           <div className="mt-4 space-y-3">
             {searchResults.map((result) => (
               <button
+                type="button"
                 key={result.id}
                 onClick={() => onLoadSession(result.session_id, result.turn_id)}
                 className="w-full rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-left text-sm text-slate-700 transition hover:border-teal-200 hover:bg-white"
@@ -79,6 +80,7 @@ export const Sidebar = ({
             <p className="text-xs text-slate-500">Root: {sessionsTree?.root || sessionsRoot || '—'}</p>
           </div>
           <button
+            type="button"
             onClick={onRefreshSessions}
             className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 shadow-sm hover:text-slate-900"
           >
@@ -107,6 +109,7 @@ export const Sidebar = ({
                             <div className="mt-2 space-y-2 pl-2">
                               {day.files.map((file) => (
                                 <button
+                                  type="button"
                                   key={file.id}
                                   onClick={() => onLoadSession(file.id)}
                                   className={`w-full rounded-2xl border px-3 py-2 text-left text-xs transition ${
@@ -140,5 +143,5 @@ export const Sidebar = ({
         </div>
       </div>
     </aside>
-  )
-}
+  );
+};

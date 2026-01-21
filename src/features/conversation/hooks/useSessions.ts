@@ -1,87 +1,87 @@
-import { useCallback, useEffect, useState } from 'react'
-import { clearIndex, fetchConfig, fetchSessions, reindexSessions, saveConfig } from '../api'
-import type { SessionTree } from '../types'
+import { useCallback, useEffect, useState } from 'react';
+import { clearIndex, fetchConfig, fetchSessions, reindexSessions, saveConfig } from '../api';
+import type { SessionTree } from '../types';
 
 interface UseSessionsOptions {
-  onError?: (message: string | null) => void
+  onError?: (message: string | null) => void;
 }
 
 export const useSessions = ({ onError }: UseSessionsOptions = {}) => {
-  const [sessionsTree, setSessionsTree] = useState<SessionTree | null>(null)
-  const [sessionsRoot, setSessionsRoot] = useState('')
-  const [sessionsRootSource, setSessionsRootSource] = useState<string>('')
-  const [reindexing, setReindexing] = useState(false)
-  const [clearingIndex, setClearingIndex] = useState(false)
-  const [indexSummary, setIndexSummary] = useState('')
+  const [sessionsTree, setSessionsTree] = useState<SessionTree | null>(null);
+  const [sessionsRoot, setSessionsRoot] = useState('');
+  const [sessionsRootSource, setSessionsRootSource] = useState<string>('');
+  const [reindexing, setReindexing] = useState(false);
+  const [clearingIndex, setClearingIndex] = useState(false);
+  const [indexSummary, setIndexSummary] = useState('');
 
   const loadConfig = useCallback(async () => {
     try {
-      const data = await fetchConfig()
-      setSessionsRoot(data.value || '')
-      setSessionsRootSource(data.source || '')
+      const data = await fetchConfig();
+      setSessionsRoot(data.value || '');
+      setSessionsRootSource(data.source || '');
     } catch (error: any) {
-      onError?.(error?.message || 'Failed to load config.')
+      onError?.(error?.message || 'Failed to load config.');
     }
-  }, [onError])
+  }, [onError]);
 
   const loadSessions = useCallback(async () => {
     try {
-      onError?.(null)
-      const data = await fetchSessions()
-      setSessionsTree(data)
+      onError?.(null);
+      const data = await fetchSessions();
+      setSessionsTree(data);
     } catch (error: any) {
-      onError?.(error?.message || 'Failed to load sessions.')
+      onError?.(error?.message || 'Failed to load sessions.');
     }
-  }, [onError])
+  }, [onError]);
 
   useEffect(() => {
-    loadConfig()
-    loadSessions()
-  }, [loadConfig, loadSessions])
+    loadConfig();
+    loadSessions();
+  }, [loadConfig, loadSessions]);
 
   const saveRoot = useCallback(async () => {
     try {
-      onError?.(null)
-      await saveConfig(sessionsRoot)
-      setSessionsRootSource('config')
-      await loadSessions()
-      await loadConfig()
+      onError?.(null);
+      await saveConfig(sessionsRoot);
+      setSessionsRootSource('config');
+      await loadSessions();
+      await loadConfig();
     } catch (error: any) {
-      onError?.(error?.message || 'Failed to update config.')
+      onError?.(error?.message || 'Failed to update config.');
     }
-  }, [loadConfig, loadSessions, onError, sessionsRoot])
+  }, [loadConfig, loadSessions, onError, sessionsRoot]);
 
   const reindex = useCallback(async () => {
     try {
-      setReindexing(true)
-      onError?.(null)
-      const summary = await reindexSessions()
+      setReindexing(true);
+      onError?.(null);
+      const summary = await reindexSessions();
       setIndexSummary(
         `Scanned ${summary.scanned} files · Updated ${summary.updated} · Removed ${summary.removed} · ${summary.messageCount} messages`,
-      )
-      await loadSessions()
+      );
+      await loadSessions();
     } catch (error: any) {
-      onError?.(error?.message || 'Reindex failed.')
+      onError?.(error?.message || 'Reindex failed.');
     } finally {
-      setReindexing(false)
+      setReindexing(false);
     }
-  }, [loadSessions, onError])
+  }, [loadSessions, onError]);
 
   const rebuildIndex = useCallback(async () => {
     try {
-      setClearingIndex(true)
-      onError?.(null)
-      const summary = await clearIndex()
+      setClearingIndex(true);
+      onError?.(null);
+      const summary = await clearIndex();
       setIndexSummary(
         `Cleared index · Scanned ${summary.scanned} files · Updated ${summary.updated} · Removed ${summary.removed} · ${summary.messageCount} messages`,
-      )
-      await loadSessions()
+      );
+      await loadSessions();
     } catch (error: any) {
-      onError?.(error?.message || 'Clear index failed.')
+      onError?.(error?.message || 'Clear index failed.');
     } finally {
-      setClearingIndex(false)
+      setClearingIndex(false);
     }
-  }, [loadSessions, onError])
+  }, [loadSessions, onError]);
 
   return {
     sessionsTree,
@@ -96,5 +96,5 @@ export const useSessions = ({ onError }: UseSessionsOptions = {}) => {
     reindexing,
     clearingIndex,
     indexSummary,
-  }
-}
+  };
+};

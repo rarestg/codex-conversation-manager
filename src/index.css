@@ -16,7 +16,7 @@
   }
 
   body {
-    font-family: 'Sora', sans-serif;
+    font-family: "Sora", sans-serif;
     color: var(--ink-900);
     background-color: var(--sand-50);
     background-image:
@@ -26,13 +26,18 @@
     min-height: 100vh;
   }
 
-  h1, h2, h3, h4 {
-    font-family: 'Fraunces', serif;
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: "Fraunces", serif;
     letter-spacing: 0.01em;
   }
 
-  code, pre, kbd {
-    font-family: 'JetBrains Mono', monospace;
+  code,
+  pre,
+  kbd {
+    font-family: "JetBrains Mono", monospace;
   }
 }
 

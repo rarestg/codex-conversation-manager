@@ -1,14 +1,13 @@
-import { type CSSProperties } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { solarizedlight } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { unified } from 'unified'
-import remarkParse from 'remark-parse'
+import type { CSSProperties, ReactNode } from 'react';
+import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { solarizedlight } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
+import remarkGfm from 'remark-gfm';
+import remarkParse from 'remark-parse';
+import { unified } from 'unified';
 
-const prismStyle: Record<string, CSSProperties> =
-  solarizedlight as unknown as Record<string, CSSProperties>
+const prismStyle: Record<string, CSSProperties> = solarizedlight as unknown as Record<string, CSSProperties>;
 
 const markdownSchema = {
   ...defaultSchema,
@@ -17,77 +16,83 @@ const markdownSchema = {
     code: [...(defaultSchema.attributes?.code || []), ['className']],
     pre: [...(defaultSchema.attributes?.pre || []), ['className']],
   },
-}
+};
 
 export const mdastToText = (node: any): string => {
-  if (!node) return ''
+  if (!node) return '';
   switch (node.type) {
     case 'root':
-      return node.children.map(mdastToText).join('').replace(/\n{3,}/g, '\n\n').trimEnd()
+      return node.children
+        .map(mdastToText)
+        .join('')
+        .replace(/\n{3,}/g, '\n\n')
+        .trimEnd();
     case 'text':
-      return node.value
+      return node.value;
     case 'inlineCode':
-      return node.value
+      return node.value;
     case 'code':
-      return `${node.value}\n`
+      return `${node.value}\n`;
     case 'break':
-      return '\n'
+      return '\n';
     case 'paragraph':
     case 'heading':
-      return `${node.children.map(mdastToText).join('')}\n\n`
+      return `${node.children.map(mdastToText).join('')}\n\n`;
     case 'list':
-      return `${node.children.map(mdastToText).join('')}\n`
+      return `${node.children.map(mdastToText).join('')}\n`;
     case 'listItem':
-      return `${node.children.map(mdastToText).join('')}\n`
+      return `${node.children.map(mdastToText).join('')}\n`;
     case 'blockquote':
-      return `${node.children.map(mdastToText).join('')}\n\n`
+      return `${node.children.map(mdastToText).join('')}\n\n`;
     case 'thematicBreak':
-      return '\n\n'
+      return '\n\n';
     case 'table':
-      return `${node.children.map(mdastToText).join('')}\n`
+      return `${node.children.map(mdastToText).join('')}\n`;
     case 'tableRow':
-      return `${node.children.map(mdastToText).join('\t')}\n`
+      return `${node.children.map(mdastToText).join('\t')}\n`;
     case 'tableCell':
-      return node.children.map(mdastToText).join('')
+      return node.children.map(mdastToText).join('');
     default:
-      if (node.children) return node.children.map(mdastToText).join('')
-      return ''
+      if (node.children) return node.children.map(mdastToText).join('');
+      return '';
   }
-}
+};
 
 export const markdownToPlainText = async (markdown: string) => {
-  const processor = unified().use(remarkParse).use(remarkGfm)
-  const tree = processor.parse(markdown)
-  return mdastToText(tree)
-}
+  const processor = unified().use(remarkParse).use(remarkGfm);
+  const tree = processor.parse(markdown);
+  return mdastToText(tree);
+};
 
 export const renderSnippet = (snippet?: string | null) => {
-  if (!snippet) return null
-  const nodes: Array<JSX.Element> = []
-  const regex = /\[\[(.+?)\]\]/g
-  let lastIndex = 0
-  let match: RegExpExecArray | null = null
-  let key = 0
+  if (!snippet) return null;
+  const nodes: ReactNode[] = [];
+  const regex = /\[\[(.+?)\]\]/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null = null;
+  let key = 0;
 
-  while ((match = regex.exec(snippet))) {
-    const matchStart = match.index
+  while (true) {
+    match = regex.exec(snippet);
+    if (!match) break;
+    const matchStart = match.index;
     if (matchStart > lastIndex) {
-      nodes.push(<span key={`snippet-${key++}`}>{snippet.slice(lastIndex, matchStart)}</span>)
+      nodes.push(<span key={`snippet-${key++}`}>{snippet.slice(lastIndex, matchStart)}</span>);
     }
     nodes.push(
       <mark key={`snippet-${key++}`} className="rounded bg-amber-200/70 px-1 text-slate-900">
         {match[1]}
       </mark>,
-    )
-    lastIndex = matchStart + match[0].length
+    );
+    lastIndex = matchStart + match[0].length;
   }
 
   if (lastIndex < snippet.length) {
-    nodes.push(<span key={`snippet-${key++}`}>{snippet.slice(lastIndex)}</span>)
+    nodes.push(<span key={`snippet-${key++}`}>{snippet.slice(lastIndex)}</span>);
   }
 
-  return nodes
-}
+  return nodes;
+};
 
 export const MarkdownBlock = ({ content }: { content: string }) => {
   return (
@@ -96,7 +101,7 @@ export const MarkdownBlock = ({ content }: { content: string }) => {
       rehypePlugins={[[rehypeSanitize, markdownSchema]]}
       components={{
         code({ className, children, ...props }) {
-          const match = /language-(\w+)/.exec(className || '')
+          const match = /language-(\w+)/.exec(className || '');
           if (match) {
             return (
               <div className="overflow-x-auto rounded-xl bg-white/70">
@@ -109,36 +114,36 @@ export const MarkdownBlock = ({ content }: { content: string }) => {
                   {String(children).replace(/\n$/, '')}
                 </SyntaxHighlighter>
               </div>
-            )
+            );
           }
           return (
             <code className="rounded bg-white/70 px-1 py-0.5 text-xs" {...props}>
               {children}
             </code>
-          )
+          );
         },
         ul({ children }) {
-          return <ul className="ml-6 list-disc space-y-1">{children}</ul>
+          return <ul className="ml-6 list-disc space-y-1">{children}</ul>;
         },
         ol({ children }) {
-          return <ol className="ml-6 list-decimal space-y-1">{children}</ol>
+          return <ol className="ml-6 list-decimal space-y-1">{children}</ol>;
         },
         p({ children }) {
-          return <p className="mb-2 whitespace-pre-wrap last:mb-0">{children}</p>
+          return <p className="mb-2 whitespace-pre-wrap last:mb-0">{children}</p>;
         },
         li({ children }) {
-          return <li className="whitespace-pre-wrap">{children}</li>
+          return <li className="whitespace-pre-wrap">{children}</li>;
         },
         blockquote({ children }) {
           return (
             <blockquote className="border-l-2 border-slate-300 pl-4 text-slate-600 whitespace-pre-wrap">
               {children}
             </blockquote>
-          )
+          );
         },
       }}
     >
       {content}
     </ReactMarkdown>
-  )
-}
+  );
+};

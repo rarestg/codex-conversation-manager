@@ -1,17 +1,17 @@
-import { useEffect } from 'react'
+import { useEffect } from 'react';
 
 interface SettingsModalProps {
-  open: boolean
-  sessionsRoot: string
-  sessionsRootSource: string
-  indexSummary: string
-  reindexing: boolean
-  clearingIndex: boolean
-  onSessionsRootChange: (value: string) => void
-  onSaveRoot: () => void
-  onReindex: () => void
-  onClearIndex: () => void
-  onClose: () => void
+  open: boolean;
+  sessionsRoot: string;
+  sessionsRootSource: string;
+  indexSummary: string;
+  reindexing: boolean;
+  clearingIndex: boolean;
+  onSessionsRootChange: (value: string) => void;
+  onSaveRoot: () => void;
+  onReindex: () => void;
+  onClearIndex: () => void;
+  onClose: () => void;
 }
 
 export const SettingsModal = ({
@@ -28,17 +28,17 @@ export const SettingsModal = ({
   onClose,
 }: SettingsModalProps) => {
   useEffect(() => {
-    if (!open) return
+    if (!open) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        onClose()
+        onClose();
       }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [open, onClose])
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open, onClose]);
 
-  if (!open) return null
+  if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4">
@@ -56,6 +56,7 @@ export const SettingsModal = ({
             <p className="text-xs text-slate-500">Manage session root and indexing.</p>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:text-slate-700"
           >
@@ -65,10 +66,11 @@ export const SettingsModal = ({
 
         <div className="mt-5 space-y-4">
           <div>
-            <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+            <label htmlFor="sessions-root" className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
               Sessions root ({sessionsRootSource || 'custom'})
             </label>
             <input
+              id="sessions-root"
               value={sessionsRoot}
               onChange={(event) => onSessionsRootChange(event.target.value)}
               disabled={sessionsRootSource === 'env'}
@@ -77,6 +79,7 @@ export const SettingsModal = ({
           </div>
           <div className="flex flex-wrap gap-3">
             <button
+              type="button"
               onClick={onSaveRoot}
               disabled={sessionsRootSource === 'env'}
               className="rounded-full border border-teal-200 bg-teal-600 px-4 py-2 text-sm font-medium text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
@@ -84,6 +87,7 @@ export const SettingsModal = ({
               Save root
             </button>
             <button
+              type="button"
               onClick={onReindex}
               disabled={reindexing || clearingIndex}
               className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm disabled:opacity-60"
@@ -91,6 +95,7 @@ export const SettingsModal = ({
               {reindexing ? 'Reindexing…' : 'Reindex'}
             </button>
             <button
+              type="button"
               onClick={onClearIndex}
               disabled={clearingIndex || reindexing}
               className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 shadow-sm disabled:opacity-60"
@@ -111,5 +116,5 @@ export const SettingsModal = ({
         </div>
       </div>
     </div>
-  )
-}
+  );
+};

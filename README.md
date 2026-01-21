@@ -12,6 +12,8 @@ A local, developer-focused web app for parsing, visualizing, and searching Codex
 - Full-text search across user and assistant messages via SQLite FTS5.
 - Markdown rendering with sanitized output and code highlighting.
 - Per-message and conversation-wide copy actions.
+- Session settings modal (set root, reindex, clear/rebuild index).
+- URL deep links to sessions and turns (`?session=...&turn=...`).
 
 ## Getting Started
 ```bash
@@ -19,10 +21,54 @@ npm install
 npm run dev
 ```
 
-## Notes
+## Pre-commit Hooks
+We use pre-commit to run Biome and markdownlint before commits.
+```bash
+brew install pre-commit
+pre-commit install
+```
+Run all hooks manually:
+```bash
+pre-commit run --all-files
+```
+
+## Configuration
 - Default sessions root: `~/.codex/sessions` (override with `CODEX_SESSIONS_ROOT`).
-- Config lives at `~/.codex-formatter/config.json`.
-- SQLite index lives at `~/.codex-formatter/codex_index.db`.
+- Optional config file: `~/.codex-formatter/config.json`.
+- SQLite index: `~/.codex-formatter/codex_index.db`.
+- Debug logging: set `CODEX_DEBUG=1`.
+
+## Notes
+- The Vite dev server hosts the API middleware that reads sessions and manages indexing.
+
+## Code Tour
+- `src/main.tsx` wires up the app; `src/ConversationViewer.tsx` re-exports the feature entry.
+- `src/features/conversation/ConversationViewer.tsx` is the main container composing hooks + UI.
+- `src/features/conversation/components/` holds the UI building blocks:
+  - `Sidebar.tsx` (search + session browser)
+  - `SessionHeader.tsx` (session metadata + copy controls)
+  - `TurnList.tsx` / `TurnCard.tsx` / `MessageCard.tsx` (conversation rendering)
+  - `SettingsModal.tsx` (session root + indexing actions)
+  - `Toggle.tsx` (feature toggles)
+- `src/features/conversation/hooks/` manages data flow:
+  - `useSessions.ts` (config, sessions tree, reindex)
+  - `useSession.ts` (load/parse a session)
+  - `useSearch.ts` (FTS search + resolve session IDs)
+  - `useUrlSync.ts` (deep-link sync)
+  - `useCopyFeedback.ts` (clipboard feedback state)
+- `src/features/conversation/parsing.ts` implements JSONL parsing rules and turn grouping.
+- `src/features/conversation/markdown.tsx` handles sanitized markdown + snippet highlighting.
+- `src/features/conversation/api.ts` wraps API fetches; `copy.ts` formats exports; `url.ts` handles deep links.
+- `vite.config.ts` contains API endpoints and SQLite indexing logic.
+
+## API Endpoints (dev middleware)
+- `GET /api/config` / `POST /api/config`
+- `GET /api/sessions`
+- `GET /api/session?path=...`
+- `GET /api/search?q=...&limit=...`
+- `POST /api/reindex`
+- `POST /api/clear-index`
+- `GET /api/resolve-session?id=...`
 
 ## Development
 ```bash

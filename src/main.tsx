@@ -1,10 +1,15 @@
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import ConversationViewer from './ConversationViewer'
-import './index.css'
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import ConversationViewer from './ConversationViewer';
+import './index.css';
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+const root = document.getElementById('root');
+if (!root) {
+  throw new Error('Missing root element');
+}
+
+ReactDOM.createRoot(root).render(
   <React.StrictMode>
     <ConversationViewer />
   </React.StrictMode>,
-)
+);

@@ -1,26 +1,26 @@
-import { useMemo, useState } from 'react'
-import { buildConversationExport, copyText } from './copy'
-import { markdownToPlainText } from './markdown'
-import { useSearch } from './hooks/useSearch'
-import { useSession } from './hooks/useSession'
-import { useSessions } from './hooks/useSessions'
-import { useUrlSync } from './hooks/useUrlSync'
-import { useCopyFeedback } from './hooks/useCopyFeedback'
-import { SessionHeader } from './components/SessionHeader'
-import { SettingsModal } from './components/SettingsModal'
-import { Sidebar } from './components/Sidebar'
-import { Toggle } from './components/Toggle'
-import { TurnList } from './components/TurnList'
-import type { ParsedItem } from './types'
+import { useMemo, useState } from 'react';
+import { SessionHeader } from './components/SessionHeader';
+import { SettingsModal } from './components/SettingsModal';
+import { Sidebar } from './components/Sidebar';
+import { Toggle } from './components/Toggle';
+import { TurnList } from './components/TurnList';
+import { buildConversationExport, copyText } from './copy';
+import { useCopyFeedback } from './hooks/useCopyFeedback';
+import { useSearch } from './hooks/useSearch';
+import { useSession } from './hooks/useSession';
+import { useSessions } from './hooks/useSessions';
+import { useUrlSync } from './hooks/useUrlSync';
+import { markdownToPlainText } from './markdown';
+import type { ParsedItem } from './types';
 
 export default function ConversationViewer() {
-  const [showThoughts, setShowThoughts] = useState(true)
-  const [showTools, setShowTools] = useState(true)
-  const [showMeta, setShowMeta] = useState(false)
-  const [showFullContent, setShowFullContent] = useState(false)
-  const [apiError, setApiError] = useState<string | null>(null)
-  const { copiedId, showCopied } = useCopyFeedback()
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [showThoughts, setShowThoughts] = useState(true);
+  const [showTools, setShowTools] = useState(true);
+  const [showMeta, setShowMeta] = useState(false);
+  const [showFullContent, setShowFullContent] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const { copiedId, showCopied } = useCopyFeedback();
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const {
     sessionsTree,
@@ -34,59 +34,59 @@ export default function ConversationViewer() {
     reindexing,
     clearingIndex,
     indexSummary,
-  } = useSessions({ onError: setApiError })
+  } = useSessions({ onError: setApiError });
 
   const { turns, parseErrors, activeSession, sessionDetails, loadingSession, loadSession, clearSession } = useSession({
     sessionsTree,
     onError: setApiError,
-  })
+  });
 
   const { searchQuery, setSearchQuery, searchResults, searchLoading, handleSearchKeyDown } = useSearch({
     onError: setApiError,
     onLoadSession: loadSession,
-  })
+  });
 
-  useUrlSync(loadSession, clearSession)
+  useUrlSync(loadSession, clearSession);
 
   const filteredTurns = useMemo(() => {
     return turns.map((turn) => {
       const items = turn.items.filter((item) => {
-        if (item.type === 'thought' && !showThoughts) return false
-        if ((item.type === 'tool_call' || item.type === 'tool_output') && !showTools) return false
-        if ((item.type === 'meta' || item.type === 'token_count') && !showMeta) return false
-        return true
-      })
-      return { ...turn, items }
-    })
-  }, [turns, showThoughts, showTools, showMeta])
+        if (item.type === 'thought' && !showThoughts) return false;
+        if ((item.type === 'tool_call' || item.type === 'tool_output') && !showTools) return false;
+        if ((item.type === 'meta' || item.type === 'token_count') && !showMeta) return false;
+        return true;
+      });
+      return { ...turn, items };
+    });
+  }, [turns, showThoughts, showTools, showMeta]);
 
   const visibleItemCount = useMemo(() => {
-    return filteredTurns.reduce((count, turn) => count + turn.items.length, 0)
-  }, [filteredTurns])
+    return filteredTurns.reduce((count, turn) => count + turn.items.length, 0);
+  }, [filteredTurns]);
 
   const handleCopyConversation = async () => {
-    const formatted = buildConversationExport(filteredTurns)
-    await copyText(formatted)
-    showCopied('conversation', 2000)
-  }
+    const formatted = buildConversationExport(filteredTurns);
+    await copyText(formatted);
+    showCopied('conversation', 2000);
+  };
 
   const handleCopyItem = async (item: ParsedItem, format: 'text' | 'markdown') => {
-    const raw = item.content
-    const text = format === 'text' ? await markdownToPlainText(raw) : raw
-    await copyText(text)
-    showCopied(item.id + format, 1500)
-  }
+    const raw = item.content;
+    const text = format === 'text' ? await markdownToPlainText(raw) : raw;
+    await copyText(text);
+    showCopied(item.id + format, 1500);
+  };
 
   const handleCopyMeta = async (value: string, id: string) => {
-    await copyText(value)
-    showCopied(id, 1500)
-  }
+    await copyText(value);
+    showCopied(id, 1500);
+  };
 
   const handleClearIndex = async () => {
-    const confirmed = window.confirm('This will clear the index and rebuild it from scratch. Continue?')
-    if (!confirmed) return
-    await rebuildIndex()
-  }
+    const confirmed = window.confirm('This will clear the index and rebuild it from scratch. Continue?');
+    if (!confirmed) return;
+    await rebuildIndex();
+  };
 
   return (
     <div className="min-h-screen px-4 py-8 sm:px-8">
@@ -94,13 +94,16 @@ export default function ConversationViewer() {
         <header className="flex flex-col gap-3 rounded-3xl border border-white/70 bg-white/70 px-6 py-5 shadow-soft backdrop-blur">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-teal-700">Codex Conversation Manager</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-teal-700">
+                Codex Conversation Manager
+              </p>
               <h1 className="mt-2 text-3xl text-slate-900">Session Explorer & Conversation Viewer</h1>
               <p className="mt-1 text-sm text-slate-600">
                 Browse local Codex JSONL sessions, inspect turns, and search across your own history.
               </p>
             </div>
             <button
+              type="button"
               onClick={() => setSettingsOpen(true)}
               className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
             >
@@ -194,5 +197,5 @@ export default function ConversationViewer() {
         onClose={() => setSettingsOpen(false)}
       />
     </div>
-  )
+  );
 }
