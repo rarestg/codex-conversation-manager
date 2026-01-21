@@ -37,8 +37,14 @@
 }
 
 @layer components {
+  .pill {
+    --pill-text-shift: 0.14em;
+  }
+
   .pill-text {
-    @apply leading-none translate-y-[1px];
+    line-height: 1;
+    display: inline-block;
+    transform: translateY(var(--pill-text-shift, 0.14em));
   }
 
   .chip {
@@ -46,7 +52,7 @@
   }
 
   .chip-label {
-    @apply pill-text text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-400;
+    @apply text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-400;
   }
 
   .chip-value {

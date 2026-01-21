@@ -874,14 +874,14 @@ export default function ConversationViewer() {
                   {(sessionDetails.sessionId || sessionDetails.cwd) && (
                     <div className="grid gap-2 text-xs sm:grid-cols-2">
                       {sessionDetails.sessionId && (
-                        <div className="chip">
-                          <span className="chip-label">Session</span>
+                        <div className="chip pill">
+                          <span className="chip-label pill-text">Session</span>
                           <span className="chip-value" title={sessionDetails.sessionId}>
                             {sessionDetails.sessionId}
                           </span>
                           <button
                             onClick={() => handleCopyMeta(sessionDetails.sessionId!, 'session-id')}
-                            className="chip-action"
+                            className="chip-action pill"
                           >
                             <span className="pill-text">
                               {copiedId === 'session-id' ? 'Copied' : 'Copy'}
@@ -890,14 +890,14 @@ export default function ConversationViewer() {
                         </div>
                       )}
                       {sessionDetails.cwd && (
-                        <div className="chip">
-                          <span className="chip-label">Dir</span>
+                        <div className="chip pill">
+                          <span className="chip-label pill-text">Dir</span>
                           <span className="chip-value" title={sessionDetails.cwd}>
                             {sessionDetails.cwd}
                           </span>
                           <button
                             onClick={() => handleCopyMeta(sessionDetails.cwd!, 'session-cwd')}
-                            className="chip-action"
+                            className="chip-action pill"
                           >
                             <span className="pill-text">
                               {copiedId === 'session-cwd' ? 'Copied' : 'Copy'}
