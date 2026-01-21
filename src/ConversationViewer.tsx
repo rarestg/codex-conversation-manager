@@ -874,34 +874,30 @@ export default function ConversationViewer() {
                   {(sessionDetails.sessionId || sessionDetails.cwd) && (
                     <div className="grid gap-2 text-xs sm:grid-cols-2">
                       {sessionDetails.sessionId && (
-                        <div className="chip pill">
-                          <span className="chip-label pill-text">Session</span>
+                        <div className="chip">
+                          <span className="chip-label">Session</span>
                           <span className="chip-value" title={sessionDetails.sessionId}>
                             {sessionDetails.sessionId}
                           </span>
                           <button
                             onClick={() => handleCopyMeta(sessionDetails.sessionId!, 'session-id')}
-                            className="chip-action pill"
+                            className="chip-action"
                           >
-                            <span className="pill-text">
-                              {copiedId === 'session-id' ? 'Copied' : 'Copy'}
-                            </span>
+                            {copiedId === 'session-id' ? 'Copied' : 'Copy'}
                           </button>
                         </div>
                       )}
                       {sessionDetails.cwd && (
-                        <div className="chip pill">
-                          <span className="chip-label pill-text">Dir</span>
+                        <div className="chip">
+                          <span className="chip-label">Dir</span>
                           <span className="chip-value" title={sessionDetails.cwd}>
                             {sessionDetails.cwd}
                           </span>
                           <button
                             onClick={() => handleCopyMeta(sessionDetails.cwd!, 'session-cwd')}
-                            className="chip-action pill"
+                            className="chip-action"
                           >
-                            <span className="pill-text">
-                              {copiedId === 'session-cwd' ? 'Copied' : 'Copy'}
-                            </span>
+                            {copiedId === 'session-cwd' ? 'Copied' : 'Copy'}
                           </button>
                         </div>
                       )}

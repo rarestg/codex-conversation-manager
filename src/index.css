@@ -38,29 +38,25 @@
 
 @layer components {
   .pill {
-    --pill-text-shift: 0.14em;
-  }
-
-  .pill-text {
+    display: inline-flex;
+    align-items: center;
     line-height: 1;
-    display: inline-block;
-    transform: translateY(var(--pill-text-shift, 0.14em));
   }
 
   .chip {
-    @apply flex min-w-0 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 shadow-sm;
+    @apply flex min-w-0 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 shadow-sm leading-none;
   }
 
   .chip-label {
-    @apply text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-400;
+    @apply text-[10px]/[1] font-semibold uppercase tracking-[0.25em] text-slate-400;
   }
 
   .chip-value {
-    @apply min-w-0 flex-1 truncate font-mono text-slate-700;
+    @apply min-w-0 flex-1 truncate font-mono text-slate-700 leading-none;
   }
 
   .chip-action {
-    @apply inline-flex shrink-0 items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500;
+    @apply inline-flex shrink-0 items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px]/[1] font-semibold uppercase tracking-[0.2em] text-slate-500 leading-none;
   }
 }
 
