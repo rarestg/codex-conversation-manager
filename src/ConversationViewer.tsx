@@ -1,4 +1,4 @@
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
@@ -86,6 +86,12 @@ interface SearchResult {
   git_branch?: string | null
   git_repo?: string | null
   snippet?: string | null
+}
+
+type HistoryMode = 'replace' | 'push'
+
+interface LoadSessionOptions {
+  historyMode?: HistoryMode
 }
 
 const copyText = async (text: string) => {
@@ -256,6 +262,47 @@ const extractSessionIdFromPath = (value?: string | null) => {
   const prefixMatch = withoutExt.match(SESSION_ID_PREFIX_REGEX)
   if (prefixMatch) return prefixMatch[0]
   return null
+}
+
+const getSessionParamsFromLocation = () => {
+  const search = window.location.search
+  if (!search || search.length <= 1) return { sessionId: null as string | null, turnId: null as number | null }
+  const params = new URLSearchParams(search)
+  const sessionId = params.get('session')
+  const turnValue = params.get('turn')
+  let turnId: number | null = null
+  if (turnValue !== null && turnValue !== '') {
+    const numeric = Number(turnValue)
+    if (Number.isFinite(numeric)) {
+      turnId = numeric
+    }
+  }
+  return { sessionId, turnId }
+}
+
+const buildSessionUrl = (sessionId: string, turnId?: number | null) => {
+  const encodedSession = encodeURIComponent(sessionId)
+  const queryParts = [`session=${encodedSession}`]
+  if (typeof turnId === 'number' && Number.isFinite(turnId)) {
+    queryParts.push(`turn=${encodeURIComponent(String(turnId))}`)
+  }
+  const query = queryParts.length ? `?${queryParts.join('&')}` : ''
+  const hash = window.location.hash || ''
+  return `${window.location.pathname}${query}${hash}`
+}
+
+const updateSessionUrl = (sessionId: string, turnId?: number | null, mode: HistoryMode = 'push') => {
+  const nextUrl = buildSessionUrl(sessionId, turnId)
+  const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash || ''}`
+  if (nextUrl === currentUrl && mode === 'push') {
+    window.history.replaceState(null, '', nextUrl)
+    return
+  }
+  if (mode === 'replace') {
+    window.history.replaceState(null, '', nextUrl)
+    return
+  }
+  window.history.pushState(null, '', nextUrl)
 }
 
 const parseJsonl = (raw: string) => {
@@ -493,9 +540,11 @@ export default function ConversationViewer() {
   const [sessionsRoot, setSessionsRoot] = useState('')
   const [sessionsRootSource, setSessionsRootSource] = useState<string>('')
   const [reindexing, setReindexing] = useState(false)
+  const [clearingIndex, setClearingIndex] = useState(false)
   const [indexSummary, setIndexSummary] = useState<string>('')
   const [scrollToTurnId, setScrollToTurnId] = useState<number | null>(null)
   const searchTimeout = useRef<number | null>(null)
+  const initialLoadRef = useRef(false)
 
   const filteredTurns = useMemo(() => {
     return turns.map((turn) => {
@@ -580,7 +629,7 @@ export default function ConversationViewer() {
   }, [searchQuery])
 
   useEffect(() => {
-    if (!scrollToTurnId) return
+    if (scrollToTurnId === null) return
     const element = document.getElementById(`turn-${scrollToTurnId}`)
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -588,44 +637,109 @@ export default function ConversationViewer() {
     setScrollToTurnId(null)
   }, [scrollToTurnId, turns])
 
-  const findSessionById = (sessionId: string) => {
-    if (!sessionsTree) return null
-    for (const year of sessionsTree.years) {
-      for (const month of year.months) {
-        for (const day of month.days) {
-          const file = day.files.find((entry) => entry.id === sessionId)
-          if (file) return file
+  const findSessionById = useCallback(
+    (sessionId: string) => {
+      if (!sessionsTree) return null
+      for (const year of sessionsTree.years) {
+        for (const month of year.months) {
+          for (const day of month.days) {
+            const file = day.files.find((entry) => entry.id === sessionId)
+            if (file) return file
+          }
         }
       }
-    }
-    return null
-  }
+      return null
+    },
+    [sessionsTree],
+  )
 
-  const loadSession = async (sessionId: string, turnId?: number) => {
-    try {
-      setLoadingSession(true)
-      setApiError(null)
-      const res = await fetch(`/api/session?path=${encodeURIComponent(sessionId)}`)
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data?.error || 'Unable to load session file.')
+  const loadSession = useCallback(
+    async (sessionId: string, turnId?: number, options?: LoadSessionOptions) => {
+      const historyMode = options?.historyMode ?? 'push'
+      updateSessionUrl(sessionId, turnId ?? null, historyMode)
+      try {
+        setLoadingSession(true)
+        setApiError(null)
+        const res = await fetch(`/api/session?path=${encodeURIComponent(sessionId)}`)
+        if (!res.ok) {
+          const data = await res.json()
+          throw new Error(data?.error || 'Unable to load session file.')
+        }
+        const raw = await res.text()
+        const parsed = parseJsonl(raw)
+        setTurns(parsed.turns)
+        setParseErrors(parsed.errors)
+        const meta =
+          findSessionById(sessionId) ?? ({ id: sessionId, filename: sessionId, size: 0 } as SessionFileEntry)
+        const fallbackSessionId = extractSessionIdFromPath(meta.filename || meta.id)
+        const resolvedSessionId = parsed.sessionInfo.sessionId || fallbackSessionId || undefined
+        const resolvedCwd = parsed.sessionInfo.cwd || meta.cwd || undefined
+        setSessionDetails({ sessionId: resolvedSessionId, cwd: resolvedCwd })
+        setActiveSession(meta)
+        setScrollToTurnId(turnId ?? null)
+      } catch (error: any) {
+        setApiError(error?.message || 'Failed to load session.')
+      } finally {
+        setLoadingSession(false)
       }
-      const raw = await res.text()
-      const parsed = parseJsonl(raw)
-      setTurns(parsed.turns)
-      setParseErrors(parsed.errors)
-      const meta =
-        findSessionById(sessionId) ?? ({ id: sessionId, filename: sessionId, size: 0 } as SessionFileEntry)
-      const fallbackSessionId = extractSessionIdFromPath(meta.filename || meta.id)
-      const resolvedSessionId = parsed.sessionInfo.sessionId || fallbackSessionId || undefined
-      const resolvedCwd = parsed.sessionInfo.cwd || meta.cwd || undefined
-      setSessionDetails({ sessionId: resolvedSessionId, cwd: resolvedCwd })
-      setActiveSession(meta)
-      setScrollToTurnId(turnId ?? null)
+    },
+    [findSessionById],
+  )
+
+  const clearSession = useCallback(() => {
+    setActiveSession(null)
+    setTurns([])
+    setParseErrors([])
+    setSessionDetails({})
+    setScrollToTurnId(null)
+    setLoadingSession(false)
+  }, [])
+
+  useEffect(() => {
+    if (initialLoadRef.current) return
+    initialLoadRef.current = true
+    const { sessionId, turnId } = getSessionParamsFromLocation()
+    if (!sessionId) {
+      clearSession()
+      return
+    }
+    const parsedTurn = typeof turnId === 'number' && Number.isFinite(turnId) ? turnId : undefined
+    loadSession(sessionId, parsedTurn, { historyMode: 'replace' })
+  }, [clearSession, loadSession])
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const { sessionId, turnId } = getSessionParamsFromLocation()
+      if (!sessionId) {
+        clearSession()
+        return
+      }
+      const parsedTurn = typeof turnId === 'number' && Number.isFinite(turnId) ? turnId : undefined
+      loadSession(sessionId, parsedTurn, { historyMode: 'replace' })
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [clearSession, loadSession])
+
+  const handleSearchKeyDown = async (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter') return
+    const query = searchQuery.trim()
+    if (!query) return
+    event.preventDefault()
+    try {
+      const res = await fetch(`/api/resolve-session?id=${encodeURIComponent(query)}`)
+      if (!res.ok) {
+        if (res.status === 404) return
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data?.error || 'Unable to resolve session.')
+      }
+      const data = await res.json()
+      if (!data?.id) return
+      await loadSession(data.id)
+      setSearchQuery('')
+      setSearchResults([])
     } catch (error: any) {
-      setApiError(error?.message || 'Failed to load session.')
-    } finally {
-      setLoadingSession(false)
+      setApiError(error?.message || 'Unable to resolve session.')
     }
   }
 
@@ -721,6 +835,27 @@ export default function ConversationViewer() {
     }
   }
 
+  const handleClearIndex = async () => {
+    const confirmed = window.confirm('This will clear the index and rebuild it from scratch. Continue?')
+    if (!confirmed) return
+    try {
+      setClearingIndex(true)
+      setApiError(null)
+      const res = await fetch('/api/clear-index', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || 'Clear index failed.')
+      const summary = data.summary
+      setIndexSummary(
+        `Cleared index · Scanned ${summary.scanned} files · Updated ${summary.updated} · Removed ${summary.removed} · ${summary.messageCount} messages`,
+      )
+      await loadSessions()
+    } catch (error: any) {
+      setApiError(error?.message || 'Clear index failed.')
+    } finally {
+      setClearingIndex(false)
+    }
+  }
+
   return (
     <div className="min-h-screen px-4 py-8 sm:px-8">
       <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
@@ -765,6 +900,7 @@ export default function ConversationViewer() {
                 type="search"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
+                onKeyDown={handleSearchKeyDown}
                 placeholder="Search messages"
                 className="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-200"
               />
@@ -1184,10 +1320,17 @@ export default function ConversationViewer() {
                 </button>
                 <button
                   onClick={handleReindex}
-                  disabled={reindexing}
+                  disabled={reindexing || clearingIndex}
                   className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm disabled:opacity-60"
                 >
                   {reindexing ? 'Reindexing…' : 'Reindex'}
+                </button>
+                <button
+                  onClick={handleClearIndex}
+                  disabled={clearingIndex || reindexing}
+                  className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 shadow-sm disabled:opacity-60"
+                >
+                  {clearingIndex ? 'Clearing…' : 'Clear & rebuild'}
                 </button>
               </div>
               {indexSummary && (
