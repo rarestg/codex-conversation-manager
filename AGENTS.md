@@ -13,6 +13,16 @@ Codex Conversation Manager (codex-formatter) is a local, developer-focused web a
 - `react-markdown` + `remark-gfm` + `rehype-sanitize`
 - `react-syntax-highlighter` (Prism)
 
+## Quality Checks
+Run these frequently while working on changes:
+- `npm run typecheck` (TypeScript checks for frontend + server)
+- `npm run check` (Biome lint + formatting validation)
+
+Fix commands when needed:
+- `npm run check:write` (autofix lint + formatting)
+- `npm run lint:fix` (lint autofix only)
+- `npm run format:write` (formatting only)
+
 ## Repository Layout (Post-refactor)
 - `src/main.tsx` - React entry.
 - `src/ConversationViewer.tsx` - re-export to the feature module (keeps import path stable).
