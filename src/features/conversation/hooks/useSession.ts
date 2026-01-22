@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchSession } from '../api';
 import { extractSessionIdFromPath, parseJsonl } from '../parsing';
 import type { LoadSessionOptions, SessionDetails, SessionFileEntry, SessionTree, Turn } from '../types';
@@ -9,10 +9,19 @@ interface UseSessionOptions {
   onError?: (message: string | null) => void;
 }
 
+interface ParsedMeta {
+  preview?: string;
+  startedAt?: string;
+  endedAt?: string;
+  turnCount?: number;
+  filename?: string;
+}
+
 export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [parseErrors, setParseErrors] = useState<string[]>([]);
-  const [activeSession, setActiveSession] = useState<SessionFileEntry | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [parsedMeta, setParsedMeta] = useState<ParsedMeta | null>(null);
   const [sessionDetails, setSessionDetails] = useState<SessionDetails>({});
   const [loadingSession, setLoadingSession] = useState(false);
   const [scrollToTurnId, setScrollToTurnId] = useState<number | null>(null);
@@ -42,18 +51,20 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
     if (firstTimestamp !== null) startedAt = new Date(firstTimestamp).toISOString();
     if (lastTimestamp !== null) endedAt = new Date(lastTimestamp).toISOString();
     const filename = sessionId.split('/').pop() || sessionId;
+    const turnCountValue = turnCount > 0 ? turnCount : undefined;
 
     return {
       preview,
       startedAt,
       endedAt,
-      turnCount,
+      turnCount: turnCountValue,
       filename,
     };
   }, []);
 
   const clearSession = useCallback(() => {
-    setActiveSession(null);
+    setActiveSessionId(null);
+    setParsedMeta(null);
     setTurns([]);
     setParseErrors([]);
     setSessionDetails({});
@@ -89,30 +100,14 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
         setTurns(parsed.turns);
         setParseErrors(parsed.errors);
         const derivedMeta = buildDerivedMeta(sessionId, parsed.turns);
-        const meta =
-          findSessionById(sessionId) ??
-          ({
-            id: sessionId,
-            filename: derivedMeta.filename || sessionId,
-            size: 0,
-          } as SessionFileEntry);
-        const fallbackSessionId = extractSessionIdFromPath(meta.filename || meta.id);
+        const indexed = findSessionById(sessionId);
+        const metaFilename = indexed?.filename ?? derivedMeta.filename ?? sessionId;
+        const fallbackSessionId = extractSessionIdFromPath(metaFilename);
         const resolvedSessionId = parsed.sessionInfo.sessionId || fallbackSessionId || undefined;
-        const resolvedCwd = parsed.sessionInfo.cwd || meta.cwd || undefined;
+        const resolvedCwd = parsed.sessionInfo.cwd || indexed?.cwd || undefined;
         setSessionDetails({ sessionId: resolvedSessionId, cwd: resolvedCwd });
-        setActiveSession((prev) => {
-          const next = { ...meta };
-          if (!next.preview && derivedMeta.preview) next.preview = derivedMeta.preview;
-          if (!next.timestamp && derivedMeta.startedAt) next.timestamp = derivedMeta.startedAt;
-          if (!next.startedAt && derivedMeta.startedAt) next.startedAt = derivedMeta.startedAt;
-          if (!next.endedAt && derivedMeta.endedAt) next.endedAt = derivedMeta.endedAt;
-          if ((next.turnCount === null || next.turnCount === undefined) && derivedMeta.turnCount > 0) {
-            next.turnCount = derivedMeta.turnCount;
-          }
-          if (!next.filename && derivedMeta.filename) next.filename = derivedMeta.filename;
-          if (prev?.id && prev.id === next.id) return { ...prev, ...next };
-          return next;
-        });
+        setActiveSessionId(sessionId);
+        setParsedMeta(derivedMeta);
         setScrollToTurnId(turnId ?? null);
       } catch (error: any) {
         onError?.(error?.message || 'Failed to load session.');
@@ -123,6 +118,43 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
     [buildDerivedMeta, findSessionById, onError],
   );
 
+  const activeSession = useMemo<SessionFileEntry | null>(() => {
+    if (!activeSessionId) return null;
+    const indexed = findSessionById(activeSessionId);
+    const extractedId = extractSessionIdFromPath(activeSessionId);
+    const filename = indexed?.filename || parsedMeta?.filename || activeSessionId;
+    const fallback: SessionFileEntry = {
+      id: activeSessionId,
+      filename,
+      size: indexed?.size ?? 0,
+      preview: parsedMeta?.preview ?? null,
+      timestamp: parsedMeta?.startedAt ?? null,
+      startedAt: parsedMeta?.startedAt ?? null,
+      endedAt: parsedMeta?.endedAt ?? null,
+      turnCount: parsedMeta?.turnCount ?? null,
+      messageCount: indexed?.messageCount ?? null,
+      cwd: indexed?.cwd ?? null,
+      gitBranch: indexed?.gitBranch ?? null,
+      gitRepo: indexed?.gitRepo ?? null,
+      gitCommitHash: indexed?.gitCommitHash ?? null,
+      sessionId: indexed?.sessionId || extractedId || '',
+    };
+
+    if (!indexed) return fallback;
+
+    return {
+      ...fallback,
+      ...indexed,
+      preview: indexed.preview || fallback.preview,
+      timestamp: indexed.timestamp || fallback.timestamp,
+      startedAt: indexed.startedAt ?? fallback.startedAt,
+      endedAt: indexed.endedAt ?? fallback.endedAt,
+      turnCount: indexed.turnCount ?? fallback.turnCount,
+      filename: indexed.filename || fallback.filename,
+      sessionId: indexed.sessionId || fallback.sessionId,
+    };
+  }, [activeSessionId, findSessionById, parsedMeta]);
+
   useEffect(() => {
     if (scrollToTurnId === null) return;
     const element = document.getElementById(`turn-${scrollToTurnId}`);
@@ -131,25 +163,6 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
     }
     setScrollToTurnId(null);
   }, [scrollToTurnId]);
-
-  useEffect(() => {
-    if (!activeSession || !sessionsTree) return;
-    const updated = findSessionById(activeSession.id);
-    if (!updated) return;
-    setActiveSession((prev) => {
-      if (!prev) return updated;
-      return {
-        ...prev,
-        ...updated,
-        preview: updated.preview ?? prev.preview,
-        timestamp: updated.timestamp ?? prev.timestamp,
-        startedAt: updated.startedAt ?? prev.startedAt,
-        endedAt: updated.endedAt ?? prev.endedAt,
-        turnCount: updated.turnCount ?? prev.turnCount,
-        filename: updated.filename || prev.filename,
-      };
-    });
-  }, [activeSession, findSessionById, sessionsTree]);
 
   return {
     turns,
