@@ -52,8 +52,9 @@ New or modified components/hooks:
 
 ## Behavior Notes / Gotchas
 - **Workspace key is `cwd` only.** Repo root detection is not implemented yet; this avoids identity whiplash until a deliberate migration is planned.
-- **Reindex required for new git fields.** Existing session rows won’t populate `git_commit_hash` until a reindex.
-- **Workspace list depends on session data.** If sessions root changes, users must reindex to see new workspaces.
+- **Schema is treated as baseline.** There are no migrations; use “Clear & Rebuild” to reset the DB when pulling changes.
+- **Reindex required for new git fields.** Existing session rows won’t populate `git_commit_hash` until a reindex/clear.
+- **Workspace list depends on session data.** If sessions root changes, reindex to see new workspaces.
 
 ## How to Validate
 - Run `npm run typecheck` and `npm run check`.
