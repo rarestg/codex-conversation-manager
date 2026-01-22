@@ -1,4 +1,4 @@
-import { formatTimestamp } from '../format';
+import { formatTimestamp, formatWorkspacePath } from '../format';
 import type { SessionDetails, SessionFileEntry } from '../types';
 
 interface SessionHeaderProps {
@@ -47,7 +47,7 @@ export const SessionHeader = ({
               <div className="chip">
                 <span className="chip-label">Dir</span>
                 <span className="chip-value" title={cwd}>
-                  {cwd}
+                  {formatWorkspacePath(cwd)}
                 </span>
                 <button type="button" onClick={() => onCopyMeta(cwd, 'session-cwd')} className="chip-action">
                   {copiedId === 'session-cwd' ? 'Copied' : 'Copy'}

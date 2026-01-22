@@ -1,0 +1,32 @@
+Workspaces + Sessions layout adjustments (progress notes)
+
+What changed
+- Home layout now places Workspaces on the left and Sessions on the right, with a 50/50 split (repo-first flow).
+- Session mode sidebar moved to the right (lg:flex-row-reverse) to keep layout consistent between home and session views.
+- Workspace cards: right column (sessions/date/time) stays top-right by using a non-wrapping layout on larger screens.
+- Timestamp display: date and time are split into separate lines; time is displayed without seconds.
+- Paths shorten home directories to ~ for readability and less wrapping pressure.
+- GitHub URL is replaced with an “Open on GitHub” link when a GitHub slug is available; otherwise the raw git URL is shown.
+
+Why
+- The repo-first workflow is more natural: pick a workspace first, then scan sessions and search.
+- A consistent layout (right sidebar) reduces spatial shifts between home and session modes.
+- Long paths were pushing the session/date info below; shortening paths and constraining layout keeps metadata aligned.
+- Removing seconds and splitting the date/time gives the left column more breathing room.
+- The GitHub link is cleaner than a long git URL and easier to act on.
+
+Files touched
+- src/features/conversation/ConversationViewer.tsx
+- src/features/conversation/components/WorkspacesPanel.tsx
+- src/features/conversation/components/SearchPanel.tsx
+- src/features/conversation/components/SessionsPanel.tsx
+- src/features/conversation/components/SessionHeader.tsx
+- src/features/conversation/format.ts
+
+Commands run
+- npm run format:write
+- npm run lint
+- npm run typecheck
+
+Branch
+- ui/workspace-layout

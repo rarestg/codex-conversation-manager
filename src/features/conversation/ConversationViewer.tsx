@@ -163,16 +163,7 @@ export default function ConversationViewer() {
               searchLoading={searchLoading}
               onLoadSession={loadSession}
             />
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]">
-              <SessionsPanel
-                sessionsTree={sessionsTree}
-                sessionsRoot={sessionsRoot}
-                onRefreshSessions={loadSessions}
-                onLoadSession={loadSession}
-                activeSession={activeSession}
-                activeWorkspace={activeWorkspace}
-                onClearWorkspace={handleClearWorkspace}
-              />
+            <div className="grid gap-6 lg:grid-cols-2">
               <WorkspacesPanel
                 workspaces={workspaces}
                 loading={workspacesLoading}
@@ -182,10 +173,19 @@ export default function ConversationViewer() {
                 onSelectWorkspace={handleSelectWorkspace}
                 onClearWorkspace={handleClearWorkspace}
               />
+              <SessionsPanel
+                sessionsTree={sessionsTree}
+                sessionsRoot={sessionsRoot}
+                onRefreshSessions={loadSessions}
+                onLoadSession={loadSession}
+                activeSession={activeSession}
+                activeWorkspace={activeWorkspace}
+                onClearWorkspace={handleClearWorkspace}
+              />
             </div>
           </div>
         ) : (
-          <div className="flex flex-col gap-6 lg:flex-row">
+          <div className="flex flex-col gap-6 lg:flex-row-reverse">
             <Sidebar
               sessionsTree={sessionsTree}
               sessionsRoot={sessionsRoot}

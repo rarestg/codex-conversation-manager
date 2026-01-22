@@ -1,4 +1,4 @@
-import { formatTimestamp } from '../format';
+import { formatDate, formatTime, formatWorkspacePath } from '../format';
 import type { WorkspaceSummary } from '../types';
 import { GitHubIcon } from './GitHubIcon';
 
@@ -59,7 +59,7 @@ export const WorkspacesPanel = ({
               Filtered by workspace
             </span>
             <span className="truncate rounded-full bg-slate-100 px-3 py-1 text-[11px] text-slate-600">
-              {activeWorkspace}
+              {formatWorkspacePath(activeWorkspace)}
             </span>
             <button
               type="button"
@@ -74,41 +74,65 @@ export const WorkspacesPanel = ({
           {workspaces.length ? (
             workspaces.map((workspace) => {
               const isActive = activeWorkspace === workspace.cwd;
+              const displayCwd = formatWorkspacePath(workspace.cwd);
+              const githubUrl = workspace.github_slug ? `https://github.com/${workspace.github_slug}` : null;
               return (
-                <button
-                  type="button"
+                <div
                   key={workspace.cwd}
-                  onClick={() => onSelectWorkspace(workspace.cwd)}
-                  className={`w-full rounded-2xl border px-4 py-3 text-left text-sm transition ${
+                  className={`w-full rounded-2xl border text-left text-sm transition ${
                     isActive
                       ? 'border-teal-300 bg-teal-50 text-teal-800'
                       : 'border-slate-100 bg-white text-slate-700 hover:border-teal-200 hover:bg-white'
                   }`}
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 text-sm font-semibold">
-                        {workspace.github_slug && (
-                          <span className="rounded-full bg-slate-200 p-1 text-slate-600">
-                            <GitHubIcon className="h-3.5 w-3.5" />
-                          </span>
+                  <button
+                    type="button"
+                    onClick={() => onSelectWorkspace(workspace.cwd)}
+                    className="w-full px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-200"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0 sm:flex-1">
+                        <div className="flex items-center gap-2 text-sm font-semibold">
+                          {workspace.github_slug && (
+                            <span className="rounded-full bg-slate-200 p-1 text-slate-600">
+                              <GitHubIcon className="h-3.5 w-3.5" />
+                            </span>
+                          )}
+                          <span className="truncate">{getWorkspaceTitle(workspace)}</span>
+                        </div>
+                        <div className="mt-1 truncate text-xs text-slate-500" title={workspace.cwd}>
+                          {displayCwd}
+                        </div>
+                        {workspace.git_branch && (
+                          <div className="mt-1 text-[11px] text-slate-500">Branch: {workspace.git_branch}</div>
                         )}
-                        <span className="truncate">{getWorkspaceTitle(workspace)}</span>
                       </div>
-                      <div className="mt-1 truncate text-xs text-slate-500">{workspace.cwd}</div>
-                      {workspace.git_repo && (
-                        <div className="mt-1 truncate text-[11px] text-slate-500">{workspace.git_repo}</div>
-                      )}
-                      {workspace.git_branch && (
-                        <div className="mt-1 text-[11px] text-slate-500">Branch: {workspace.git_branch}</div>
-                      )}
+                      <div className="shrink-0 text-right text-xs text-slate-500">
+                        <div>{workspace.session_count} sessions</div>
+                        {workspace.last_seen && (
+                          <>
+                            <div>{formatDate(workspace.last_seen)}</div>
+                            <div>{formatTime(workspace.last_seen)}</div>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-right text-xs text-slate-500">
-                      <div>{workspace.session_count} sessions</div>
-                      {workspace.last_seen && <div>{formatTimestamp(workspace.last_seen)}</div>}
-                    </div>
-                  </div>
-                </button>
+                  </button>
+                  {githubUrl ? (
+                    <a
+                      href={githubUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 px-4 pb-3 text-[11px] font-medium text-teal-700 hover:text-teal-800"
+                    >
+                      Open on GitHub
+                    </a>
+                  ) : (
+                    workspace.git_repo && (
+                      <div className="px-4 pb-3 text-[11px] text-slate-500">{workspace.git_repo}</div>
+                    )
+                  )}
+                </div>
               );
             })
           ) : (
