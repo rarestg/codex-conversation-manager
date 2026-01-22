@@ -53,6 +53,19 @@ const asRecord = (value: unknown): Record<string, unknown> =>
 
 const getString = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined);
 
+const extractGithubSlug = (value?: string | null) => {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const sshMatch = trimmed.match(/^git@github\.com:([^/]+\/[^/]+?)(?:\.git)?$/i);
+  if (sshMatch) return sshMatch[1];
+  const httpsMatch = trimmed.match(/^https?:\/\/github\.com\/([^/]+\/[^/]+?)(?:\.git)?\/?$/i);
+  if (httpsMatch) return httpsMatch[1];
+  const sshUrlMatch = trimmed.match(/^ssh:\/\/git@github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/i);
+  if (sshUrlMatch) return sshUrlMatch[1];
+  return null;
+};
+
 const ensureDir = async (dir: string) => {
   await fsp.mkdir(dir, { recursive: true });
 };
@@ -111,6 +124,7 @@ const initSchema = (database: Database.Database) => {
       cwd TEXT,
       git_branch TEXT,
       git_repo TEXT,
+      git_commit_hash TEXT,
       first_user_message TEXT
     );
 
@@ -173,6 +187,10 @@ const initSchema = (database: Database.Database) => {
     database.exec(
       'UPDATE sessions SET session_id_checked = CASE WHEN session_id IS NOT NULL THEN 1 ELSE 0 END WHERE session_id_checked IS NULL',
     );
+  }
+  const hasGitCommitHash = sessionColumns.some((column) => column.name === 'git_commit_hash');
+  if (!hasGitCommitHash) {
+    database.exec('ALTER TABLE sessions ADD COLUMN git_commit_hash TEXT');
   }
   database.exec('CREATE INDEX IF NOT EXISTS idx_sessions_session_id ON sessions(session_id)');
 };
@@ -321,6 +339,7 @@ const parseJsonlFile = async (filePath: string) => {
     cwd?: string;
     git_branch?: string;
     git_repo?: string;
+    git_commit_hash?: string;
     timestamp?: string;
     session_id?: string;
   } = {};
@@ -344,10 +363,22 @@ const parseJsonlFile = async (filePath: string) => {
       const entry = JSON.parse(line);
       if (entry.type === 'session_meta') {
         const payload = entry.payload ?? entry;
+        const gitPayload = payload?.git ?? {};
         sessionMeta = {
           cwd: payload?.cwd ?? sessionMeta.cwd,
-          git_branch: payload?.git_branch ?? payload?.gitBranch ?? sessionMeta.git_branch,
-          git_repo: payload?.git_repo ?? payload?.gitRepo ?? sessionMeta.git_repo,
+          git_branch: payload?.git_branch ?? payload?.gitBranch ?? gitPayload?.branch ?? sessionMeta.git_branch,
+          git_repo:
+            payload?.git_repo ??
+            payload?.gitRepo ??
+            gitPayload?.repository_url ??
+            gitPayload?.repositoryUrl ??
+            sessionMeta.git_repo,
+          git_commit_hash:
+            payload?.git_commit_hash ??
+            payload?.gitCommitHash ??
+            gitPayload?.commit_hash ??
+            gitPayload?.commitHash ??
+            sessionMeta.git_commit_hash,
           timestamp: payload?.timestamp ?? entry.timestamp ?? sessionMeta.timestamp,
           session_id: sessionMeta.session_id,
         };
@@ -486,8 +517,30 @@ const indexSessions = async (root: string) => {
   const currentPaths = new Set(files.map((file) => file.relPath));
 
   const insertSession = database.prepare(`
-    INSERT INTO sessions (id, path, session_id, session_id_checked, timestamp, cwd, git_branch, git_repo, first_user_message)
-    VALUES (@id, @path, @session_id, @session_id_checked, @timestamp, @cwd, @git_branch, @git_repo, @first_user_message)
+    INSERT INTO sessions (
+      id,
+      path,
+      session_id,
+      session_id_checked,
+      timestamp,
+      cwd,
+      git_branch,
+      git_repo,
+      git_commit_hash,
+      first_user_message
+    )
+    VALUES (
+      @id,
+      @path,
+      @session_id,
+      @session_id_checked,
+      @timestamp,
+      @cwd,
+      @git_branch,
+      @git_repo,
+      @git_commit_hash,
+      @first_user_message
+    )
     ON CONFLICT(id) DO UPDATE SET
       session_id = excluded.session_id,
       session_id_checked = excluded.session_id_checked,
@@ -495,6 +548,7 @@ const indexSessions = async (root: string) => {
       cwd = excluded.cwd,
       git_branch = excluded.git_branch,
       git_repo = excluded.git_repo,
+      git_commit_hash = excluded.git_commit_hash,
       first_user_message = excluded.first_user_message
   `);
   const insertFile = database.prepare(`
@@ -541,6 +595,7 @@ const indexSessions = async (root: string) => {
           cwd: parsed.sessionMeta.cwd ?? null,
           git_branch: parsed.sessionMeta.git_branch ?? null,
           git_repo: parsed.sessionMeta.git_repo ?? null,
+          git_commit_hash: parsed.sessionMeta.git_commit_hash ?? null,
           first_user_message: parsed.firstUserMessage || null,
         });
       } catch (error) {
@@ -632,6 +687,57 @@ const getSessionsPreviewMap = (database: Database.Database) => {
     });
   }
   return map;
+};
+
+const getWorkspaceSummaries = (database: Database.Database) => {
+  const rows = database
+    .prepare(
+      `
+        WITH summary AS (
+          SELECT cwd, COUNT(*) AS session_count, MAX(timestamp) AS last_seen
+          FROM sessions
+          WHERE cwd IS NOT NULL AND cwd != ''
+          GROUP BY cwd
+        ),
+        ranked AS (
+          SELECT
+            cwd,
+            git_branch,
+            git_repo,
+            git_commit_hash,
+            timestamp,
+            ROW_NUMBER() OVER (PARTITION BY cwd ORDER BY timestamp DESC) AS rn
+          FROM sessions
+          WHERE cwd IS NOT NULL AND cwd != ''
+        )
+        SELECT
+          summary.cwd AS cwd,
+          summary.session_count AS session_count,
+          summary.last_seen AS last_seen,
+          ranked.git_branch AS git_branch,
+          ranked.git_repo AS git_repo,
+          ranked.git_commit_hash AS git_commit_hash
+        FROM summary
+        LEFT JOIN ranked ON ranked.cwd = summary.cwd AND ranked.rn = 1
+      `,
+    )
+    .all() as Array<{
+    cwd: string;
+    session_count: number;
+    last_seen?: string | null;
+    git_branch?: string | null;
+    git_repo?: string | null;
+    git_commit_hash?: string | null;
+  }>;
+  return rows.map((row) => ({
+    cwd: row.cwd,
+    session_count: row.session_count,
+    last_seen: row.last_seen ?? null,
+    git_branch: row.git_branch ?? null,
+    git_repo: row.git_repo ?? null,
+    git_commit_hash: row.git_commit_hash ?? null,
+    github_slug: extractGithubSlug(row.git_repo ?? undefined),
+  }));
 };
 
 const buildSessionsTree = (
@@ -814,19 +920,47 @@ export const apiPlugin = (): Plugin => {
                 error: `Sessions root not found: ${rootInfo.value}. Set CODEX_SESSIONS_ROOT or update ~/.codex-formatter/config.json`,
               });
             }
+            const workspace = url.searchParams.get('workspace')?.trim() || null;
             const files = await scanSessionFiles(rootInfo.value);
             const database = ensureDb();
             const previewMap = getSessionsPreviewMap(database);
+            const filteredFiles = workspace
+              ? files.filter((file) => previewMap.get(file.relPath)?.cwd === workspace)
+              : files;
 
-            for (const file of files) {
+            for (const file of filteredFiles) {
               if (!previewMap.has(file.relPath)) {
                 const preview = await readFirstUserMessage(file.absPath);
                 previewMap.set(file.relPath, { preview });
               }
             }
 
-            const tree = buildSessionsTree(rootInfo.value, files, previewMap);
+            const tree = buildSessionsTree(rootInfo.value, filteredFiles, previewMap);
             return sendJson(res, 200, tree);
+          }
+
+          if (pathname === '/api/workspaces' && req.method === 'GET') {
+            const sort = url.searchParams.get('sort');
+            const sortBy = sort === 'session_count' ? 'session_count' : 'last_seen';
+            const database = ensureDb();
+            const workspaces = getWorkspaceSummaries(database);
+            workspaces.sort((a, b) => {
+              if (sortBy === 'session_count') {
+                if (b.session_count !== a.session_count) {
+                  return b.session_count - a.session_count;
+                }
+                const lastSeenCompare = (b.last_seen ?? '').localeCompare(a.last_seen ?? '');
+                if (lastSeenCompare !== 0) return lastSeenCompare;
+              } else {
+                const lastSeenCompare = (b.last_seen ?? '').localeCompare(a.last_seen ?? '');
+                if (lastSeenCompare !== 0) return lastSeenCompare;
+                if (b.session_count !== a.session_count) {
+                  return b.session_count - a.session_count;
+                }
+              }
+              return a.cwd.localeCompare(b.cwd);
+            });
+            return sendJson(res, 200, { workspaces });
           }
 
           if (pathname === '/api/session' && req.method === 'GET') {
@@ -918,8 +1052,30 @@ export const apiPlugin = (): Plugin => {
           if (pathname === '/api/search' && req.method === 'GET') {
             const q = url.searchParams.get('q');
             const limit = Number(url.searchParams.get('limit') || '20');
+            const workspace = url.searchParams.get('workspace')?.trim() || null;
             if (!q) return sendJson(res, 400, { error: 'q is required.' });
             const database = ensureDb();
+            const params: Array<string | number> = [q];
+            let whereClause = 'messages_fts MATCH ?';
+            if (workspace) {
+              whereClause += ' AND sessions.cwd = ?';
+              params.push(workspace);
+            }
+            params.push(Number.isFinite(limit) ? limit : 20);
+            type SearchResultRow = {
+              id: number;
+              content: string;
+              session_id: string;
+              turn_id: number;
+              role: string;
+              timestamp?: string | null;
+              session_timestamp?: string | null;
+              cwd?: string | null;
+              git_branch?: string | null;
+              git_repo?: string | null;
+              git_commit_hash?: string | null;
+              snippet?: string | null;
+            };
             const stmt = database.prepare(`
               SELECT
                 messages_fts.rowid AS id,
@@ -932,16 +1088,76 @@ export const apiPlugin = (): Plugin => {
                 sessions.cwd AS cwd,
                 sessions.git_branch AS git_branch,
                 sessions.git_repo AS git_repo,
+                sessions.git_commit_hash AS git_commit_hash,
                 snippet(messages_fts, 0, '[[', ']]', '…', 18) AS snippet
               FROM messages_fts
               JOIN messages ON messages_fts.rowid = messages.id
               JOIN sessions ON sessions.id = messages_fts.session_id
-              WHERE messages_fts MATCH ?
+              WHERE ${whereClause}
               ORDER BY bm25(messages_fts)
               LIMIT ?
             `);
-            const results = stmt.all(q, Number.isFinite(limit) ? limit : 20);
-            return sendJson(res, 200, { results });
+            const results = stmt.all(...params) as SearchResultRow[];
+            const summaries = getWorkspaceSummaries(database);
+            const summaryMap = new Map(summaries.map((summary) => [summary.cwd, summary]));
+            const groupsMap = new Map<
+              string,
+              {
+                workspace: {
+                  cwd: string;
+                  session_count: number;
+                  last_seen: string | null;
+                  git_branch: string | null;
+                  git_repo: string | null;
+                  git_commit_hash: string | null;
+                  github_slug: string | null;
+                };
+                results: SearchResultRow[];
+              }
+            >();
+
+            for (const result of results) {
+              const workspaceKey = result.cwd || 'Unknown workspace';
+              const summary = summaryMap.get(workspaceKey);
+              const workspaceSummary = summary
+                ? summary
+                : {
+                    cwd: workspaceKey,
+                    session_count: 0,
+                    last_seen: result.session_timestamp ?? null,
+                    git_branch: result.git_branch ?? null,
+                    git_repo: result.git_repo ?? null,
+                    git_commit_hash: result.git_commit_hash ?? null,
+                    github_slug: extractGithubSlug(result.git_repo ?? undefined),
+                  };
+              const group = groupsMap.get(workspaceKey) ?? {
+                workspace: workspaceSummary,
+                results: [] as SearchResultRow[],
+              };
+              group.results.push(result);
+              groupsMap.set(workspaceKey, group);
+            }
+
+            const groups = Array.from(groupsMap.values())
+              .map((group) => {
+                if (!group.workspace.session_count) {
+                  group.workspace.session_count = group.results.length;
+                }
+                if (!group.workspace.last_seen) {
+                  group.workspace.last_seen = group.results[0]?.session_timestamp ?? null;
+                }
+                return group;
+              })
+              .sort((a, b) => {
+                const lastSeenCompare = (b.workspace.last_seen ?? '').localeCompare(a.workspace.last_seen ?? '');
+                if (lastSeenCompare !== 0) return lastSeenCompare;
+                if (b.workspace.session_count !== a.workspace.session_count) {
+                  return b.workspace.session_count - a.workspace.session_count;
+                }
+                return a.workspace.cwd.localeCompare(b.workspace.cwd);
+              });
+
+            return sendJson(res, 200, { groups });
           }
 
           return sendJson(res, 404, { error: 'Not found' });

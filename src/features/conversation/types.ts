@@ -57,7 +57,23 @@ export interface SearchResult {
   cwd?: string | null;
   git_branch?: string | null;
   git_repo?: string | null;
+  git_commit_hash?: string | null;
   snippet?: string | null;
+}
+
+export interface WorkspaceSummary {
+  cwd: string;
+  session_count: number;
+  last_seen: string | null;
+  git_branch: string | null;
+  git_repo: string | null;
+  git_commit_hash: string | null;
+  github_slug: string | null;
+}
+
+export interface WorkspaceSearchGroup {
+  workspace: WorkspaceSummary;
+  results: SearchResult[];
 }
 
 export type HistoryMode = 'replace' | 'push';

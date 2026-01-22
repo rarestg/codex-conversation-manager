@@ -1,15 +1,19 @@
 import { useMemo, useState } from 'react';
+import { SearchPanel } from './components/SearchPanel';
 import { SessionHeader } from './components/SessionHeader';
+import { SessionsPanel } from './components/SessionsPanel';
 import { SettingsModal } from './components/SettingsModal';
 import { Sidebar } from './components/Sidebar';
 import { Toggle } from './components/Toggle';
 import { TurnList } from './components/TurnList';
+import { WorkspacesPanel } from './components/WorkspacesPanel';
 import { buildConversationExport, copyText } from './copy';
 import { useCopyFeedback } from './hooks/useCopyFeedback';
 import { useSearch } from './hooks/useSearch';
 import { useSession } from './hooks/useSession';
 import { useSessions } from './hooks/useSessions';
 import { useUrlSync } from './hooks/useUrlSync';
+import { useWorkspaces } from './hooks/useWorkspaces';
 import { markdownToPlainText } from './markdown';
 import type { ParsedItem } from './types';
 
@@ -21,6 +25,7 @@ export default function ConversationViewer() {
   const [apiError, setApiError] = useState<string | null>(null);
   const { copiedId, showCopied } = useCopyFeedback();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [activeWorkspace, setActiveWorkspace] = useState<string | null>(null);
 
   const {
     sessionsTree,
@@ -34,17 +39,26 @@ export default function ConversationViewer() {
     reindexing,
     clearingIndex,
     indexSummary,
-  } = useSessions({ onError: setApiError });
+  } = useSessions({ onError: setApiError, workspace: activeWorkspace });
 
   const { turns, parseErrors, activeSession, sessionDetails, loadingSession, loadSession, clearSession } = useSession({
     sessionsTree,
     onError: setApiError,
   });
 
-  const { searchQuery, setSearchQuery, searchResults, searchLoading, handleSearchKeyDown } = useSearch({
+  const { searchQuery, setSearchQuery, searchGroups, searchLoading, handleSearchKeyDown } = useSearch({
     onError: setApiError,
     onLoadSession: loadSession,
+    workspace: activeWorkspace,
   });
+
+  const {
+    workspaces,
+    loading: workspacesLoading,
+    sort: workspacesSort,
+    setSort: setWorkspacesSort,
+    loadWorkspaces,
+  } = useWorkspaces({ onError: setApiError });
 
   useUrlSync(loadSession, clearSession);
 
@@ -86,7 +100,23 @@ export default function ConversationViewer() {
     const confirmed = window.confirm('This will clear the index and rebuild it from scratch. Continue?');
     if (!confirmed) return;
     await rebuildIndex();
+    await loadWorkspaces();
   };
+
+  const handleReindex = async () => {
+    await reindex();
+    await loadWorkspaces();
+  };
+
+  const handleSelectWorkspace = (workspace: string) => {
+    setActiveWorkspace((current) => (current === workspace ? null : workspace));
+  };
+
+  const handleClearWorkspace = () => {
+    setActiveWorkspace(null);
+  };
+
+  const showHome = !activeSession;
 
   return (
     <div className="min-h-screen px-4 py-8 sm:px-8">
@@ -117,70 +147,105 @@ export default function ConversationViewer() {
           )}
         </header>
 
-        <div className="flex flex-col gap-6 lg:flex-row">
-          <Sidebar
-            sessionsTree={sessionsTree}
-            sessionsRoot={sessionsRoot}
-            searchQuery={searchQuery}
-            onSearchQueryChange={setSearchQuery}
-            onSearchKeyDown={handleSearchKeyDown}
-            searchResults={searchResults}
-            searchLoading={searchLoading}
-            onLoadSession={loadSession}
-            activeSession={activeSession}
-            onRefreshSessions={loadSessions}
-          />
-
-          <main className="flex-1 min-w-0 space-y-6">
-            <div className="rounded-3xl border border-white/70 bg-white/80 p-6 shadow-card backdrop-blur">
-              <SessionHeader
-                activeSession={activeSession}
-                sessionDetails={sessionDetails}
-                visibleItemCount={visibleItemCount}
-                copiedId={copiedId}
-                onCopyConversation={handleCopyConversation}
-                onCopyMeta={handleCopyMeta}
-              />
-
-              <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <Toggle
-                  label="Show thoughts"
-                  description="Include agent reasoning inline."
-                  checked={showThoughts}
-                  onChange={setShowThoughts}
-                />
-                <Toggle
-                  label="Show tools"
-                  description="Tool calls and outputs inline."
-                  checked={showTools}
-                  onChange={setShowTools}
-                />
-                <Toggle
-                  label="Show metadata"
-                  description="turn_context, session_meta, token_count."
-                  checked={showMeta}
-                  onChange={setShowMeta}
-                />
-                <Toggle
-                  label="Show full content"
-                  description="Disable truncation for long messages."
-                  checked={showFullContent}
-                  onChange={setShowFullContent}
-                />
-              </div>
-            </div>
-
-            <TurnList
-              filteredTurns={filteredTurns}
-              loadingSession={loadingSession}
-              activeSession={activeSession}
-              parseErrors={parseErrors}
-              showFullContent={showFullContent}
-              copiedId={copiedId}
-              onCopyItem={handleCopyItem}
+        {showHome ? (
+          <div className="flex flex-col gap-6">
+            <SearchPanel
+              searchQuery={searchQuery}
+              onSearchQueryChange={setSearchQuery}
+              onSearchKeyDown={handleSearchKeyDown}
+              searchGroups={searchGroups}
+              searchLoading={searchLoading}
+              onLoadSession={loadSession}
             />
-          </main>
-        </div>
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]">
+              <SessionsPanel
+                sessionsTree={sessionsTree}
+                sessionsRoot={sessionsRoot}
+                onRefreshSessions={loadSessions}
+                onLoadSession={loadSession}
+                activeSession={activeSession}
+                activeWorkspace={activeWorkspace}
+                onClearWorkspace={handleClearWorkspace}
+              />
+              <WorkspacesPanel
+                workspaces={workspaces}
+                loading={workspacesLoading}
+                sort={workspacesSort}
+                onSortChange={setWorkspacesSort}
+                activeWorkspace={activeWorkspace}
+                onSelectWorkspace={handleSelectWorkspace}
+                onClearWorkspace={handleClearWorkspace}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-6 lg:flex-row">
+            <Sidebar
+              sessionsTree={sessionsTree}
+              sessionsRoot={sessionsRoot}
+              searchQuery={searchQuery}
+              onSearchQueryChange={setSearchQuery}
+              onSearchKeyDown={handleSearchKeyDown}
+              searchGroups={searchGroups}
+              searchLoading={searchLoading}
+              onLoadSession={loadSession}
+              activeSession={activeSession}
+              onRefreshSessions={loadSessions}
+              activeWorkspace={activeWorkspace}
+              onClearWorkspace={handleClearWorkspace}
+            />
+
+            <main className="flex-1 min-w-0 space-y-6">
+              <div className="rounded-3xl border border-white/70 bg-white/80 p-6 shadow-card backdrop-blur">
+                <SessionHeader
+                  activeSession={activeSession}
+                  sessionDetails={sessionDetails}
+                  visibleItemCount={visibleItemCount}
+                  copiedId={copiedId}
+                  onCopyConversation={handleCopyConversation}
+                  onCopyMeta={handleCopyMeta}
+                />
+
+                <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <Toggle
+                    label="Show thoughts"
+                    description="Include agent reasoning inline."
+                    checked={showThoughts}
+                    onChange={setShowThoughts}
+                  />
+                  <Toggle
+                    label="Show tools"
+                    description="Tool calls and outputs inline."
+                    checked={showTools}
+                    onChange={setShowTools}
+                  />
+                  <Toggle
+                    label="Show metadata"
+                    description="turn_context, session_meta, token_count."
+                    checked={showMeta}
+                    onChange={setShowMeta}
+                  />
+                  <Toggle
+                    label="Show full content"
+                    description="Disable truncation for long messages."
+                    checked={showFullContent}
+                    onChange={setShowFullContent}
+                  />
+                </div>
+              </div>
+
+              <TurnList
+                filteredTurns={filteredTurns}
+                loadingSession={loadingSession}
+                activeSession={activeSession}
+                parseErrors={parseErrors}
+                showFullContent={showFullContent}
+                copiedId={copiedId}
+                onCopyItem={handleCopyItem}
+              />
+            </main>
+          </div>
+        )}
       </div>
 
       <SettingsModal
@@ -192,7 +257,7 @@ export default function ConversationViewer() {
         clearingIndex={clearingIndex}
         onSessionsRootChange={setSessionsRoot}
         onSaveRoot={saveRoot}
-        onReindex={reindex}
+        onReindex={handleReindex}
         onClearIndex={handleClearIndex}
         onClose={() => setSettingsOpen(false)}
       />

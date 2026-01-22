@@ -1,15 +1,16 @@
 import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { resolveSession, searchSessions } from '../api';
-import type { SearchResult } from '../types';
+import type { WorkspaceSearchGroup } from '../types';
 
 interface UseSearchOptions {
   onError?: (message: string | null) => void;
   onLoadSession: (sessionId: string, turnId?: number) => Promise<void> | void;
+  workspace?: string | null;
 }
 
-export const useSearch = ({ onError, onLoadSession }: UseSearchOptions) => {
+export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOptions) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchGroups, setSearchGroups] = useState<WorkspaceSearchGroup[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const searchTimeout = useRef<number | null>(null);
   const latestRequestId = useRef(0);
@@ -21,7 +22,7 @@ export const useSearch = ({ onError, onLoadSession }: UseSearchOptions) => {
     latestRequestId.current += 1;
     const requestId = latestRequestId.current;
     if (!trimmedQuery) {
-      setSearchResults([]);
+      setSearchGroups([]);
       setSearchLoading(false);
       return;
     }
@@ -31,9 +32,9 @@ export const useSearch = ({ onError, onLoadSession }: UseSearchOptions) => {
     searchTimeout.current = window.setTimeout(async () => {
       setSearchLoading(true);
       try {
-        const results = await searchSessions(trimmedQuery, 40);
+        const results = await searchSessions(trimmedQuery, 40, workspace);
         if (requestId !== latestRequestId.current || latestQuery.current !== trimmedQuery) return;
-        setSearchResults(results);
+        setSearchGroups(results);
       } catch (error: any) {
         if (requestId !== latestRequestId.current || latestQuery.current !== trimmedQuery) return;
         onError?.(error?.message || 'Search failed.');
@@ -50,7 +51,7 @@ export const useSearch = ({ onError, onLoadSession }: UseSearchOptions) => {
         window.clearTimeout(searchTimeout.current);
       }
     };
-  }, [onError, searchQuery]);
+  }, [onError, searchQuery, workspace]);
 
   const handleSearchKeyDown = useCallback(
     async (event: KeyboardEvent<HTMLInputElement>) => {
@@ -63,7 +64,7 @@ export const useSearch = ({ onError, onLoadSession }: UseSearchOptions) => {
         if (!resolved) return;
         await onLoadSession(resolved);
         setSearchQuery('');
-        setSearchResults([]);
+        setSearchGroups([]);
       } catch (error: any) {
         onError?.(error?.message || 'Unable to resolve session.');
       }
@@ -73,13 +74,13 @@ export const useSearch = ({ onError, onLoadSession }: UseSearchOptions) => {
 
   const clearSearch = useCallback(() => {
     setSearchQuery('');
-    setSearchResults([]);
+    setSearchGroups([]);
   }, []);
 
   return {
     searchQuery,
     setSearchQuery,
-    searchResults,
+    searchGroups,
     searchLoading,
     handleSearchKeyDown,
     clearSearch,

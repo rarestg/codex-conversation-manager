@@ -4,9 +4,10 @@ import type { SessionTree } from '../types';
 
 interface UseSessionsOptions {
   onError?: (message: string | null) => void;
+  workspace?: string | null;
 }
 
-export const useSessions = ({ onError }: UseSessionsOptions = {}) => {
+export const useSessions = ({ onError, workspace }: UseSessionsOptions = {}) => {
   const [sessionsTree, setSessionsTree] = useState<SessionTree | null>(null);
   const [sessionsRoot, setSessionsRoot] = useState('');
   const [sessionsRootSource, setSessionsRootSource] = useState<string>('');
@@ -27,12 +28,12 @@ export const useSessions = ({ onError }: UseSessionsOptions = {}) => {
   const loadSessions = useCallback(async () => {
     try {
       onError?.(null);
-      const data = await fetchSessions();
+      const data = await fetchSessions(workspace);
       setSessionsTree(data);
     } catch (error: any) {
       onError?.(error?.message || 'Failed to load sessions.');
     }
-  }, [onError]);
+  }, [onError, workspace]);
 
   useEffect(() => {
     loadConfig();
