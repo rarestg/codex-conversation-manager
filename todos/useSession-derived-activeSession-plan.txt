@@ -1,0 +1,212 @@
+Implementation Plan — Fix Active Session Update Loop via Derived State
+
+Context
+
+We are fixing a severe performance and stability issue: the UI constantly re-renders and logs “Maximum update depth exceeded” and long “message/click handler” violations even when the app is idle. The root cause is an effect in src/features/conversation/hooks/useSession.ts that depends on activeSession and unconditionally calls setActiveSession with a new object. That creates an infinite update loop. The loop saturates the main thread, which explains the cursor lag, delayed copy feedback, and slow click/hover response.
+
+Relevant code and data flow
+
+- src/features/conversation/hooks/useSession.ts currently stores an activeSession object in state and uses an effect to “sync” it with sessionsTree updates. That effect sets state on every render because it always creates a new object.
+- ConversationViewer (src/features/conversation/ConversationViewer.tsx) consumes activeSession and passes it to SessionHeader, SessionsPanel, TurnList, and Sidebar. Any change to activeSession triggers re-renders across the core UI.
+- sessionsTree comes from useSessions (src/features/conversation/hooks/useSessions.ts) and is populated asynchronously after load or reindex.
+- parseJsonl produces derived metadata (preview, timestamps, turnCount, filename) and sessionInfo (sessionId, cwd). These are currently merged into activeSession directly in loadSession.
+- The rest of the UI treats activeSession as a view model: it expects fields such as filename, preview, timestamps, git repo/branch, etc.
+
+Goal
+
+Refactor useSession to keep only minimal, stable state (session ID + parsed metadata), and compute activeSession as derived data via useMemo. This removes the effect that syncs state based on itself, preventing update loops and improving performance. The pattern also makes it harder to reintroduce similar bugs in the future.
+
+The Plan
+
+Step 1: Introduce a “parsed meta” shape and minimal state
+
+<annotations>Note: SessionFileEntry expects a sessionId string, but the current data model allows it to be empty (sessionsTree often uses '' when unknown). In fallback objects, ensure a sessionId string exists; prefer extractSessionIdFromPath where sensible, otherwise use '' as the explicit “unknown” placeholder.</annotations>
+
+Where: src/features/conversation/hooks/useSession.ts (and optionally types in src/features/conversation/types.ts)
+
+What to do:
+- Define a local type for the metadata produced by parsing a JSONL session. This is the “parsedMeta”. Suggested fields: preview, startedAt, endedAt, turnCount, filename, plus optional size/cwd/other parsed-only fields if useful. Keep it minimal and directly derived from the file content.
+- Replace the activeSession state with two smaller pieces of state:
+  - activeSessionId: string | null
+  - parsedMeta: ParsedMeta | null
+- Keep the existing state for turns, parseErrors, sessionDetails, loadingSession, and scrollToTurnId unchanged.
+
+Why:
+- activeSession should be a derived view model. The ID and parsed meta are stable and do not require syncing. This removes the self-triggering effect and makes the state transition flow explicit.
+
+Dependencies:
+- This step should precede any changes to how activeSession is returned or used in other components.
+
+Step 2: Refactor loadSession to set minimal state only
+
+<annotations>ParsedMeta should be computed once in loadSession; avoid re-parsing inside the derived memo to keep it cheap and deterministic.</annotations>
+
+Where: src/features/conversation/hooks/useSession.ts (inside loadSession)
+
+What to do:
+- Replace setActiveSession with setActiveSessionId and setParsedMeta.
+- Use buildDerivedMeta as the source for parsedMeta and store it directly.
+- Set activeSessionId to sessionId when a session is loaded.
+- Retain sessionDetails logic (session ID + cwd) as-is, since it is unrelated to activeSession and already stable.
+
+Why:
+- loadSession is the right place to store source-of-truth data. Everything else should be derived on render. This keeps state minimal and prevents merging issues later.
+
+Dependencies:
+- ParsedMeta type must exist before this change.
+
+Step 3: Derive activeSession via useMemo (no effect)
+
+<annotations>Explicitly define merge precedence: indexed/sessionTree values win for repo/branch/commit/cwd/size (canonical metadata), while parsedMeta provides preview/startedAt/endedAt/turnCount only when indexed values are null/undefined. The useMemo should depend on activeSessionId, parsedMeta, and sessionsTree (or findSessionById) so reindex updates flow through.</annotations>
+
+Where: src/features/conversation/hooks/useSession.ts
+
+What to do:
+- Add a helper function (e.g., mergeSessionMeta or buildActiveSession) that accepts:
+  - activeSessionId
+  - sessionsTree (or findSessionById result)
+  - parsedMeta
+- Implement a useMemo that returns the “activeSession” view model:
+  - If no activeSessionId, return null.
+  - Attempt to find the indexed session entry via findSessionById(activeSessionId).
+  - If neither indexed data nor parsedMeta exist, return a minimal fallback object: { id, filename: id, size: 0, sessionId: id } (ensure required fields exist).
+<annotations>If you use a placeholder sessionId, prefer extractSessionIdFromPath(id) when it yields a real session ID. Otherwise use '' rather than the path/id, so the UI doesn’t display a file path as a session ID.</annotations>
+  - Merge indexed data and parsedMeta carefully:
+    - Prefer indexed values when available (for git repo/branch/commit, cwd, timestamps, etc.).
+    - Use parsedMeta as fallback when indexed values are absent or null.
+    - Ensure filename/preview/startedAt/endedAt are always populated when possible.
+- Return this memoized value as activeSession in the hook’s return object.
+
+Why:
+- This removes the need for the effect that syncs activeSession based on itself.
+- The derived model responds to sessionsTree updates without state churn.
+- The explicit merge function makes the behavior testable and avoids reintroducing loops.
+
+Dependencies:
+- The effect that previously merged activeSession must be removed after this memoized derivation is added (see Step 4).
+
+Step 4: Delete the syncing effect that updates activeSession
+
+Where: src/features/conversation/hooks/useSession.ts
+
+What to do:
+- Remove the useEffect that depends on activeSession and sessionsTree and calls setActiveSession (currently around lines ~135–152 in the file).
+
+Why:
+- This effect is the direct cause of the infinite render loop. With derived state, it is unnecessary and harmful.
+
+Dependencies:
+- Only remove this after Step 3’s derived activeSession is in place.
+
+Step 5: Update clearSession and related code paths
+
+Where: src/features/conversation/hooks/useSession.ts
+
+What to do:
+- Update clearSession to reset activeSessionId and parsedMeta to null (instead of clearing activeSession).
+- Ensure any code paths that relied on activeSession being set to null still behave correctly (e.g., showHome in ConversationViewer is derived from activeSession).
+
+Why:
+- Keep state transitions consistent and predictable.
+
+Dependencies:
+- Should be done after Step 1 so the state variables exist.
+
+Step 6: Adjust types and required fields (if needed)
+
+<annotations>Keep sessionDetails (sessionId + cwd) as its own state derived from parsed sessionInfo and fallback logic; do not mix it into activeSession derivation to avoid conflating UI meta chips with session identity resolution.</annotations>
+
+Where: src/features/conversation/types.ts and/or useSession.ts
+
+What to do:
+- If SessionFileEntry requires non-optional fields (id, filename, size, sessionId), ensure the derived activeSession always returns them.
+- Consider introducing a local “ActiveSessionView” type if SessionFileEntry is too strict for the derived object. Otherwise, ensure the merge function supplies required defaults.
+
+Why:
+- Prevents type errors and runtime issues when derived data is incomplete (e.g., sessionsTree not yet loaded).
+
+Dependencies:
+- This should be handled while implementing the memoized activeSession in Step 3.
+
+Decisions & Tradeoffs
+
+Chosen approach: Minimal source-of-truth state + derived activeSession via useMemo.
+
+Why this approach:
+- It removes the class of “effect sync loop” bugs entirely by design.
+- It provides a clear separation between parsed data (from JSONL) and indexed metadata (from sessionsTree).
+- It is maintainable: future contributors can add new metadata sources by extending the merge function rather than adding new effects.
+
+Alternatives considered:
+- Keep rawActiveSession in state and only merge with sessionsTree via useMemo. This is a smaller diff but keeps a larger, mixed-source state object that can become stale and invites future sync effects.
+- Add shallow-equality guards to the existing effect. This mitigates the loop but keeps a fragile pattern and can regress if any new field changes each render.
+
+Tradeoffs accepted:
+- Slightly larger refactor in useSession in exchange for stronger architecture and fewer long-term risks.
+- Derived activeSession is computed each render (memoized), which is negligible compared to the performance cost of a re-render loop.
+
+Landmines & Non‑obvious Notes
+
+- The SessionFileEntry type requires certain fields (id, filename, size, sessionId). When sessionsTree is not ready, the derived activeSession must still return defaults or a fallback object. Failing to do this can cause runtime errors in SessionHeader or SessionsPanel.
+- Be careful not to reintroduce state updates inside effects that depend on the same state. This refactor is specifically aimed at preventing that pattern.
+- In loadSession, do not attempt to “merge” indexed data directly into parsedMeta. The merge should happen in the memoized derived layer only.
+- Deep link loads (URL with session ID) can happen before sessionsTree arrives. The derived activeSession must still produce a valid object from parsedMeta to avoid breaking the UI.
+<annotations>Specifically ensure the header title uses parsedMeta.preview in this case so it does not fall back to the filename-only title during initial load.</annotations>
+- SessionsPanel and SessionHeader rely on activeSession fields like filename, preview, timestamps, repo info. Make sure the merge order preserves the best available information.
+
+Verification
+
+Step-level checks:
+- After Step 3, the derived activeSession should update when sessionsTree changes without any setState calls. Confirm by adding a temporary console log or by observing activeSession values in React DevTools.
+- After Step 4, confirm the “Maximum update depth exceeded” warning no longer appears on idle.
+
+Functional tests:
+- Start the app (`npm run dev`) and load a session by clicking in SessionsPanel. Confirm:
+  - No repeating console warnings or violations.
+  - The session header shows correct filename, timestamps, and repo info.
+  - The “Copied” checkmark appears promptly.
+- Deep-link test: open a session via URL parameters (`?session=...&turn=...`). Confirm the header renders even before sessionsTree finishes loading.
+- Toggle a workspace filter and ensure activeSession stays correct after sessionsTree reloads.
+- Manually trigger reindex/clear-index and ensure the active session metadata updates as sessionsTree refreshes.
+
+Optional verification:
+- Run `npm run typecheck` and `npm run check` to ensure types and formatting remain valid.
+
+
+Example merge function (illustrative)
+
+<annotations>
+The snippet below is illustrative only and should be adapted to the actual types in useSession. The key ideas are: (1) only merge in one place, (2) prefer indexed values for canonical metadata, and (3) fall back to parsed values for preview/timestamps when indexed data is missing.
+</annotations>
+
+```
+const buildActiveSession = (
+  sessionId: string,
+  indexed: SessionFileEntry | null,
+  parsedMeta: ParsedMeta | null,
+): SessionFileEntry => {
+  const fallback = {
+    id: sessionId,
+    filename: parsedMeta?.filename || sessionId,
+    size: indexed?.size ?? 0,
+    sessionId: extractSessionIdFromPath(sessionId) || '',
+  } as SessionFileEntry;
+
+  if (!indexed && !parsedMeta) return fallback;
+
+  return {
+    ...fallback,
+    ...(indexed ?? {}),
+    // prefer indexed canonical metadata
+    cwd: indexed?.cwd ?? parsedMeta?.cwd ?? undefined,
+    gitRepo: indexed?.gitRepo ?? undefined,
+    gitBranch: indexed?.gitBranch ?? undefined,
+    gitCommitHash: indexed?.gitCommitHash ?? undefined,
+    // prefer parsed meta only when indexed fields are absent
+    preview: indexed?.preview ?? parsedMeta?.preview ?? fallback.filename,
+    startedAt: indexed?.startedAt ?? parsedMeta?.startedAt ?? indexed?.timestamp ?? undefined,
+    endedAt: indexed?.endedAt ?? parsedMeta?.endedAt ?? undefined,
+    turnCount: indexed?.turnCount ?? parsedMeta?.turnCount ?? undefined,
+  };
+};
+```
