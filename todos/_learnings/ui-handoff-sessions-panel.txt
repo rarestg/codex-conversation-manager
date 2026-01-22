@@ -1,0 +1,60 @@
+Handoff: Sessions UI / UX Improvements
+
+Overview
+We’ve been iterating on the Sessions panel (right-side list) to make it easier to scan: readable date labels, session metadata pills, and cleaner rows (no filename). We also switched to overlay scrollbars and started using Lucide icons.
+
+Key files
+- src/features/conversation/components/SessionsPanel.tsx
+  - Main Sessions list UI (year/month/day accordion + session cards)
+  - Where most visual tweaks were made
+- src/features/conversation/format.ts
+  - Date label helpers (formatMonthLabel, formatDayLabel)
+  - Duration / relative time helpers
+- server/apiPlugin.ts
+  - Session indexing: now includes session ID, turns, timestamps, etc.
+- src/index.css
+  - OverlayScrollbars theme (.os-theme-codex)
+- src/main.tsx
+  - Imports OverlayScrollbars CSS
+
+What changed (high level)
+- Date labels:
+  - Month: “01 January”
+  - Day: “21 Wednesday”
+- Sessions list items:
+  - Title uses first user message (fallback “Session”)
+  - Filename removed from UI
+  - Metadata pills: time (Clock), duration (Hourglass), turns (Repeat2), repo (GitHub), branch (GitBranch)
+- Session ID is now a pill with Fingerprint icon; clicking copies it
+- Session IDs are sourced from session_meta.payload.id (fixed in parser/indexer)
+- Overlay scrollbars enabled for Sessions list via overlayscrollbars-react
+- Lucide icons added (also used in header Home + Settings)
+
+Important behaviors
+- Session IDs now guaranteed in data:
+  - server/apiPlugin.ts pulls payload.id and falls back to filename
+- Session row click opens session
+- Session ID pill is a separate button to copy ID
+
+Text centering (pills)
+- Pill text looked low due to font metrics (Sora at 10px).
+- Working fix: optical nudge on the text span itself:
+  - translate-y-[0.5px]
+- Full experiment history documented in:
+  - todos/_learnings/pill-text-centering.txt
+
+If you tweak pills
+- Use the same base pill styling for consistency:
+  - inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[10px]/[12px] text-slate-600 shadow-sm
+- Keep the text-nudge span for optical centering:
+  - <span className="translate-y-[0.5px]">…</span>
+
+How to run
+- npm run typecheck
+- npm run format:write
+
+Notes for future improvements
+- Potential improvements still open:
+  - Centralize pill styles into reusable class/component
+  - Add copy icon to other copy buttons
+  - Extend overlay scrollbars to search results/workspaces if desired

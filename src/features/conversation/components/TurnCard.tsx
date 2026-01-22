@@ -26,16 +26,22 @@ export const TurnCard = ({ turn, showFullContent, copiedId, onCopyItem }: TurnCa
       </div>
 
       <div className="mt-4 space-y-4">
-        {turn.items.map((item, itemIndex) => (
-          <MessageCard
-            key={item.id}
-            item={item}
-            itemIndex={itemIndex}
-            showFullContent={showFullContent}
-            copiedId={copiedId}
-            onCopyItem={onCopyItem}
-          />
-        ))}
+        {turn.items.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-4 text-xs text-slate-500">
+            All items hidden by filters.
+          </div>
+        ) : (
+          turn.items.map((item, itemIndex) => (
+            <MessageCard
+              key={item.id}
+              item={item}
+              itemIndex={itemIndex}
+              showFullContent={showFullContent}
+              copiedId={copiedId}
+              onCopyItem={onCopyItem}
+            />
+          ))
+        )}
       </div>
     </section>
   );

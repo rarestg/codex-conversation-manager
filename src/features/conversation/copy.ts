@@ -3,8 +3,12 @@ import type { Turn } from './types';
 
 export const copyText = async (text: string) => {
   if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch (_error) {
+      // Fall back to execCommand-based copy below.
+    }
   }
   const textarea = document.createElement('textarea');
   textarea.value = text;

@@ -1,0 +1,69 @@
+Virtualized Conversation List Implementation Plan
+
+Context
+This project renders long Codex sessions as a list of turns and message cards. The list can easily reach hundreds of items (e.g., 464 items with tools/thoughts), and toggling filters (“Show thoughts/tools/meta”) currently causes a full re-render of all rendered items. The slow part is not the filtering logic itself but the expensive render tree for every visible MessageCard, including ReactMarkdown rendering, rehype-sanitize, and syntax highlighting. We need virtualization so only the portion of the list that is visible in the viewport is rendered at any moment. This is a performance fix for the session view and is triggered by user feedback that toggles take ~1s to reflect. The code already indexes and loads sessions locally; this change targets UI rendering time, not data loading.
+
+Relevant code and how it connects
+The session viewer lives in src/features/conversation/ConversationViewer.tsx. It uses useSession (src/features/conversation/hooks/useSession.ts) to load the session and track scroll-to-turn behavior via document.getElementById("turn-N"). It renders TurnList (src/features/conversation/components/TurnList.tsx), which maps each filtered Turn to a TurnCard (src/features/conversation/components/TurnCard.tsx). TurnCard renders the turn header and all MessageCard rows. MessageCard (src/features/conversation/components/MessageCard.tsx) renders MarkdownBlock for user/assistant/thought messages, which is heavy. TurnList is the correct insertion point for virtualization because it owns the list. The turn id is encoded as id=turn-${turn.id} on the TurnCard section, and useSession depends on that for deep-link scrolling.
+
+The Plan (execution order, with dependencies)
+Step 1: Add the virtualization dependency. Add @tanstack/react-virtual to package.json dependencies and run npm install (or npm install @tanstack/react-virtual). This is a hard dependency for the new list rendering. Do this first so types and imports are available before code changes.
+
+Step 2: Decide the virtualization granularity and preserve existing UI. We will virtualize at the Turn level, not at the individual MessageCard level, to minimize refactors and keep the existing TurnCard layout intact (header + list of items in a card). This still yields large wins because most sessions have many turns, and only the visible TurnCards (and their contained MessageCards) will render. Message-level virtualization can be revisited later if a single turn becomes extremely large.
+
+Step 3: Replace TurnList with a virtualized list using @tanstack/react-virtual. In src/features/conversation/components/TurnList.tsx, import useWindowVirtualizer (or useVirtualizer with window scroll, depending on the version API). The list is currently in the main document flow (not inside a custom scroll container), so use the window as the scroll element. Build a virtualizer with count = filteredTurns.length, an estimateSize (e.g., 260), and overscan (e.g., 6–10). Render a “spacer” container with position: relative and height = virtualizer.getTotalSize(). Then render only virtual items, each as an absolutely positioned row translated to virtualRow.start. Each row should render the existing TurnCard for the associated turn. Attach ref={virtualizer.measureElement} to each row wrapper to support dynamic row heights.
+
+Step 4: Preserve spacing and layout in the virtualized list. The current TurnList uses `space-y-6` to add vertical gaps between TurnCards. With absolute positioning, gap utilities won’t apply. Instead, add padding-bottom to each row wrapper (e.g., className="pb-6") and ensure the estimateSize roughly accounts for this gap. The TurnCard itself remains unchanged, but it now sits inside a wrapper div that the virtualizer measures.
+
+Step 5: Update scroll-to-turn behavior to work with virtualization. The current useSession implementation scrolls to a DOM element by id in a useEffect. With virtualization, the target TurnCard might not be mounted, so document.getElementById will return null. Replace this behavior with virtualizer-based scrolling. Modify useSession to expose a “scrollTargetTurnId” and a “clearScrollTarget” method instead of immediately calling scrollIntoView. Then, in TurnList, whenever scrollTargetTurnId is set, compute the target index by finding the turn in filteredTurns whose id matches. Call virtualizer.scrollToIndex(targetIndex, { align: 'start' }) and then invoke clearScrollTarget to prevent repeated scrolling. This is a dependency: TurnList must run after useSession so the turn list is loaded, and the clear call should happen after a successful scroll attempt. Keep a fallback to DOM-based scrolling only if the virtualizer is disabled or the target is already rendered (optional; not required for the first implementation).
+
+Step 6: Keep deep-link anchors intact. Continue to set id={`turn-${turn.id}`} on the TurnCard (or its wrapper) so URLs still resolve to anchors if the row is currently mounted. This supports browser link behavior when the row is visible. The virtualizer-based scroll should be the primary deep-link mechanism.
+
+Step 7: Ensure the empty-state placeholder for hidden items still appears inside a TurnCard. We already added an “All items hidden by filters” message in TurnCard when turn.items.length === 0. Since TurnCard is still used, no changes are required, but confirm that it is visible in the virtualized list and not clipped by height measurement.
+
+Step 8: Validate and adjust performance. After initial integration, tune estimateSize and overscan to minimize layout thrash. If rows are measured frequently, avoid too low an estimate (it causes more reflow) and avoid too high overscan (it increases render cost). A reasonable starting point is estimateSize 260 and overscan 8, but adjust based on the largest common TurnCard heights.
+
+Decisions & Tradeoffs
+We are virtualizing at the Turn level (not MessageCard level) because it is the most impactful change for minimal refactor risk. This keeps the existing TurnCard composition intact and avoids reworking the visual grouping of messages within a turn. The tradeoff is that very large single turns still render all messages at once, which could be slow in edge cases. However, for typical sessions where work is spread across many turns, turn-level virtualization produces a large performance win. We are using window-based virtualization rather than introducing a new scroll container, which preserves current layout and avoids a large UX shift. The tradeoff is slightly more complexity in scroll-to-turn and anchoring behavior, but it avoids changing how the page scrolls.
+
+Landmines and non-obvious behavior
+The biggest landmine is useSession’s scroll-into-view logic. It currently uses document.getElementById on `turn-${turnId}`. Virtualization will unmount most TurnCards, so this will often fail silently. This must be replaced with a virtualizer scroll call or deep-linking will stop working. Another fragile area is spacing: Tailwind’s `space-y-6` no longer affects absolutely positioned virtual rows. If spacing is removed, the list will look too tight. You must reintroduce the vertical spacing in the row wrapper (padding-bottom or similar). Also note that measureElement does not include external margins; padding should be used if you rely on the virtualizer’s size measurements. Finally, ensure that the TurnCard id remains stable and unique so search results and deep linking remain consistent.
+
+Verification
+For functional correctness: open a large session, scroll through the conversation, and confirm that only the visible turn cards are in the DOM (React DevTools or inspecting the DOM should show far fewer nodes). Toggle Show Thoughts/Tools/Metadata and confirm the toggle state changes immediately and the list updates without a long delay. Deep-link to a turn using ?turn=ID and confirm the viewer scrolls to the correct turn after load. If the turn is far down the list, it should still scroll correctly; if it doesn’t, the scroll-to-index mapping is wrong or not wired. Also verify that the “All items hidden by filters” placeholder renders for a preamble when filters hide its content.
+
+For UI consistency: check the spacing between TurnCards; it should match the old `space-y-6` rhythm. Confirm that TurnCard styling and header layout are unchanged. Ensure that the “Loading session…” state still renders above the virtualized list and that parse warnings and empty-session messages still render correctly when no turns are present.
+
+Suggested tests (manual)
+Load a long session (hundreds of items) and toggle all filters quickly while watching frame drops; the delay should be significantly reduced. Navigate to a deep link with a turn parameter and confirm it lands correctly. Scroll quickly through the list to confirm there are no blank gaps or rendering glitches. Inspect the DOM to verify that the number of rendered MessageCards is proportional to the viewport, not to the total session size.
+
+Addendum: useTransition for Toggle Responsiveness + Toggle Styling Tweaks
+
+Context and intent
+Even with virtualization, toggling filters can still feel heavy because React waits for the expensive list update before the UI shows state changes. React’s useTransition lets us mark the filter update as low-priority so the toggle itself flips immediately, and the list update happens “after.” This is purely a perceived-performance improvement, but it makes the UI feel snappy and responsive. While reviewing the toggles, there is also a UX gap: the cursor doesn’t change on hover and there’s no hover/active styling, so the toggles don’t feel interactive.
+
+Implementation plan (with dependencies)
+1) Import React’s useTransition in src/features/conversation/ConversationViewer.tsx. Create a transition hook (const [isPending, startTransition] = useTransition()). This step must happen before updating the toggle handlers because we will use startTransition to wrap the expensive update.
+
+2) Change the toggle state updates to use startTransition. Wrap the setShowThoughts / setShowTools / setShowMeta / setShowFullContent calls inside startTransition, so the switch itself updates immediately and the expensive list re-render is deprioritized. Example pattern:
+   - onChange={(checked) => startTransition(() => setShowThoughts(checked))}
+   Apply this to all four toggles.
+
+3) Optionally surface “Updating…” feedback when isPending is true. This is not strictly required, but it can be added in the header or near the toggles to make long transitions explicit. If added, it should be subtle (small pill or text) and only visible while pending.
+
+4) Update Toggle styling to feel interactive. In src/features/conversation/components/Toggle.tsx, add a cursor and hover/focus cues:
+   - Add cursor-pointer to the root label.
+   - Add hover:bg-white/90 or hover:border-teal-200 to reinforce interactivity.
+   - Add focus-visible styles to the input or label (e.g., focus-within:ring-2 focus-within:ring-teal-200 focus-within:ring-offset-1) so keyboard users see focus.
+   - Add transition classes (transition-colors) for hover/focus smoothing.
+
+5) Consider increasing the clickable area if needed. The whole label is already the click target, so no structural changes are required. The goal is a cursor change, hover background, and a visible focus ring.
+
+Decisions & Tradeoffs
+This is a low-risk, high-perceived-impact change. useTransition does not reduce the actual render cost, but it keeps the toggle from feeling blocked and makes the UI respond instantly. The tradeoff is that the list visually updates a short moment later, which can feel like a two-stage change. The optional “Updating…” pill can reduce confusion if users wonder why the list lags.
+
+Landmines
+If the toggle state is used for anything else that must be synchronous (e.g., saving preferences to disk), do not wrap those actions in startTransition. Only the UI list update should be deferred. Also, avoid wrapping multiple state updates that must stay in lockstep unless they are all inside the same transition callback.
+
+Verification
+Toggle each filter quickly in a large session. The toggle should flip instantly, the cursor should change on hover, and the list should update shortly after without blocking the interaction. Tab to the toggles and ensure a focus ring is visible. If you add an “Updating…” indicator, it should appear only while the list is re-rendering and disappear quickly.
