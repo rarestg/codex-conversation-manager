@@ -1,17 +1,20 @@
 import type { CSSProperties } from 'react';
+import { copyText } from '../copy';
 import { MAX_PREVIEW_CHARS } from '../format';
-import { MarkdownBlock } from '../markdown';
+import { MarkdownBlock, markdownToPlainText } from '../markdown';
 import type { ParsedItem } from '../types';
+import { CopyButton } from './CopyButton';
 
 interface MessageCardProps {
   item: ParsedItem;
   itemIndex: number;
   showFullContent: boolean;
-  copiedId: string | null;
-  onCopyItem: (item: ParsedItem, format: 'text' | 'markdown') => void;
 }
 
-export const MessageCard = ({ item, itemIndex, showFullContent, copiedId, onCopyItem }: MessageCardProps) => {
+export const MessageCard = ({ item, itemIndex, showFullContent }: MessageCardProps) => {
+  if (import.meta.env.DEV && itemIndex === 0) {
+    console.debug('[render] MessageCard', { id: item.id, type: item.type });
+  }
   const isMarkdownItem = ['user', 'assistant', 'thought'].includes(item.type);
   const displayContent = item.content;
   const truncated =
@@ -45,6 +48,15 @@ export const MessageCard = ({ item, itemIndex, showFullContent, copiedId, onCopy
             : item.type === 'tool_output'
               ? 'border-rose-200/70 bg-rose-50/80 text-rose-900'
               : 'border-slate-200/70 bg-slate-50/80 text-slate-800';
+  const handleCopy = async (format: 'text' | 'markdown') => {
+    const raw = item.content;
+    if (format === 'text') {
+      const text = await markdownToPlainText(raw);
+      await copyText(text);
+      return;
+    }
+    await copyText(raw);
+  };
 
   return (
     <div
@@ -59,33 +71,30 @@ export const MessageCard = ({ item, itemIndex, showFullContent, copiedId, onCopy
         </div>
         {isMarkdownItem && (
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => onCopyItem(item, 'text')}
+            <CopyButton
+              onCopy={() => handleCopy('text')}
               aria-label={`Copy ${roleLabel} message as text`}
               className="rounded-full border border-white/70 bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm"
             >
-              {copiedId === item.id + 'text' ? 'Copied' : 'Copy text'}
-            </button>
-            <button
-              type="button"
-              onClick={() => onCopyItem(item, 'markdown')}
+              Copy text
+            </CopyButton>
+            <CopyButton
+              onCopy={() => handleCopy('markdown')}
               aria-label={`Copy ${roleLabel} message as markdown`}
               className="rounded-full border border-white/70 bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm"
             >
-              {copiedId === item.id + 'markdown' ? 'Copied' : 'Copy MD'}
-            </button>
+              Copy MD
+            </CopyButton>
           </div>
         )}
         {['tool_call', 'tool_output', 'meta', 'token_count'].includes(item.type) && (
-          <button
-            type="button"
-            onClick={() => onCopyItem(item, 'markdown')}
+          <CopyButton
+            onCopy={() => handleCopy('markdown')}
             aria-label={`Copy ${roleLabel} content`}
             className="rounded-full border border-white/70 bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm"
           >
-            {copiedId === item.id + 'markdown' ? 'Copied' : 'Copy'}
-          </button>
+            Copy
+          </CopyButton>
         )}
       </div>
 

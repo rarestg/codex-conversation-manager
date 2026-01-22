@@ -1,4 +1,7 @@
-import type { ParsedItem, SessionFileEntry, Turn } from '../types';
+import { memo, useEffect } from 'react';
+import { useRenderDebug } from '../hooks/useRenderDebug';
+import { useWhyDidYouRender } from '../hooks/useWhyDidYouRender';
+import type { SessionFileEntry, Turn } from '../types';
 import { TurnCard } from './TurnCard';
 
 interface TurnListProps {
@@ -7,19 +10,40 @@ interface TurnListProps {
   activeSession: SessionFileEntry | null;
   parseErrors: string[];
   showFullContent: boolean;
-  copiedId: string | null;
-  onCopyItem: (item: ParsedItem, format: 'text' | 'markdown') => void;
 }
 
-export const TurnList = ({
+const TurnListComponent = ({
   filteredTurns,
   loadingSession,
   activeSession,
   parseErrors,
   showFullContent,
-  copiedId,
-  onCopyItem,
 }: TurnListProps) => {
+  const renderStart = import.meta.env.DEV ? performance.now() : 0;
+  useRenderDebug('TurnList', {
+    loadingSession,
+    activeSessionId: activeSession?.id ?? null,
+    parseErrorsCount: parseErrors.length,
+    showFullContent,
+    filteredTurnCount: filteredTurns.length,
+  });
+  useWhyDidYouRender(
+    'TurnList',
+    {
+      filteredTurns,
+      loadingSession,
+      activeSession,
+      parseErrors,
+      showFullContent,
+    },
+    { includeFunctions: true },
+  );
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const duration = performance.now() - renderStart;
+    console.debug('[render cost] TurnList', { duration });
+  });
+
   return (
     <div className="space-y-6">
       {loadingSession && (
@@ -53,14 +77,10 @@ export const TurnList = ({
       )}
 
       {filteredTurns.map((turn, index) => (
-        <TurnCard
-          key={`turn-${turn.id}-${index}`}
-          turn={turn}
-          showFullContent={showFullContent}
-          copiedId={copiedId}
-          onCopyItem={onCopyItem}
-        />
+        <TurnCard key={`turn-${turn.id}-${index}`} turn={turn} showFullContent={showFullContent} />
       ))}
     </div>
   );
 };
+
+export const TurnList = memo(TurnListComponent);
