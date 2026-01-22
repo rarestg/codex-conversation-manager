@@ -66,6 +66,18 @@ const extractGithubSlug = (value?: string | null) => {
   return null;
 };
 
+const normalizeCwd = (value?: string | null) => {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  try {
+    const normalized = path.normalize(trimmed);
+    return path.isAbsolute(normalized) ? path.resolve(normalized) : normalized;
+  } catch (_error) {
+    return trimmed;
+  }
+};
+
 const ensureDir = async (dir: string) => {
   await fsp.mkdir(dir, { recursive: true });
 };
@@ -364,8 +376,9 @@ const parseJsonlFile = async (filePath: string) => {
       if (entry.type === 'session_meta') {
         const payload = entry.payload ?? entry;
         const gitPayload = payload?.git ?? {};
+        const nextCwd = payload?.cwd ?? sessionMeta.cwd;
         sessionMeta = {
-          cwd: payload?.cwd ?? sessionMeta.cwd,
+          cwd: nextCwd ? normalizeCwd(nextCwd) : sessionMeta.cwd,
           git_branch: payload?.git_branch ?? payload?.gitBranch ?? gitPayload?.branch ?? sessionMeta.git_branch,
           git_repo:
             payload?.git_repo ??
@@ -1020,15 +1033,22 @@ export const apiPlugin = (): Plugin => {
           if (pathname === '/api/resolve-session' && req.method === 'GET') {
             const id = url.searchParams.get('id')?.trim();
             if (!id) return sendJson(res, 400, { error: 'id is required.' });
+            const workspace = url.searchParams.get('workspace')?.trim();
             const database = ensureDb();
             const escaped = id.replace(/[\\%_]/g, '\\$&');
             const likePattern = `%${escaped}%`;
+            const params: Array<string> = [id, id, likePattern];
+            let whereClause = "session_id = ? OR path = ? OR path LIKE ? ESCAPE '\\\\'";
+            if (workspace) {
+              whereClause = `(${whereClause}) AND cwd = ?`;
+              params.push(workspace);
+            }
             const row = database
               .prepare(
                 `
                   SELECT id
                   FROM sessions
-                  WHERE session_id = ? OR path = ? OR path LIKE ? ESCAPE '\\\\'
+                  WHERE ${whereClause}
                   ORDER BY
                     CASE
                       WHEN session_id = ? THEN 0
@@ -1040,7 +1060,7 @@ export const apiPlugin = (): Plugin => {
                   LIMIT 1
                 `,
               )
-              .get(id, id, likePattern, id, id) as { id?: string } | undefined;
+              .get(...params, id, id) as { id?: string } | undefined;
             if (!row?.id) {
               logDebug('resolve-session miss', { id });
               return sendJson(res, 404, { error: 'Session not found.' });
@@ -1112,6 +1132,7 @@ export const apiPlugin = (): Plugin => {
                   git_commit_hash: string | null;
                   github_slug: string | null;
                 };
+                match_count: number;
                 results: SearchResultRow[];
               }
             >();
@@ -1132,19 +1153,21 @@ export const apiPlugin = (): Plugin => {
                   };
               const group = groupsMap.get(workspaceKey) ?? {
                 workspace: workspaceSummary,
+                match_count: 0,
                 results: [] as SearchResultRow[],
               };
               group.results.push(result);
+              group.match_count += 1;
               groupsMap.set(workspaceKey, group);
             }
 
             const groups = Array.from(groupsMap.values())
               .map((group) => {
-                if (!group.workspace.session_count) {
-                  group.workspace.session_count = group.results.length;
-                }
                 if (!group.workspace.last_seen) {
                   group.workspace.last_seen = group.results[0]?.session_timestamp ?? null;
+                }
+                if (!group.match_count) {
+                  group.match_count = group.results.length;
                 }
                 return group;
               })

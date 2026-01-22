@@ -60,7 +60,7 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
       if (!query) return;
       event.preventDefault();
       try {
-        const resolved = await resolveSession(query);
+        const resolved = await resolveSession(query, workspace);
         if (!resolved) return;
         await onLoadSession(resolved);
         setSearchQuery('');
@@ -69,7 +69,7 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
         onError?.(error?.message || 'Unable to resolve session.');
       }
     },
-    [onError, onLoadSession, searchQuery],
+    [onError, onLoadSession, searchQuery, workspace],
   );
 
   const clearSearch = useCallback(() => {

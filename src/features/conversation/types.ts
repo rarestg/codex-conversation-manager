@@ -74,6 +74,7 @@ export interface WorkspaceSummary {
 export interface WorkspaceSearchGroup {
   workspace: WorkspaceSummary;
   results: SearchResult[];
+  match_count: number;
 }
 
 export type HistoryMode = 'replace' | 'push';

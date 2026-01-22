@@ -103,6 +103,12 @@ export default function ConversationViewer() {
     await loadWorkspaces();
   };
 
+  const handleSaveRoot = async () => {
+    await saveRoot();
+    setActiveWorkspace(null);
+    await loadWorkspaces();
+  };
+
   const handleReindex = async () => {
     await reindex();
     await loadWorkspaces();
@@ -256,7 +262,7 @@ export default function ConversationViewer() {
         reindexing={reindexing}
         clearingIndex={clearingIndex}
         onSessionsRootChange={setSessionsRoot}
-        onSaveRoot={saveRoot}
+        onSaveRoot={handleSaveRoot}
         onReindex={handleReindex}
         onClearIndex={handleClearIndex}
         onClose={() => setSettingsOpen(false)}

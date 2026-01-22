@@ -89,8 +89,12 @@ export const clearIndex = async () => {
   return data.summary as IndexSummary;
 };
 
-export const resolveSession = async (query: string) => {
-  const res = await fetch(`/api/resolve-session?id=${encodeURIComponent(query)}`);
+export const resolveSession = async (query: string, workspace?: string | null) => {
+  const params = new URLSearchParams({ id: query });
+  if (workspace) {
+    params.set('workspace', workspace);
+  }
+  const res = await fetch(`/api/resolve-session?${params.toString()}`);
   if (!res.ok) {
     if (res.status === 404) return null;
     await parseError(res, 'Unable to resolve session.');

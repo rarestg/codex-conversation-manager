@@ -71,7 +71,10 @@ export const SearchPanel = ({
                     </div>
                   </div>
                   <div className="text-right text-xs text-slate-500">
-                    <div>{group.workspace.session_count} sessions</div>
+                    <div>
+                      {group.match_count} matches
+                      {group.workspace.session_count ? ` · ${group.workspace.session_count} sessions` : ''}
+                    </div>
                     {group.workspace.last_seen && <div>{formatTimestamp(group.workspace.last_seen)}</div>}
                   </div>
                 </div>
