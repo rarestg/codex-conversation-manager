@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { isRenderDebugEnabled } from '../debug';
 
 type PropsMap = Record<string, unknown>;
 
@@ -27,7 +28,7 @@ export const useWhyDidYouRender = (label: string, props: PropsMap, options: WhyD
   const prevProps = useRef<PropsMap | null>(null);
 
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
+    if (!isRenderDebugEnabled) return;
     if (!prevProps.current) {
       prevProps.current = props;
       return;

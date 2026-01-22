@@ -2,6 +2,7 @@ import { Calendar, Clock, Fingerprint, GitBranch, Github, Hourglass, Repeat2 } f
 import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { memo, useEffect, useRef } from 'react';
 import { copyText } from '../copy';
+import { isRenderDebugEnabled } from '../debug';
 import {
   formatDayLabel,
   formatDuration,
@@ -45,7 +46,7 @@ const SessionsPanelComponent = ({
 }: SessionsPanelProps) => {
   const formatCountLabel = (count: number, label: string) => `${count} ${count === 1 ? label : `${label}s`}`;
   const now = new Date();
-  const renderStart = import.meta.env.DEV ? performance.now() : 0;
+  const renderStart = isRenderDebugEnabled ? performance.now() : 0;
   const listRef = useRef<HTMLDivElement | null>(null);
   const activeRowRef = useRef<HTMLDivElement | null>(null);
   const treeKey = sessionsTree?.years.length ?? 0;
@@ -73,7 +74,7 @@ const SessionsPanelComponent = ({
   );
 
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
+    if (!isRenderDebugEnabled) return;
     const duration = performance.now() - renderStart;
     console.debug('[render cost] SessionsPanel', { duration });
   });

@@ -1,4 +1,5 @@
 import { memo, useEffect } from 'react';
+import { isRenderDebugEnabled } from '../debug';
 import { useRenderDebug } from '../hooks/useRenderDebug';
 import { useWhyDidYouRender } from '../hooks/useWhyDidYouRender';
 import type { SessionFileEntry, Turn } from '../types';
@@ -19,7 +20,7 @@ const TurnListComponent = ({
   parseErrors,
   showFullContent,
 }: TurnListProps) => {
-  const renderStart = import.meta.env.DEV ? performance.now() : 0;
+  const renderStart = isRenderDebugEnabled ? performance.now() : 0;
   useRenderDebug('TurnList', {
     loadingSession,
     activeSessionId: activeSession?.id ?? null,
@@ -39,7 +40,7 @@ const TurnListComponent = ({
     { includeFunctions: true },
   );
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
+    if (!isRenderDebugEnabled) return;
     const duration = performance.now() - renderStart;
     console.debug('[render cost] TurnList', { duration });
   });
