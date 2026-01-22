@@ -43,7 +43,7 @@ export const SessionHeader = ({
     filteredTurnCount: filteredTurns.length,
   });
 
-  const sessionId = sessionDetails.sessionId;
+  const sessionId = activeSession?.sessionId || sessionDetails.sessionId;
   const cwd = sessionDetails.cwd;
   const rawTitle = activeSession?.preview?.trim() || activeSession?.filename || 'Session viewer';
   const title = rawTitle.replace(/\s+/g, ' ').trim();
@@ -55,12 +55,15 @@ export const SessionHeader = ({
       : formatTime(timeSource)
     : '';
   const durationLabel = activeSession ? formatDuration(activeSession.startedAt, activeSession.endedAt) : '';
-  const durationDisplay = durationLabel || (timeSource ? '0m' : '');
+  const durationDisplay = durationLabel || (timeSource ? '-' : '');
   const sessionRoot = sessionsRoot?.trim() || '';
-  const normalizedRoot = sessionRoot.replace(/[\\/]+$/, '');
-  const pathSeparator = normalizedRoot.includes('\\') ? '\\' : '/';
+  const pathSeparator = sessionRoot.includes('\\') ? '\\' : '/';
+  const trimmedRoot = sessionRoot.replace(/[\\/]+$/, '');
+  const normalizedRoot = trimmedRoot || (/^[\\/]+$/.test(sessionRoot) ? pathSeparator : '');
   const normalizedId = activeSession?.id ? activeSession.id.replace(/[\\/]+/g, pathSeparator) : '';
-  const filePath = activeSession && normalizedRoot ? `${normalizedRoot}${pathSeparator}${normalizedId}` : normalizedId;
+  const rootJoiner = normalizedRoot && normalizedRoot !== pathSeparator ? pathSeparator : '';
+  const filePath =
+    activeSession && normalizedRoot && normalizedId ? `${normalizedRoot}${rootJoiner}${normalizedId}` : normalizedId;
   const getRepoLabel = (gitRepo?: string | null, cwdValue?: string | null) => {
     if (gitRepo) {
       const cleaned = gitRepo.replace(/\.git$/i, '');
