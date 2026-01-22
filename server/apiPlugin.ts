@@ -76,9 +76,12 @@ const extractGithubSlug = (value?: string | null) => {
 
 const extractSessionIdFromPath = (value?: string | null) => {
   if (!value) return null;
-  const match = value.match(SESSION_ID_REGEX);
+  const normalized = value.replace(/\\/g, '/');
+  const filename = normalized.split('/').pop() || normalized;
+  const withoutExt = filename.replace(/\.jsonl$/i, '');
+  const match = withoutExt.match(SESSION_ID_REGEX);
   if (match) return match[0];
-  const prefixMatch = value.match(SESSION_ID_PREFIX_REGEX);
+  const prefixMatch = withoutExt.match(SESSION_ID_PREFIX_REGEX);
   if (prefixMatch) return prefixMatch[0];
   return null;
 };

@@ -37,6 +37,7 @@ export default function ConversationViewer() {
     saveRoot,
     reindex,
     rebuildIndex,
+    loadingSessions,
     reindexing,
     clearingIndex,
     indexSummary,
@@ -196,6 +197,7 @@ export default function ConversationViewer() {
               <SessionsPanel
                 sessionsTree={sessionsTree}
                 sessionsRoot={sessionsRoot}
+                loading={loadingSessions}
                 onRefreshSessions={loadSessions}
                 onLoadSession={loadSession}
                 activeSession={activeSession}
@@ -209,6 +211,7 @@ export default function ConversationViewer() {
             <Sidebar
               sessionsTree={sessionsTree}
               sessionsRoot={sessionsRoot}
+              sessionsLoading={loadingSessions}
               searchQuery={searchQuery}
               onSearchQueryChange={setSearchQuery}
               onSearchKeyDown={handleSearchKeyDown}

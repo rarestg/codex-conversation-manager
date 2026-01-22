@@ -14,9 +14,12 @@ import {
 import { useCopyFeedback } from '../hooks/useCopyFeedback';
 import type { SessionFileEntry, SessionTree } from '../types';
 
+const SESSIONS_SKELETON_KEYS = ['a', 'b', 'c', 'd', 'e'];
+
 interface SessionsPanelProps {
   sessionsTree: SessionTree | null;
   sessionsRoot: string;
+  loading: boolean;
   onRefreshSessions: () => void;
   onLoadSession: (sessionId: string, turnId?: number) => void;
   activeSession: SessionFileEntry | null;
@@ -28,6 +31,7 @@ interface SessionsPanelProps {
 export const SessionsPanel = ({
   sessionsTree,
   sessionsRoot,
+  loading,
   onRefreshSessions,
   onLoadSession,
   activeSession,
@@ -114,7 +118,23 @@ export const SessionsPanel = ({
           data-overlayscrollbars-initialize
         >
           <div className="space-y-3">
-            {sessionsTree?.years.length ? (
+            {loading ? (
+              <div className="space-y-3 animate-pulse">
+                {SESSIONS_SKELETON_KEYS.map((key) => (
+                  <div
+                    key={`sessions-skeleton-${key}`}
+                    className="rounded-2xl border border-slate-100 bg-white/70 px-3 py-3"
+                  >
+                    <div className="h-3 w-24 rounded-full bg-slate-200" />
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <div className="h-4 w-16 rounded-full bg-slate-100" />
+                      <div className="h-4 w-20 rounded-full bg-slate-100" />
+                      <div className="h-4 w-14 rounded-full bg-slate-100" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : sessionsTree?.years.length ? (
               sessionsTree.years.map((year) => (
                 <details key={year.year} open className="group">
                   <summary className="cursor-pointer list-none rounded-xl bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">

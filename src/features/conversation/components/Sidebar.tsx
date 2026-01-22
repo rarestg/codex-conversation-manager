@@ -6,6 +6,7 @@ import { SessionsPanel } from './SessionsPanel';
 interface SidebarProps {
   sessionsTree: SessionTree | null;
   sessionsRoot: string;
+  sessionsLoading: boolean;
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
   onSearchKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
@@ -21,6 +22,7 @@ interface SidebarProps {
 export const Sidebar = ({
   sessionsTree,
   sessionsRoot,
+  sessionsLoading,
   searchQuery,
   onSearchQueryChange,
   onSearchKeyDown,
@@ -45,6 +47,7 @@ export const Sidebar = ({
       <SessionsPanel
         sessionsTree={sessionsTree}
         sessionsRoot={sessionsRoot}
+        loading={sessionsLoading}
         onRefreshSessions={onRefreshSessions}
         onLoadSession={onLoadSession}
         activeSession={activeSession}

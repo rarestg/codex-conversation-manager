@@ -11,6 +11,7 @@ export const useSessions = ({ onError, workspace }: UseSessionsOptions = {}) => 
   const [sessionsTree, setSessionsTree] = useState<SessionTree | null>(null);
   const [sessionsRoot, setSessionsRoot] = useState('');
   const [sessionsRootSource, setSessionsRootSource] = useState<string>('');
+  const [loadingSessions, setLoadingSessions] = useState(false);
   const [reindexing, setReindexing] = useState(false);
   const [clearingIndex, setClearingIndex] = useState(false);
   const [indexSummary, setIndexSummary] = useState('');
@@ -27,11 +28,14 @@ export const useSessions = ({ onError, workspace }: UseSessionsOptions = {}) => 
 
   const loadSessions = useCallback(async () => {
     try {
+      setLoadingSessions(true);
       onError?.(null);
       const data = await fetchSessions(workspace);
       setSessionsTree(data);
     } catch (error: any) {
       onError?.(error?.message || 'Failed to load sessions.');
+    } finally {
+      setLoadingSessions(false);
     }
   }, [onError, workspace]);
 
@@ -94,6 +98,7 @@ export const useSessions = ({ onError, workspace }: UseSessionsOptions = {}) => 
     saveRoot,
     reindex,
     rebuildIndex,
+    loadingSessions,
     reindexing,
     clearingIndex,
     indexSummary,
