@@ -40,6 +40,7 @@ type YearsMap = Map<string, MonthsMap>;
 let cachedConfig: ConfigFile | null = null;
 let cachedRoot: { value: string; source: 'env' | 'config' | 'default' } | null = null;
 let db: Database.Database | null = null;
+let cwdNormalizationApplied = false;
 
 const toPosix = (value: string) => value.split(path.sep).join('/');
 const DEBUG_ENABLED = ['1', 'true', 'yes', 'on'].includes(String(process.env.CODEX_DEBUG).toLowerCase());
@@ -76,6 +77,24 @@ const normalizeCwd = (value?: string | null) => {
   } catch (_error) {
     return trimmed;
   }
+};
+
+const normalizeSessionCwds = (database: Database.Database) => {
+  const rows = database.prepare('SELECT id, cwd FROM sessions WHERE cwd IS NOT NULL AND cwd != ?').all('') as Array<{
+    id: string;
+    cwd?: string | null;
+  }>;
+  if (!rows.length) return;
+  const update = database.prepare('UPDATE sessions SET cwd = ? WHERE id = ?');
+  const normalizeTransaction = database.transaction(() => {
+    for (const row of rows) {
+      const normalized = normalizeCwd(row.cwd ?? null);
+      if (normalized && normalized !== row.cwd) {
+        update.run(normalized, row.id);
+      }
+    }
+  });
+  normalizeTransaction();
 };
 
 const ensureDir = async (dir: string) => {
@@ -218,6 +237,10 @@ const ensureDb = () => {
   db.pragma('trusted_schema = ON');
   logDebug('db open', DB_PATH);
   initSchema(db);
+  if (!cwdNormalizationApplied) {
+    normalizeSessionCwds(db);
+    cwdNormalizationApplied = true;
+  }
   return db;
 };
 
