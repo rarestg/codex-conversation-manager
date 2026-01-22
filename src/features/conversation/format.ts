@@ -15,7 +15,7 @@ export const generateId = () => {
   return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 };
 
-export const formatTimestamp = (value?: string | null) => {
+export const formatTimestamp = (value?: string | null, includeSeconds = true) => {
   if (!value) return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -25,7 +25,7 @@ export const formatTimestamp = (value?: string | null) => {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit',
+    ...(includeSeconds ? { second: '2-digit' } : {}),
   }).format(date);
 };
 

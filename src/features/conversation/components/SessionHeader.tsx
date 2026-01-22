@@ -38,7 +38,8 @@ export const SessionHeader = ({
 }: SessionHeaderProps) => {
   const sessionId = sessionDetails.sessionId;
   const cwd = sessionDetails.cwd;
-  const title = activeSession?.preview?.trim() || activeSession?.filename || 'Session viewer';
+  const rawTitle = activeSession?.preview?.trim() || activeSession?.filename || 'Session viewer';
+  const title = rawTitle.replace(/\s+/g, ' ').trim();
   const now = new Date();
   const timeSource = activeSession?.startedAt ?? activeSession?.timestamp ?? '';
   const timeLabel = timeSource
@@ -77,8 +78,8 @@ export const SessionHeader = ({
           {title}
         </h2>
         <p className="text-xs text-slate-500">
-          {activeSession?.timestamp
-            ? `Session: ${formatTimestamp(activeSession.timestamp)}`
+          {activeSession?.startedAt || activeSession?.timestamp
+            ? formatTimestamp(activeSession.startedAt ?? activeSession.timestamp, false)
             : 'Select a session to start.'}
         </p>
         {(sessionId || cwd || activeSession?.filename) && (
@@ -152,70 +153,70 @@ export const SessionHeader = ({
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
               {timeLabel && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[10px]/[12px] text-slate-600 shadow-sm">
-                  <Clock className="h-3 w-3" />
+                <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px]/[14px] text-slate-600 shadow-sm">
+                  <Clock className="h-3.5 w-3.5" />
                   <span className="translate-y-[0.5px] inline-block min-w-[7ch] text-center tabular-nums">
                     {timeLabel}
                   </span>
                 </span>
               )}
               {timeSource && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[10px]/[12px] text-slate-600 shadow-sm">
-                  <Hourglass className="h-3 w-3" />
+                <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px]/[14px] text-slate-600 shadow-sm">
+                  <Hourglass className="h-3.5 w-3.5" />
                   <span className="translate-y-[0.5px] inline-block min-w-[6ch] text-center tabular-nums">
                     {durationDisplay}
                   </span>
                 </span>
               )}
               {activeSession.turnCount !== null && activeSession.turnCount !== undefined && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[10px]/[12px] text-slate-600 shadow-sm">
-                  <Repeat2 className="h-3 w-3" />
+                <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px]/[14px] text-slate-600 shadow-sm">
+                  <Repeat2 className="h-3.5 w-3.5" />
                   <span className="translate-y-[0.5px] inline-block min-w-[4ch] text-center tabular-nums">
                     {activeSession.turnCount}
                   </span>
                 </span>
               )}
               {repoLabel && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[10px] leading-none text-slate-600 shadow-sm">
-                  <Github className="h-3 w-3" />
+                <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] leading-none text-slate-600 shadow-sm">
+                  <Github className="h-3.5 w-3.5" />
                   {repoLabel}
                 </span>
               )}
               {activeSession.gitBranch && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[10px] leading-none text-slate-600 shadow-sm">
-                  <GitBranch className="h-3 w-3" />
+                <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] leading-none text-slate-600 shadow-sm">
+                  <GitBranch className="h-3.5 w-3.5" />
                   {activeSession.gitBranch}
                 </span>
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[10px]/[12px] text-slate-600 shadow-sm">
-                <Eye className="h-3 w-3" />
-                <span className="translate-y-[0.5px] inline-block min-w-[4ch] text-center tabular-nums">
-                  {visibleItemCount}
-                </span>
-                <span className="translate-y-[0.5px]">visible</span>
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[10px]/[12px] text-slate-600 shadow-sm">
-                <Brain className="h-3 w-3" />
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1.5 text-[11px]/[14px] text-slate-600 shadow-sm">
+                <Brain className="h-3.5 w-3.5" />
                 <span className="translate-y-[0.5px] inline-block min-w-[4ch] text-center tabular-nums">
                   {stats.thoughtCount}
                 </span>
                 <span className="translate-y-[0.5px]">thoughts</span>
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[10px]/[12px] text-slate-600 shadow-sm">
-                <Wrench className="h-3 w-3" />
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1.5 text-[11px]/[14px] text-slate-600 shadow-sm">
+                <Wrench className="h-3.5 w-3.5" />
                 <span className="translate-y-[0.5px] inline-block min-w-[4ch] text-center tabular-nums">
                   {stats.toolCallCount}
                 </span>
                 <span className="translate-y-[0.5px]">tools</span>
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[10px]/[12px] text-slate-600 shadow-sm">
-                <Info className="h-3 w-3" />
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1.5 text-[11px]/[14px] text-slate-600 shadow-sm">
+                <Info className="h-3.5 w-3.5" />
                 <span className="translate-y-[0.5px] inline-block min-w-[4ch] text-center tabular-nums">
                   {stats.metaCount}
                 </span>
                 <span className="translate-y-[0.5px]">meta</span>
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1.5 text-[11px]/[14px] text-slate-600 shadow-sm">
+                <Eye className="h-3.5 w-3.5" />
+                <span className="translate-y-[0.5px] inline-block min-w-[4ch] text-center tabular-nums">
+                  {visibleItemCount}
+                </span>
+                <span className="translate-y-[0.5px]">visible</span>
               </span>
             </div>
           </div>
@@ -226,7 +227,7 @@ export const SessionHeader = ({
           type="button"
           onClick={onCopyConversation}
           disabled={!visibleItemCount}
-          className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-50"
+          className="inline-flex min-w-[170px] items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-50"
         >
           {copiedId === 'conversation' ? 'Copied' : 'Copy conversation'}
         </button>

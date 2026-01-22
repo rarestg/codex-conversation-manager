@@ -46,6 +46,7 @@ export const SessionsPanel = ({
   const { copiedId, showCopied } = useCopyFeedback();
   const listRef = useRef<HTMLDivElement | null>(null);
   const activeRowRef = useRef<HTMLDivElement | null>(null);
+  const treeKey = sessionsTree?.years.length ?? 0;
   const getRepoLabel = (gitRepo?: string | null, cwd?: string | null) => {
     if (gitRepo) {
       const cleaned = gitRepo.replace(/\.git$/i, '');
@@ -75,6 +76,7 @@ export const SessionsPanel = ({
   useEffect(() => {
     const container = listRef.current;
     if (!container) return;
+    if (!treeKey) return;
 
     const activeId = activeSession?.id;
     const detailsNodes = Array.from(container.querySelectorAll<HTMLDetailsElement>('details'));
@@ -126,7 +128,7 @@ export const SessionsPanel = ({
         }
       });
     });
-  }, [activeSession?.id]);
+  }, [activeSession?.id, treeKey]);
 
   return (
     <div className={className}>

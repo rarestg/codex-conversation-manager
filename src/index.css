@@ -34,6 +34,19 @@
     letter-spacing: 0.01em;
   }
 
+  button,
+  [role="button"],
+  summary,
+  a,
+  label {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
   code,
   pre,
   kbd {

@@ -1,0 +1,131 @@
+Title: Index Session-Level Metrics in SQLite and Surface Them in UI
+
+Context
+We currently derive several session-level metadata fields (first user prompt preview, startedAt/endedAt timestamps, turn count, tool/thought/meta counts) on the client after loading a JSONL session. This has two downsides:
+1) Direct URL loads (deep links to /?session=...) can render an incomplete header until the sessions tree finishes loading or the user clicks the session.
+2) The session picker and header repeat logic for deriving preview/time/turns, and those values can be missing or temporarily wrong if the local JSONL parse fails or if the UI is still waiting on sessionsTree.
+
+We already have a SQLite index (server/apiPlugin.ts) that parses JSONL during reindexing and stores session-level data (first_user_message, timestamp, cwd, git info). We should extend the index to store the additional “rich metrics” and surface those via /api/sessions so the UI can use them immediately without relying on client-side fallback parsing. The JSONL parse will still be used for the actual message rendering (the conversation view), but the summary metrics should come from the index by default.
+
+Relevant codebase surface
+- server/apiPlugin.ts
+  - Indexing pipeline: parseJsonlFile(...) and indexSessions(...)
+  - DB schema: sessions, messages, messages_fts
+  - buildSessionsTree(...) populates SessionFileEntry fields used by the UI
+  - /api/sessions endpoint returns the tree consumed by SessionsPanel and useSessions
+- src/features/conversation/types.ts
+  - SessionFileEntry type used by UI
+- src/features/conversation/hooks/useSessions.ts
+  - Loads sessionsTree via /api/sessions
+- src/features/conversation/hooks/useSession.ts
+  - Loads JSONL for selected session; falls back to locally-derived meta when sessionsTree doesn’t have it
+- src/features/conversation/components/SessionHeader.tsx
+  - Displays preview/title, metrics, session meta chips
+- src/features/conversation/components/SessionsPanel.tsx
+  - Uses preview, time, duration, turnCount, etc.
+
+How it connects
+- Indexing happens in the dev server middleware (apiPlugin.ts). The UI’s sessionsTree (sidebar/picker) is purely backed by the index. SessionHeader pulls from activeSession (which comes from sessionsTree) and falls back to parsed JSONL when tree data is missing. By pushing the metrics into the index, we make both the picker and header deterministic and consistent across page reloads and deep links.
+
+The Plan (execution order)
+
+Step 1 — Define the new session-level metrics we will store
+We want session-level metrics that are stable and useful for UI. The following should be computed during indexing and stored in the sessions table:
+- first_user_message (already exists)
+- started_at (derived from the earliest message timestamp)
+- ended_at (derived from the latest message timestamp)
+- turn_count (number of user turns)
+- thought_count (number of “thought” items)
+- tool_call_count (number of tool call items)
+- meta_count (count of meta + token_count items)
+
+Why: These metrics power the picker pills and the header metrics. “Visible items” still depends on UI filters, so keep it computed in the client.
+
+Step 2 — Extend the SQLite schema
+In server/apiPlugin.ts, update the schema initialization to include new columns on the sessions table:
+- started_at TEXT
+- ended_at TEXT
+- turn_count INTEGER
+- thought_count INTEGER
+- tool_call_count INTEGER
+- meta_count INTEGER
+
+Because the schema is created in code, ensure the migration path for existing DBs. If you already have a schema_version table, bump it and run ALTER TABLE statements when version < new version. If there is no migration logic yet, add a minimal migration section inside ensureDb() or initSchema() that checks existing columns and adds them if missing. This is a landmine because existing users won’t re-create the DB automatically.
+
+Step 3 — Compute the metrics during indexing
+Inside parseJsonlFile(...) or the indexSessions(...) pipeline, compute these metrics while streaming the JSONL:
+- turn_count: number of distinct user_message entries (or increment when a user_message starts a new turn).
+- started_at / ended_at: track earliest and latest timestamp across parsed items (all roles). Only set if timestamp is valid.
+- thought_count: count “agent_reasoning” (or item type “thought”).
+- tool_call_count: count tool call items (function_call, custom_tool_call, web_search_call).
+- meta_count: count “session_meta”, “turn_context”, and “token_count” entries.
+
+Be consistent with the parsing rules in src/features/conversation/parsing.ts. This avoids mismatches between UI filtering and stored counts.
+
+Step 4 — Persist the new metrics into the sessions table
+Update insertSession / updateSession statements in indexSessions(...) so the new columns are stored for each session. Ensure the conflict update path updates these columns as well.
+
+Step 5 — Surface the new metrics in buildSessionsTree()
+The SessionFileEntry assembled in buildSessionsTree(...) should include the new fields. Add them to the previewMap (getSessionsPreviewMap) and pass through into the tree’s file objects.
+
+- Update getSessionsPreviewMap(...) SELECT to include started_at, ended_at, turn_count, thought_count, tool_call_count, meta_count.
+- Update the previewMap construction to store these fields.
+- Update buildSessionsTree(...) to place them onto SessionFileEntry.
+
+Step 6 — Update TypeScript types
+Extend SessionFileEntry in src/features/conversation/types.ts with:
+- startedAt?: string | null
+- endedAt?: string | null
+- turnCount?: number | null
+- thoughtCount?: number | null
+- toolCallCount?: number | null
+- metaCount?: number | null
+
+Ensure naming matches what’s stored in the tree (camelCase) and what the UI expects.
+
+Step 7 — Use indexed values in the UI
+In SessionHeader and SessionsPanel, rely on activeSession.* fields for preview/time/metrics. The goal is to minimize fallback parsing in the UI.
+
+- The header title should always use activeSession.preview when available.
+- The clock/hourglass/rounds pills should rely on activeSession.startedAt/endedAt/turnCount.
+- The “rich metrics” row should use thoughtCount/toolCallCount/metaCount.
+
+Keep the client-side fallback (derived from parsed JSONL) only as a safety net for sessions loaded by direct URL before the sessionsTree is ready. Once sessionsTree loads, merge in the indexed values and render from them.
+
+Step 8 — Verify deep-link behavior
+When landing on a direct URL, the app should:
+- Load JSONL and show preview/time immediately (from indexed fields if tree is ready, from parsed fallback if not).
+- After sessionsTree loads, the picker should auto-expand and scroll to the active session.
+- The header should not regress to filename-only title.
+
+Decisions & tradeoffs
+- Chosen approach: store session-level metrics in the SQLite index and surface them to the UI.
+  - Pros: consistent data across UI, faster load, no dependence on parsing for summary UI, and better support for deep links.
+  - Cons: requires schema migration and duplicating parsing logic in server and client (risk of drift).
+- Alternative: keep all metrics derived client-side after loading JSONL.
+  - Pros: single parsing implementation.
+  - Cons: slower UI, missing metadata on deep-link load, and no centralized summary metrics.
+
+Tradeoffs accepted
+- We accept a small risk of drift between server indexing and client parsing rules. This is mitigated by referencing the same parsing rules (event_msg + response_item handling) and documenting them in AGENTS.md/parsing.ts.
+- We accept that indexed metrics can be stale if reindex hasn’t run after code changes, but this is already true for other indexed fields.
+
+Landmines / non-obvious behavior
+- Schema migrations: Without an ALTER TABLE path, existing users will not get new columns and the app may crash or show nulls. Implement a safe migration path.
+- Timestamp parsing: Ensure that started_at/ended_at uses valid timestamps only. Bad timestamps can yield “Invalid Date” and should be ignored.
+- JSONL parsing rules: The indexer’s parsing rules must match the UI parsing rules in src/features/conversation/parsing.ts (especially for tool vs thought vs meta).
+- sessionsTree availability: UI may render before sessionsTree loads; keep the fallback logic in useSession (derived preview/time) until tree data arrives.
+
+Verification plan
+- Schema migration test:
+  - Start with an existing DB. Ensure the app doesn’t crash and new columns are added.
+  - Confirm data in sessions table has non-null started_at/ended_at/turn_count after reindex.
+- Indexing correctness:
+  - Pick a known session, manually count user turns and compare with turn_count.
+  - Verify thought/tool/meta counts match what the UI would show when all toggles are on.
+- UI sanity checks:
+  - Load via direct URL and confirm header shows preview title and metric pills.
+  - Confirm picker auto-expands and scrolls to the active session after sessionsTree loads.
+  - Switch filters (show/hide thoughts/tools/meta) and ensure “visible” count changes while indexed counts remain stable.
+
+End of plan.
