@@ -4,7 +4,7 @@
 
 # Codex Conversation Manager
 
-A local, developer-focused web app for parsing, visualizing, and searching Codex JSONL sessions. It reads local session logs, groups conversations by user turn, renders messages with markdown, and surfaces tools/actions inline to preserve causal flow.
+A local web app for parsing, visualizing, and searching Codex JSONL sessions. It reads local session logs, groups conversations by user turn, renders messages with markdown, and surfaces tools/actions inline.
 
 ## Features
 - Browse Codex sessions stored on disk and keep sessions separate.
@@ -38,11 +38,8 @@ pre-commit run --all-files
 - SQLite index: `~/.codex-formatter/codex_index.db`.
 - Debug logging: set `CODEX_DEBUG=1`.
 
-## Notes
-- The Vite dev server hosts the API middleware that reads sessions and manages indexing.
-
 ## Code Tour
-- `src/main.tsx` wires up the app; `src/ConversationViewer.tsx` re-exports the feature entry.
+- `src/main.tsx` wires up the app and imports the feature entry.
 - `src/features/conversation/ConversationViewer.tsx` is the main container composing hooks + UI.
 - `src/features/conversation/components/` holds the UI building blocks:
   - `Sidebar.tsx` (search + session browser)

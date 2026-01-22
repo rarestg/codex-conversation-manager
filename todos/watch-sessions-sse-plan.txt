@@ -1,0 +1,106 @@
+Watcher + SSE Auto-Reindex Plan
+
+Context
+The current UX requires manual reindexing whenever a new Codex JSONL session is created. This is jarring because the backend already supports incremental indexing; it just isn’t triggered automatically. The goal is to make the sessions list and search data feel “live” by watching the sessions directory for changes and pushing updates to the UI as soon as reindexing completes. We’ll implement a file-system watcher on the server (dev middleware in Vite) and an SSE (Server-Sent Events) endpoint that notifies the frontend when an index refresh finishes. The frontend will subscribe and refresh its sessions/workspaces data automatically. This provides best‑in‑class dev UX with minimal manual steps, while keeping indexing incremental and durable.
+
+Relevant codebase areas
+- server/apiPlugin.ts: Vite dev server middleware, SQLite indexing (indexSessions), API endpoints (`/api/reindex`, `/api/sessions`, `/api/workspaces`), config resolution (`resolveSessionsRoot`). This is where the watcher and SSE endpoint will live.
+- src/features/conversation/hooks/useSessions.ts: Loads sessions tree and config; currently fetches `/api/sessions` and exposes loadSessions. Will need to respond to SSE events.
+- src/features/conversation/hooks/useWorkspaces.ts: Loads `/api/workspaces`; should also refresh after an index update (to keep workspace counts in sync).
+- src/features/conversation/ConversationViewer.tsx: Coordinates hooks; the SSE hook will be wired here to trigger refreshes.
+
+How it connects
+The sessions picker UI reads from the SQLite index via `/api/sessions` (server uses DB via `getSessionsPreviewMap` and `buildSessionsTree`). The index is only updated on explicit `/api/reindex` or `/api/clear-index`. We’ll keep the incremental indexing logic exactly as-is; we will only add triggers (watcher) and notifications (SSE). The SSE endpoint will broadcast “index updated” events, and the frontend will call `loadSessions` and `loadWorkspaces` in response.
+
+The Plan (execution order)
+
+Step 1: Add watcher dependency (server)
+Add `chokidar` to server dependencies in package.json (runtime dependency, not dev-only), since Vite dev server runs in Node and the watcher lives in server/apiPlugin.ts. Run npm install. This must happen before server changes that import chokidar.
+
+Step 2: Introduce a singleton watcher manager in server/apiPlugin.ts
+Create module-level state in server/apiPlugin.ts:
+- `let watcher: chokidar.FSWatcher | null = null`
+- `let watcherRoot: string | null = null`
+- `let reindexInFlight = false`
+- `let reindexQueued = false`
+- `let reindexTimer: NodeJS.Timeout | null = null`
+- `const sseClients = new Set<ServerResponse>()`
+This provides durable, non-duplicated watchers across hot reloads and avoids concurrent reindex runs. The queue/flag design ensures that a burst of file events results in a single incremental reindex after a debounce window.
+
+Step 3: Build a debounced reindex trigger
+Implement a `scheduleReindex(root: string)` function that:
+- Clears any existing debounce timer.
+- Sets a timer (e.g., 1000–1500 ms) to call `runReindex(root)`.
+
+Implement `runReindex(root: string)` that:
+- If `reindexInFlight` is true, set `reindexQueued = true` and return.
+- Otherwise, set `reindexInFlight = true` and call `indexSessions(root)`.
+- After completion, set `reindexInFlight = false`.
+- If `reindexQueued` was set, clear it and call `scheduleReindex(root)` again (coalescing frequent changes).
+- On successful completion, broadcast an SSE event (`event: index-updated`) to all SSE clients.
+- Handle exceptions by logging and still clearing flags so the system can recover.
+
+Step 4: Start and manage the watcher
+Implement `startWatcher(root: string)` that:
+- If a watcher exists and `watcherRoot === root`, do nothing.
+- If a watcher exists but root changed, close it and create a new watcher.
+- Use `chokidar.watch(root, { ignored: /(^|[/\\])\./, ignoreInitial: true, depth: undefined, awaitWriteFinish: { stabilityThreshold: 500, pollInterval: 100 } })`.
+- Filter to `**/*.jsonl` via the `watch` glob or an event handler check.
+- On `add`, `change`, `unlink` events, call `scheduleReindex(root)`.
+- Attach a `close` handler when the Vite server shuts down (`server.httpServer?.on('close', ...)`) to clean up.
+
+Step 5: Connect watcher lifecycle to config/root updates
+`resolveSessionsRoot()` may yield a new root after config changes (Settings). Whenever `/api/config` updates the root, invoke `startWatcher(newRoot)` and run a reindex once to seed the new index. This ensures the watcher follows the user’s active sessions root.
+
+Step 6: Add an SSE endpoint
+Add a GET endpoint in the middleware for `/api/index-events` that:
+- Sets headers for SSE (`Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`).
+- Writes an initial `event: hello` ping or a comment to establish the stream.
+- Adds the response to `sseClients` and removes it on `close`/`finish`.
+
+Add `broadcastIndexUpdate()` that iterates `sseClients` and writes:
+```
+event: index-updated
+data: {"timestamp":"..."}
+
+
+```
+Also consider periodic keepalive comments (e.g., every 25–30s) to keep proxies from closing idle SSE connections. This can be done by a timer that loops through active clients; clean up any that throw.
+
+Step 7: Add frontend SSE subscription
+Create a new hook in `src/features/conversation/hooks/` (e.g., `useIndexEvents.ts`) that:
+- Opens an EventSource to `/api/index-events`.
+- Listens for `index-updated` events and calls provided callbacks (`onIndexUpdated`).
+- Handles reconnect logic (EventSource does automatic reconnect; add simple logging and cleanup on unmount).
+
+Step 8: Wire SSE updates to refresh the UI
+In `ConversationViewer.tsx`, after hooks are initialized, call the SSE hook and pass in `loadSessions` and `loadWorkspaces` as the refresh actions. This ensures the sessions tree, turn counts, and workspace summaries refresh automatically after indexing.
+
+Step 9: Avoid reindex loops
+Ensure that server-triggered reindex does not call the SSE endpoint itself or cause another watcher event. We are only listening to filesystem changes; the DB changes do not re-trigger the watcher, so no loop occurs. However, if the indexing touches the JSONL files or writes under the watched root, you must ensure the watcher ignores DB files and non-JSONL paths.
+
+Decisions & Tradeoffs
+- Watcher + SSE was chosen over polling for best responsiveness and lower UI latency. Polling is simpler but causes unnecessary load and never feels “instant.” SSE is robust and relatively easy to maintain.
+- Chokidar is chosen over fs.watch for cross-platform reliability (macOS + Windows edge cases) and stable semantics with debouncing.
+- Debounce + in-flight guard is used to prevent reindex thrashing when multiple JSONL lines are written rapidly. The tradeoff is that updates are not instant; they are delayed by ~1–2s, which is acceptable for UI responsiveness.
+- We keep indexing logic centralized in `indexSessions` and do not attempt to index a single file on change. This avoids complex incremental logic that could diverge from the current DB schema and reduces bugs.
+
+Landmines
+- Vite dev server hot reload can create duplicate watchers if the watcher is not kept in module-level singletons and properly shut down. Ensure you do not create a new watcher on every request.
+- SSE connections must be cleaned up on client disconnect; otherwise, the server can leak memory or retain dead responses.
+- The sessions root can change via Settings. If the watcher doesn’t update, the UI will appear stale and new sessions won’t auto-index.
+- Ignore dotfiles and non-JSONL files. The watcher should not respond to DB writes or temp files.
+- If `indexSessions` throws, you must reset `reindexInFlight` or the system will deadlock.
+
+Verification
+- Start the dev server, open the app, and create a new session JSONL file in the sessions root. The UI should update within ~2 seconds without manual reindex or refresh.
+- Confirm that the sessions list and workspace panel update (counts and metadata) after file changes.
+- Simulate multiple rapid file changes (e.g., append to a JSONL). Ensure reindex runs once after the debounce period.
+- Change the sessions root in Settings and confirm the watcher switches to the new directory; new files in the old root should not trigger updates.
+- Confirm the SSE connection remains stable (no repeated reconnect loops) and the UI still updates after several minutes.
+
+Post-implementation tests
+- Manual: add a new session file, see it appear without clicking Refresh or Reindex.
+- Manual: modify an existing session file, confirm the turn count/preview updates.
+- Manual: delete a session file, confirm it disappears after index update.
+- Manual: switch sessions root and verify updates reflect the new root.

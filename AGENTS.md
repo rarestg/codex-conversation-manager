@@ -3,7 +3,7 @@
 This file provides guidance for contributors working on this repository.
 
 ## Project Overview
-Codex Conversation Manager (codex-formatter) is a local, developer-focused web app for parsing, visualizing, and searching Codex JSONL sessions. It reads local session logs, groups conversations by user turn, renders messages with markdown, and surfaces tools/actions inline to preserve causal flow.
+Codex Conversation Manager (codex-formatter) is a local web app for parsing, visualizing, and searching Codex JSONL sessions. It reads local session logs, groups conversations by user turn, renders messages with markdown, and surfaces tools/actions inline.
 
 ## Current Stack
 - React 19 + TypeScript (strict)
@@ -23,9 +23,8 @@ Fix commands when needed:
 - `npm run lint:fix` (lint autofix only)
 - `npm run format:write` (formatting only)
 
-## Repository Layout (Post-refactor)
+## Repository Layout
 - `src/main.tsx` - React entry.
-- `src/ConversationViewer.tsx` - re-export to the feature module (keeps import path stable).
 - `src/features/conversation/ConversationViewer.tsx` - main UI container; wires hooks + layout.
 - `src/features/conversation/components/` - UI building blocks:
   - `Sidebar.tsx` (search + sessions tree)
