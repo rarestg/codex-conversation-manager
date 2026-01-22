@@ -25,6 +25,11 @@ interface SessionHeaderProps {
   visibleItemCount: number;
   stats: SessionStats;
   filteredTurns: Turn[];
+  headerClassName?: string;
+  titleClassName?: string;
+  metaGridClassName?: string;
+  statsRowClassName?: string;
+  actionsClassName?: string;
 }
 
 export const SessionHeader = ({
@@ -34,6 +39,11 @@ export const SessionHeader = ({
   visibleItemCount,
   stats,
   filteredTurns,
+  headerClassName,
+  titleClassName,
+  metaGridClassName,
+  statsRowClassName,
+  actionsClassName,
 }: SessionHeaderProps) => {
   useRenderDebug('SessionHeader', {
     activeSessionId: activeSession?.id ?? null,
@@ -89,11 +99,22 @@ export const SessionHeader = ({
     const formatted = buildConversationExport(filteredTurns);
     await copyText(formatted);
   };
+  const headerClassNameMerged = ['flex flex-wrap items-start justify-between gap-4', headerClassName]
+    .filter(Boolean)
+    .join(' ');
+  const titleClassNameMerged = ['text-xl text-slate-900 truncate', titleClassName].filter(Boolean).join(' ');
+  const metaGridClassNameMerged = ['grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-3', metaGridClassName]
+    .filter(Boolean)
+    .join(' ');
+  const statsRowClassNameMerged = ['flex flex-wrap items-center gap-2 text-[11px] text-slate-500', statsRowClassName]
+    .filter(Boolean)
+    .join(' ');
+  const actionsClassNameMerged = ['flex items-center gap-3', actionsClassName].filter(Boolean).join(' ');
 
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className={headerClassNameMerged}>
       <div className="min-w-0 space-y-3">
-        <h2 className="text-xl text-slate-900 truncate" title={title}>
+        <h2 className={titleClassNameMerged} title={title}>
           {title}
         </h2>
         <p className="text-xs text-slate-500">
@@ -102,7 +123,7 @@ export const SessionHeader = ({
             : 'Select a session to start.'}
         </p>
         {(sessionId || cwd || activeSession?.filename) && (
-          <div className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-3">
+          <div className={metaGridClassNameMerged}>
             {sessionId && (
               <div className="chip">
                 <span className="chip-label">Session</span>
@@ -196,7 +217,7 @@ export const SessionHeader = ({
                 </span>
               )}
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+            <div className={statsRowClassNameMerged}>
               <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1.5 text-[11px]/[14px] text-slate-600 shadow-sm">
                 <Brain className="h-3.5 w-3.5" />
                 <span className="translate-y-[0.5px] inline-block min-w-[4ch] text-center tabular-nums">
@@ -229,7 +250,7 @@ export const SessionHeader = ({
           </div>
         )}
       </div>
-      <div className="flex items-center gap-3">
+      <div className={actionsClassNameMerged}>
         <CopyButton
           onCopy={handleCopyConversation}
           duration={2000}

@@ -1,0 +1,51 @@
+Canvas Registry + Variant Playground Context
+
+Goals
+- Introduce a manual canvas registry under src/features/conversation/canvas/ for demo/variant definitions.
+- Refactor CanvasView to consume the registry, scale to 4+ variants, and keep per-variant toggle state.
+- Allow future demos that don’t use SessionOverview or session data without refactoring the registry API.
+- Add styling slots to SessionHeader + SessionOverview without changing production behavior.
+- Keep /layouts as an alias of /canvas.
+
+Key decisions and guidance
+- Registry location: src/features/conversation/canvas/registry.tsx.
+- Avoid hooks in registry entries; registry should point at components that own their hooks.
+- Preserve per-variant state with a wrapper component that calls useSessionOverview and uses key={variant.id}.
+- Variant selection should be a Set/array of variant IDs derived from activeDemo.variants (no 'both' | 'a' | 'b').
+- Store selection per demo (Record<demoId, string[]>), so switching demos restores prior selections.
+- For demos that do not require session data, hide the session picker and render with null/empty data.
+- Initial variants should render identical layouts; actual visual differences will be added later.
+
+Canvas registry/data model
+- Define a CanvasContext (session data optional) in src/features/conversation/canvas/types.ts.
+- CanvasDemoVariant exposes a Component that receives { context }.
+- SessionHeader demo variants live in a separate file (sessionHeaderVariants.tsx) and call useSessionOverview internally.
+
+Styling slots to add (semantic, shallow)
+- SessionOverview: containerClassName, toggleGridClassName.
+- SessionHeader: headerClassName, titleClassName, metaGridClassName, statsRowClassName, actionsClassName.
+- Keep defaults identical; only apply optional overrides when provided.
+
+CanvasView behavior
+- Demo selector lists canvasDemos entries and shows demo description.
+- Variant selector is dynamic from activeDemo.variants and supports multi-select.
+- Session picker only appears when activeDemo.requiresSessionData is true.
+- Render variants by mapping selected variants and invoking their Component with context.
+
+Implementation checklist
+- Create src/features/conversation/canvas/registry.tsx with CanvasDemo type and canvasDemos array.
+- Add a SessionHeader demo entry with 2 variants (A/B).
+- Add src/features/conversation/canvas/types.ts to define CanvasContext.
+- Add src/features/conversation/canvas/sessionHeaderVariants.tsx to host hook-using variants.
+- Refactor CanvasView to select a demo from canvasDemos and render its description.
+- Replace hard-coded A/B toggle UI with dynamic variant selection based on activeDemo.variants.
+- Replace hard-coded A/B rendering with mapping over selected variants and calling their Component.
+- Keep per-variant state by wrapping each variant in its own component that calls useSessionOverview.
+- Hide the session picker when activeDemo.requiresSessionData is false.
+- Add styling hooks to SessionHeader + SessionOverview (see slots above).
+- Ensure no changes to ConversationMain/production session view behavior.
+
+Verification
+- npm run typecheck
+- npm run check
+- Manual: /canvas (and /layouts) demo selector/variant toggles; normal session view unchanged.

@@ -1,8 +1,7 @@
-import { useMemo, useState } from 'react';
-import { SessionHeader } from './components/SessionHeader';
-import { Toggle } from './components/Toggle';
+import { SessionOverview } from './components/SessionOverview';
 import { TurnList } from './components/TurnList';
 import { useRenderDebug } from './hooks/useRenderDebug';
+import { useSessionOverview } from './hooks/useSessionOverview';
 import type { SessionDetails, SessionFileEntry, Turn } from './types';
 
 interface ConversationMainProps {
@@ -22,42 +21,19 @@ export const ConversationMain = ({
   sessionsRoot,
   loadingSession,
 }: ConversationMainProps) => {
-  const [showThoughts, setShowThoughts] = useState(true);
-  const [showTools, setShowTools] = useState(true);
-  const [showMeta, setShowMeta] = useState(false);
-  const [showFullContent, setShowFullContent] = useState(false);
-
-  const filteredTurns = useMemo(() => {
-    return turns.map((turn) => {
-      const items = turn.items.filter((item) => {
-        if (item.type === 'thought' && !showThoughts) return false;
-        if ((item.type === 'tool_call' || item.type === 'tool_output') && !showTools) return false;
-        if ((item.type === 'meta' || item.type === 'token_count') && !showMeta) return false;
-        return true;
-      });
-      return { ...turn, items };
-    });
-  }, [turns, showThoughts, showTools, showMeta]);
-
-  const visibleItemCount = useMemo(() => {
-    return filteredTurns.reduce((count, turn) => count + turn.items.length, 0);
-  }, [filteredTurns]);
-
-  const sessionStats = useMemo(() => {
-    let thoughtCount = 0;
-    let toolCallCount = 0;
-    let metaCount = 0;
-
-    for (const turn of turns) {
-      for (const item of turn.items) {
-        if (item.type === 'thought') thoughtCount += 1;
-        if (item.type === 'tool_call' || item.type === 'tool_output') toolCallCount += 1;
-        if (item.type === 'meta' || item.type === 'token_count') metaCount += 1;
-      }
-    }
-
-    return { thoughtCount, toolCallCount, metaCount };
-  }, [turns]);
+  const {
+    showThoughts,
+    setShowThoughts,
+    showTools,
+    setShowTools,
+    showMeta,
+    setShowMeta,
+    showFullContent,
+    setShowFullContent,
+    filteredTurns,
+    visibleItemCount,
+    stats,
+  } = useSessionOverview(turns);
 
   useRenderDebug('ConversationMain', {
     activeSessionId: activeSession?.id ?? null,
@@ -72,43 +48,22 @@ export const ConversationMain = ({
 
   return (
     <main className="flex-1 min-w-0 space-y-6">
-      <div className="rounded-3xl border border-white/70 bg-white/80 p-6 shadow-card backdrop-blur">
-        <SessionHeader
-          activeSession={activeSession}
-          sessionDetails={sessionDetails}
-          sessionsRoot={sessionsRoot}
-          visibleItemCount={visibleItemCount}
-          stats={sessionStats}
-          filteredTurns={filteredTurns}
-        />
-
-        <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <Toggle
-            label="Thoughts"
-            description="Include agent reasoning inline."
-            checked={showThoughts}
-            onChange={setShowThoughts}
-          />
-          <Toggle
-            label="Tools"
-            description="Tool calls and outputs inline."
-            checked={showTools}
-            onChange={setShowTools}
-          />
-          <Toggle
-            label="Metadata"
-            description="turn_context, session_meta, token_count."
-            checked={showMeta}
-            onChange={setShowMeta}
-          />
-          <Toggle
-            label="Full content"
-            description="Disable truncation for long messages."
-            checked={showFullContent}
-            onChange={setShowFullContent}
-          />
-        </div>
-      </div>
+      <SessionOverview
+        activeSession={activeSession}
+        sessionDetails={sessionDetails}
+        sessionsRoot={sessionsRoot}
+        filteredTurns={filteredTurns}
+        visibleItemCount={visibleItemCount}
+        stats={stats}
+        showThoughts={showThoughts}
+        showTools={showTools}
+        showMeta={showMeta}
+        showFullContent={showFullContent}
+        onShowThoughtsChange={setShowThoughts}
+        onShowToolsChange={setShowTools}
+        onShowMetaChange={setShowMeta}
+        onShowFullContentChange={setShowFullContent}
+      />
 
       <TurnList
         filteredTurns={filteredTurns}

@@ -1,0 +1,142 @@
+Canvas Registry + Variant Playground Plan (handoff-ready)
+
+Context
+We want a layout/canvas page (/canvas and /layouts) that lets us compare multiple variants of UI components side by side using real session data, without over-engineering a component discovery system. The current CanvasView hard-codes Variant A/B and uses the same SessionOverview component for both, which prevents real A/B divergence and makes scaling to 4+ variants clunky. We also want the canvas to be extensible to other components beyond SessionHeader, but in a lightweight, manual way.
+
+Relevant codebase areas
+- src/features/conversation/CanvasView.tsx
+  Current canvas implementation. It renders the session picker, a fixed A/B toggle bar, and two SessionOverview cards. It also owns layout and variant selection logic.
+- src/features/conversation/components/SessionOverview.tsx
+  Shared wrapper that renders SessionHeader + toggles. Used by ConversationMain and CanvasView.
+- src/features/conversation/components/SessionHeader.tsx
+  The component under redesign. It uses session metadata, time formatting, stats, and copy buttons. It has no styling override hooks today.
+- src/features/conversation/hooks/useSessionOverview.ts
+  Provides per-instance toggle state, filtered turns, visible item counts, and stats derived from the raw turns.
+- src/features/conversation/ConversationViewer.tsx
+  Entry point that routes to home vs. session vs. canvas. CanvasView is rendered here.
+
+How the code connects
+- ConversationViewer loads sessions/turns via useSessions/useSession and provides that data to CanvasView and ConversationMain.
+- ConversationMain uses SessionOverview + useSessionOverview to render the session header and toggles in production.
+- CanvasView currently duplicates the SessionOverview/Toggle logic. We will refactor it to use a registry of demos and render variants through a render function. CanvasView should continue to use the same real session data from ConversationViewer so the demo remains production-faithful.
+
+The Plan (execution order, with why)
+Step 1: Define a manual canvas registry type and location
+Create a new module: src/features/conversation/canvas/registry.tsx (or .ts if no JSX is needed).
+Define a CanvasDemo interface that describes a demo, its variants, and whether it requires session data. The minimum fields:
+- id: string (unique, used for selection)
+- label: string (human readable)
+- description?: string (display in UI)
+- requiresSessionData?: boolean (controls whether session picker is shown)
+- variants: Array<{ id: string; label: string; description?: string; render: (props: SessionOverviewProps) => React.ReactNode; }>
+
+Why: This makes demos first-class and editable by hand. It avoids auto-discovery and keeps scope low, while clearly enabling multiple component demos in the future.
+
+Step 2: Introduce a shared “session overview props” type to keep variants aligned with production
+Define a small interface for the props that variants need for the SessionHeader/Toggle demo. Place it either in the registry file or in a new shared type file (e.g., src/features/conversation/canvas/types.ts) to keep it reusable.
+It should include:
+- activeSession, sessionDetails, sessionsRoot
+- filteredTurns, visibleItemCount, stats
+- toggle state + setters OR pass the full useSessionOverview result
+
+Why: Ensures the render function has a consistent shape and mirrors production data flow. Also makes it easier to swap in alternative variants without guessing prop shapes.
+
+Step 3: Add a simple CanvasDemo registry entry for SessionHeader
+Add a demo entry for SessionHeader in the registry file. Example:
+- id: 'session-overview'
+- label: 'SessionHeader'
+- description: 'Compare overview header + toggle layouts'
+- requiresSessionData: true
+- variants: A and B (render functions) that return SessionOverview or a future custom layout.
+
+In the short term, both variants can render SessionOverview, but the goal is to make it trivial to diverge them. You can add small visual differences (className, layout tweaks) to validate the approach immediately.
+
+Why: This gives us a live example without requiring the rest of the app to change. It proves the registry + render pipeline works.
+
+Step 4: Add styling hooks to SessionHeader and/or SessionOverview to allow variant overrides
+Add optional props to SessionHeader (or SessionOverview) such as className, titleClassName, metaClassName, statsClassName, toggleGridClassName. Keep them optional and default to current styling.
+
+Why: Variants should be able to experiment with typography or spacing without modifying production defaults. This is crucial for A/B comparison and future design exploration.
+
+Step 5: Refactor CanvasView to use the registry
+Modify CanvasView to:
+- Import the registry list.
+- Add a demo selector (select input) populated from registry entries.
+- Render the selected demo’s description.
+- If demo.requiresSessionData is true, show the session picker. If false, hide it and potentially show a “No data needed” placeholder.
+- Replace the current A/B toggle group with a variant selector derived from activeDemo.variants.
+  - For multiple variants: render a multi-select toggle strip or a “show all” button. For now, keep the current single-select (A, B, A+B) but compute its labels dynamically from the registry.
+- Render variants by mapping over activeDemo.variants filtered by the active selection state and calling render(props) for each.
+
+Why: This allows 4+ variants without restructuring the component. It also enables additional demos later with minimal changes.
+
+Step 6: Wire SessionOverview data into variants in CanvasView
+CanvasView should use useSessionOverview(turns) for each variant independently, because you want per-variant toggle control. The render props should be created per variant so each can manage its own toggle state. Ensure the data flow mirrors production:
+- Use the same activeSession, sessionDetails, and turns coming from ConversationViewer.
+- Pass filteredTurns and stats from each variant’s hook into its render.
+
+Why: This matches production wiring and keeps variant controls independent, which is aligned with your guidance.
+
+Step 7: Update ConversationMain to keep using SessionOverview unchanged
+Confirm that ConversationMain still uses SessionOverview and useSessionOverview as currently implemented. Avoid regressing production behavior.
+
+Why: The goal is to keep production stable while the canvas evolves.
+
+Step 8: Add documentation for future contributors
+Add a short note to a new todos/_learnings doc or a new plan file (if desired) describing how to add a new CanvasDemo entry and how to wire data dependencies (requiresSessionData vs stub data).
+
+Why: This removes tribal knowledge and makes the canvas extensible for future contributors.
+
+Dependencies & sequencing
+- SessionHeader style hooks should be added before creating variant render functions that use them, to avoid large refactors later.
+- The registry should exist before CanvasView refactors so the UI can read from it.
+- CanvasView refactor should come after the registry is defined to prevent temporarily broken UI.
+
+Decisions & Tradeoffs
+- Manual registry vs auto-discovery: We choose manual because it’s simpler, predictable, and avoids build-time complexity. The tradeoff is that new demos must be added by hand, but that’s acceptable for a dev-only tool.
+- Per-variant state vs synced toggles: We choose per-variant state to allow variants to diverge and use different controls. The tradeoff is that comparisons can be apples-to-oranges unless the user toggles to match, but that is acceptable and aligned with your answer.
+- Extensibility now vs later: We add basic extensibility (registry, render functions) without creating a large framework. The tradeoff is less automation, but less risk of over-engineering.
+- Styling hooks: We add optional className hooks to SessionHeader/SessionOverview to enable variant-specific tweaks. The tradeoff is increased prop surface area, but it keeps production styles intact and reduces forked component copies.
+
+Landmines and non-obvious parts
+- CanvasView currently depends on activeSession for the session picker value. When a demo doesn’t require session data, ensure the picker is hidden and avoid calling onLoadSession unnecessarily.
+- SessionHeader uses several derived values (file path, duration, time label). Ensure any styling hooks don’t alter logic or create “undefined” states in variants.
+- useSessionOverview returns filteredTurns; in canvas variants, ensure each variant passes its own filteredTurns, not the raw turns, to keep visibility counts accurate.
+- SessionOverview currently owns toggle layout and uses a fixed grid. If variants need different toggle sets, provide a path to render custom toggles (e.g., allow renderToggles prop later). Don’t remove the default toggle UI yet.
+- Don’t change ConversationViewer routing logic for /canvas or /layouts. The canvas should remain reachable with no new routes or router dependencies.
+
+Failed/abandoned approaches to avoid
+- Auto-discovering components or generating a registry at build time. This is too complex and not required right now.
+- Syncing toggles across variants by default. This conflicts with the requirement that variants may not share toggle sets.
+
+Verification (step-by-step)
+1) Canvas registry compiles
+- Run TypeScript checks: npm run typecheck
+- Ensure registry exports are used by CanvasView without type errors.
+
+2) CanvasView UI behavior
+- Navigate to /canvas
+- Demo selector shows at least “SessionHeader” (or equivalent)
+- Variant selector lists variant labels from the registry (A/B)
+- Session picker remains visible for demos that require session data
+
+3) Variant rendering
+- Selecting Variant A only renders one card
+- Selecting Variant B only renders one card
+- Selecting “A + B” renders both
+- Each variant’s toggles operate independently
+- Changes in one variant do not change the other
+
+4) Production view unchanged
+- Navigate to a real session (normal app path)
+- SessionHeader and toggles still render as before
+- Copy button, stats, and metadata chips still work
+
+5) Styling hooks sanity check
+- If you add className hooks, verify that defaults look identical when no overrides are provided.
+
+Testing recommendations
+- npm run typecheck
+- npm run check (Biome)
+- Manual visual check in dev server: /canvas, /layouts, and a regular session view
+
