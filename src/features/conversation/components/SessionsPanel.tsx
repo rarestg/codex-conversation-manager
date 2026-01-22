@@ -14,6 +14,7 @@ import {
   isSameDay,
 } from '../format';
 import { useRenderDebug } from '../hooks/useRenderDebug';
+import { useWhyDidYouRender } from '../hooks/useWhyDidYouRender';
 import type { SessionFileEntry, SessionTree } from '../types';
 import { CopyButton } from './CopyButton';
 
@@ -56,6 +57,20 @@ const SessionsPanelComponent = ({
     activeSessionId: activeSession?.id ?? null,
     activeWorkspace: activeWorkspace ?? null,
   });
+  useWhyDidYouRender(
+    'SessionsPanel',
+    {
+      sessionsTree,
+      sessionsRoot,
+      loading,
+      activeSession,
+      activeWorkspace,
+      onRefreshSessions,
+      onLoadSession,
+      onClearWorkspace,
+    },
+    { includeFunctions: true },
+  );
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
