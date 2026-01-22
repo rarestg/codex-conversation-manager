@@ -1,6 +1,6 @@
 import { Clock, Fingerprint, GitBranch, Github, Hourglass, Repeat2 } from 'lucide-react';
 import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
-import type { MouseEvent } from 'react';
+import { type MouseEvent, useEffect, useRef } from 'react';
 import { copyText } from '../copy';
 import {
   formatDayLabel,
@@ -42,6 +42,8 @@ export const SessionsPanel = ({
   const formatCountLabel = (count: number, label: string) => `${count} ${count === 1 ? label : `${label}s`}`;
   const now = new Date();
   const { copiedId, showCopied } = useCopyFeedback();
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const activeRowRef = useRef<HTMLDivElement | null>(null);
   const getRepoLabel = (gitRepo?: string | null, cwd?: string | null) => {
     if (gitRepo) {
       const cleaned = gitRepo.replace(/\.git$/i, '');
@@ -67,6 +69,62 @@ export const SessionsPanel = ({
     await copyText(value);
     showCopied(id, 1500);
   };
+
+  useEffect(() => {
+    const container = listRef.current;
+    if (!container) return;
+
+    const activeId = activeSession?.id;
+    const detailsNodes = Array.from(container.querySelectorAll<HTMLDetailsElement>('details'));
+
+    if (!activeId) {
+      for (const node of detailsNodes) {
+        const level = node.dataset.level;
+        if (level === 'year') {
+          node.open = true;
+        } else {
+          node.open = false;
+        }
+      }
+      return;
+    }
+
+    const [year, month, day] = activeId.split('/');
+    if (!year || !month || !day) return;
+
+    const openDetails = () => {
+      for (const node of detailsNodes) {
+        const level = node.dataset.level;
+        if (level === 'year') {
+          node.open = node.dataset.year === year;
+        } else if (level === 'month') {
+          node.open = node.dataset.year === year && node.dataset.month === month;
+        } else if (level === 'day') {
+          node.open = node.dataset.year === year && node.dataset.month === month && node.dataset.day === day;
+        }
+      }
+    };
+
+    openDetails();
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const row = activeRowRef.current;
+        if (!row) return;
+        const viewport = row.closest<HTMLElement>('.os-viewport');
+        if (viewport) {
+          const rowRect = row.getBoundingClientRect();
+          const viewRect = viewport.getBoundingClientRect();
+          const inView = rowRect.top >= viewRect.top && rowRect.bottom <= viewRect.bottom;
+          if (!inView) {
+            row.scrollIntoView({ block: 'nearest' });
+          }
+        } else {
+          row.scrollIntoView({ block: 'nearest' });
+        }
+      });
+    });
+  }, [activeSession?.id]);
 
   return (
     <div className={className}>
@@ -117,7 +175,7 @@ export const SessionsPanel = ({
           }}
           data-overlayscrollbars-initialize
         >
-          <div className="space-y-3">
+          <div ref={listRef} className="space-y-3">
             {loading ? (
               <div className="space-y-3 animate-pulse">
                 {SESSIONS_SKELETON_KEYS.map((key) => (
@@ -136,7 +194,13 @@ export const SessionsPanel = ({
               </div>
             ) : sessionsTree?.years.length ? (
               sessionsTree.years.map((year) => (
-                <details key={year.year} open className="group">
+                <details
+                  key={year.year}
+                  open
+                  className="group overflow-visible"
+                  data-level="year"
+                  data-year={year.year}
+                >
                   <summary className="cursor-pointer list-none rounded-xl bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
                     <div className="flex w-full items-center justify-between gap-3">
                       <span>{year.year}</span>
@@ -153,8 +217,14 @@ export const SessionsPanel = ({
                   </summary>
                   <div className="mt-2 space-y-2 pl-2">
                     {year.months.map((month) => (
-                      <details key={`${year.year}-${month.month}`} className="group">
-                        <summary className="cursor-pointer list-none rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">
+                      <details
+                        key={`${year.year}-${month.month}`}
+                        className="group overflow-visible"
+                        data-level="month"
+                        data-year={year.year}
+                        data-month={month.month}
+                      >
+                        <summary className="cursor-pointer list-none rounded-xl border border-slate-100 bg-white px-3 py-2 text-xs font-semibold text-slate-600">
                           <div className="flex w-full items-center justify-between gap-3">
                             <span>{formatMonthLabel(year.year, month.month)}</span>
                             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
@@ -167,7 +237,14 @@ export const SessionsPanel = ({
                         </summary>
                         <div className="mt-2 space-y-2 pl-2">
                           {month.days.map((day) => (
-                            <details key={`${year.year}-${month.month}-${day.day}`} className="group">
+                            <details
+                              key={`${year.year}-${month.month}-${day.day}`}
+                              className="group overflow-visible"
+                              data-level="day"
+                              data-year={year.year}
+                              data-month={month.month}
+                              data-day={day.day}
+                            >
                               <summary className="cursor-pointer list-none rounded-xl bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500">
                                 <div className="flex w-full items-center justify-between gap-3">
                                   <span>{formatDayLabel(year.year, month.month, day.day)}</span>
@@ -194,6 +271,7 @@ export const SessionsPanel = ({
                                   return (
                                     <div
                                       key={file.id}
+                                      ref={file.id === activeSession?.id ? activeRowRef : null}
                                       className={`w-full rounded-2xl border px-3 py-2 text-left text-xs transition ${
                                         activeSession?.id === file.id
                                           ? 'border-teal-300 bg-teal-50 text-teal-800'
