@@ -57,10 +57,10 @@ export const SessionHeader = ({
   const durationLabel = activeSession ? formatDuration(activeSession.startedAt, activeSession.endedAt) : '';
   const durationDisplay = durationLabel || (timeSource ? '0m' : '');
   const sessionRoot = sessionsRoot?.trim() || '';
-  const filePath =
-    activeSession && sessionRoot
-      ? `${sessionRoot.replace(/[\\/]+$/, '')}/${activeSession.id}`
-      : activeSession?.id || '';
+  const normalizedRoot = sessionRoot.replace(/[\\/]+$/, '');
+  const pathSeparator = normalizedRoot.includes('\\') ? '\\' : '/';
+  const normalizedId = activeSession?.id ? activeSession.id.replace(/[\\/]+/g, pathSeparator) : '';
+  const filePath = activeSession && normalizedRoot ? `${normalizedRoot}${pathSeparator}${normalizedId}` : normalizedId;
   const getRepoLabel = (gitRepo?: string | null, cwdValue?: string | null) => {
     if (gitRepo) {
       const cleaned = gitRepo.replace(/\.git$/i, '');
