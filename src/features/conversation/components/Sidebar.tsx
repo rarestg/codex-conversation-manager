@@ -1,4 +1,6 @@
 import type { KeyboardEvent } from 'react';
+import { useRenderDebug } from '../hooks/useRenderDebug';
+import { useWhyDidYouRender } from '../hooks/useWhyDidYouRender';
 import type { SessionFileEntry, SessionTree, WorkspaceSearchGroup } from '../types';
 import { SearchPanel } from './SearchPanel';
 import { SessionsPanel } from './SessionsPanel';
@@ -34,6 +36,42 @@ export const Sidebar = ({
   activeWorkspace,
   onClearWorkspace,
 }: SidebarProps) => {
+  const renderStart = import.meta.env.DEV ? performance.now() : 0;
+  useRenderDebug('Sidebar', {
+    sessionsLoading,
+    searchQuery,
+    searchLoading,
+    searchGroupsCount: searchGroups.length,
+    activeSessionId: activeSession?.id ?? null,
+    activeWorkspace: activeWorkspace ?? null,
+  });
+  useWhyDidYouRender(
+    'Sidebar',
+    {
+      sessionsTree,
+      sessionsRoot,
+      sessionsLoading,
+      searchQuery,
+      searchGroups,
+      searchLoading,
+      activeSession,
+      activeWorkspace,
+      onSearchQueryChange,
+      onSearchKeyDown,
+      onLoadSession,
+      onRefreshSessions,
+      onClearWorkspace,
+    },
+    { includeFunctions: true },
+  );
+
+  if (import.meta.env.DEV) {
+    requestAnimationFrame(() => {
+      const duration = performance.now() - renderStart;
+      console.debug('[render cost] Sidebar', { duration });
+    });
+  }
+
   return (
     <aside className="w-full max-w-none space-y-5 lg:w-[340px]">
       <SearchPanel

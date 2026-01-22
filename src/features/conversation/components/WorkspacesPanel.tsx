@@ -1,4 +1,5 @@
 import { formatDate, formatTime, formatWorkspacePath } from '../format';
+import { useRenderDebug } from '../hooks/useRenderDebug';
 import type { WorkspaceSummary } from '../types';
 import { GitHubIcon } from './GitHubIcon';
 
@@ -33,6 +34,13 @@ export const WorkspacesPanel = ({
   onClearWorkspace,
   className,
 }: WorkspacesPanelProps) => {
+  useRenderDebug('WorkspacesPanel', {
+    loading,
+    workspacesCount: workspaces.length,
+    sort,
+    activeWorkspace: activeWorkspace ?? null,
+  });
+
   return (
     <div className={className}>
       <div className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur">

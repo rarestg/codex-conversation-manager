@@ -1,3 +1,6 @@
+import { useEffect } from 'react';
+import { useRenderDebug } from '../hooks/useRenderDebug';
+import { useWhyDidYouRender } from '../hooks/useWhyDidYouRender';
 import type { ParsedItem, SessionFileEntry, Turn } from '../types';
 import { TurnCard } from './TurnCard';
 
@@ -20,6 +23,34 @@ export const TurnList = ({
   copiedId,
   onCopyItem,
 }: TurnListProps) => {
+  const renderStart = import.meta.env.DEV ? performance.now() : 0;
+  useRenderDebug('TurnList', {
+    loadingSession,
+    activeSessionId: activeSession?.id ?? null,
+    parseErrorsCount: parseErrors.length,
+    showFullContent,
+    copiedId,
+    filteredTurnCount: filteredTurns.length,
+  });
+  useWhyDidYouRender(
+    'TurnList',
+    {
+      filteredTurns,
+      loadingSession,
+      activeSession,
+      parseErrors,
+      showFullContent,
+      copiedId,
+      onCopyItem,
+    },
+    { includeFunctions: true },
+  );
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const duration = performance.now() - renderStart;
+    console.debug('[render cost] TurnList', { duration });
+  });
+
   return (
     <div className="space-y-6">
       {loadingSession && (

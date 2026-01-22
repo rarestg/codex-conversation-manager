@@ -7,6 +7,7 @@ import {
   formatWorkspacePath,
   isSameDay,
 } from '../format';
+import { useRenderDebug } from '../hooks/useRenderDebug';
 import type { SessionDetails, SessionFileEntry } from '../types';
 
 interface SessionStats {
@@ -36,6 +37,13 @@ export const SessionHeader = ({
   onCopyConversation,
   onCopyMeta,
 }: SessionHeaderProps) => {
+  useRenderDebug('SessionHeader', {
+    activeSessionId: activeSession?.id ?? null,
+    sessionId: sessionDetails.sessionId ?? null,
+    cwd: sessionDetails.cwd ?? null,
+    copiedId,
+  });
+
   const sessionId = sessionDetails.sessionId;
   const cwd = sessionDetails.cwd;
   const rawTitle = activeSession?.preview?.trim() || activeSession?.filename || 'Session viewer';

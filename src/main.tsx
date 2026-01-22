@@ -1,4 +1,3 @@
-import React from 'react';
 import ReactDOM from 'react-dom/client';
 import 'overlayscrollbars/overlayscrollbars.css';
 import ConversationViewer from './features/conversation/ConversationViewer';
@@ -9,8 +8,4 @@ if (!root) {
   throw new Error('Missing root element');
 }
 
-ReactDOM.createRoot(root).render(
-  <React.StrictMode>
-    <ConversationViewer />
-  </React.StrictMode>,
-);
+ReactDOM.createRoot(root).render(<ConversationViewer />);

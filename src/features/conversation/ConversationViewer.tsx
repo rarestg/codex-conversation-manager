@@ -10,6 +10,7 @@ import { TurnList } from './components/TurnList';
 import { WorkspacesPanel } from './components/WorkspacesPanel';
 import { buildConversationExport, copyText } from './copy';
 import { useCopyFeedback } from './hooks/useCopyFeedback';
+import { useRenderDebug } from './hooks/useRenderDebug';
 import { useSearch } from './hooks/useSearch';
 import { useSession } from './hooks/useSession';
 import { useSessions } from './hooks/useSessions';
@@ -64,6 +65,19 @@ export default function ConversationViewer() {
 
   useUrlSync(loadSession, clearSession);
 
+  useRenderDebug('ConversationViewer', {
+    copiedId,
+    activeSessionId: activeSession?.id ?? null,
+    activeWorkspace,
+    settingsOpen,
+    loadingSessions,
+    loadingSession,
+    workspacesLoading,
+    workspacesSort,
+    searchQuery,
+    sessionsTreeRoot: sessionsTree?.root ?? null,
+  });
+
   const filteredTurns = useMemo(() => {
     return turns.map((turn) => {
       const items = turn.items.filter((item) => {
@@ -97,21 +111,83 @@ export default function ConversationViewer() {
   }, [turns]);
 
   const handleCopyConversation = async () => {
+    const debug = import.meta.env.DEV;
+    const label = 'copy-conversation';
+    if (debug) {
+      console.time(`${label}:total`);
+    }
     const formatted = buildConversationExport(filteredTurns);
+    if (debug) {
+      console.time(`${label}:copyText`);
+    }
     await copyText(formatted);
+    if (debug) {
+      console.timeEnd(`${label}:copyText`);
+      console.time(`${label}:showCopied`);
+    }
     showCopied('conversation', 2000);
+    if (debug) {
+      console.timeEnd(`${label}:showCopied`);
+      console.timeEnd(`${label}:total`);
+    }
   };
 
   const handleCopyItem = async (item: ParsedItem, format: 'text' | 'markdown') => {
+    const debug = import.meta.env.DEV;
+    const labelBase = `copy-item:${item.id}:${format}`;
+    if (debug) {
+      console.time(`${labelBase}:total`);
+    }
     const raw = item.content;
-    const text = format === 'text' ? await markdownToPlainText(raw) : raw;
-    await copyText(text);
+    if (format === 'text') {
+      if (debug) {
+        console.time(`${labelBase}:markdownToPlainText`);
+      }
+      const text = await markdownToPlainText(raw);
+      if (debug) {
+        console.timeEnd(`${labelBase}:markdownToPlainText`);
+        console.time(`${labelBase}:copyText`);
+      }
+      await copyText(text);
+      if (debug) {
+        console.timeEnd(`${labelBase}:copyText`);
+      }
+    } else {
+      if (debug) {
+        console.time(`${labelBase}:copyText`);
+      }
+      await copyText(raw);
+      if (debug) {
+        console.timeEnd(`${labelBase}:copyText`);
+      }
+    }
+    if (debug) {
+      console.time(`${labelBase}:showCopied`);
+    }
     showCopied(item.id + format, 1500);
+    if (debug) {
+      console.timeEnd(`${labelBase}:showCopied`);
+      console.timeEnd(`${labelBase}:total`);
+    }
   };
 
   const handleCopyMeta = async (value: string, id: string) => {
+    const debug = import.meta.env.DEV;
+    const label = `copy-meta:${id}`;
+    if (debug) {
+      console.time(`${label}:total`);
+      console.time(`${label}:copyText`);
+    }
     await copyText(value);
+    if (debug) {
+      console.timeEnd(`${label}:copyText`);
+      console.time(`${label}:showCopied`);
+    }
     showCopied(id, 1500);
+    if (debug) {
+      console.timeEnd(`${label}:showCopied`);
+      console.timeEnd(`${label}:total`);
+    }
   };
 
   const handleClearIndex = async () => {

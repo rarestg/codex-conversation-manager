@@ -14,6 +14,7 @@ import {
   isSameDay,
 } from '../format';
 import { useCopyFeedback } from '../hooks/useCopyFeedback';
+import { useRenderDebug } from '../hooks/useRenderDebug';
 import type { SessionFileEntry, SessionTree } from '../types';
 
 const SESSIONS_SKELETON_KEYS = ['a', 'b', 'c', 'd', 'e'];
@@ -43,10 +44,26 @@ export const SessionsPanel = ({
 }: SessionsPanelProps) => {
   const formatCountLabel = (count: number, label: string) => `${count} ${count === 1 ? label : `${label}s`}`;
   const now = new Date();
+  const renderStart = import.meta.env.DEV ? performance.now() : 0;
   const { copiedId, showCopied } = useCopyFeedback();
   const listRef = useRef<HTMLDivElement | null>(null);
   const activeRowRef = useRef<HTMLDivElement | null>(null);
   const treeKey = sessionsTree?.years.length ?? 0;
+
+  useRenderDebug('SessionsPanel', {
+    loading,
+    treeKey,
+    sessionsRoot,
+    activeSessionId: activeSession?.id ?? null,
+    activeWorkspace: activeWorkspace ?? null,
+  });
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const duration = performance.now() - renderStart;
+    console.debug('[render cost] SessionsPanel', { duration });
+  });
+
   const getRepoLabel = (gitRepo?: string | null, cwd?: string | null) => {
     if (gitRepo) {
       const cleaned = gitRepo.replace(/\.git$/i, '');
