@@ -1,4 +1,4 @@
-import { Clock, Fingerprint, GitBranch, Github, Hourglass, Repeat2 } from 'lucide-react';
+import { Calendar, Clock, Fingerprint, GitBranch, Github, Hourglass, Repeat2 } from 'lucide-react';
 import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { type MouseEvent, useEffect, useRef } from 'react';
 import { copyText } from '../copy';
@@ -9,6 +9,8 @@ import {
   formatRelativeTime,
   formatTime,
   formatWorkspacePath,
+  getDaysInMonth,
+  getDaysInYear,
   isSameDay,
 } from '../format';
 import { useCopyFeedback } from '../hooks/useCopyFeedback';
@@ -204,15 +206,35 @@ export const SessionsPanel = ({
                   <summary className="cursor-pointer list-none rounded-xl bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
                     <div className="flex w-full items-center justify-between gap-3">
                       <span>{year.year}</span>
-                      <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-                        {formatCountLabel(
-                          year.months.reduce(
+                      <div className="flex items-center gap-2">
+                        {(() => {
+                          const yearSessionCount = year.months.reduce(
                             (total, month) => total + month.days.reduce((sum, day) => sum + day.files.length, 0),
                             0,
-                          ),
-                          'session',
-                        )}
-                      </span>
+                          );
+                          const yearActiveDays = year.months.reduce((total, month) => total + month.days.length, 0);
+                          const yearTotalDays = getDaysInYear(year.year);
+
+                          return (
+                            <>
+                              {yearTotalDays && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-white/80 px-2 py-0.5 text-[10px]/[12px] font-medium text-slate-500">
+                                  <Calendar className="h-3 w-3" />
+                                  <span className="translate-y-[0.5px] inline-block min-w-[6ch] text-center tabular-nums">
+                                    {`${yearActiveDays}/${yearTotalDays}`}
+                                  </span>
+                                </span>
+                              )}
+                              <span className="inline-flex items-center rounded-full bg-white/80 px-2 py-0.5 text-[10px]/[12px] font-medium text-slate-500">
+                                <span className="translate-y-[0.5px] inline-flex items-center gap-1">
+                                  <span className="min-w-[4ch] text-center tabular-nums">{yearSessionCount}</span>
+                                  <span>{yearSessionCount === 1 ? 'session' : 'sessions'}</span>
+                                </span>
+                              </span>
+                            </>
+                          );
+                        })()}
+                      </div>
                     </div>
                   </summary>
                   <div className="mt-2 space-y-2 pl-2">
@@ -227,12 +249,34 @@ export const SessionsPanel = ({
                         <summary className="cursor-pointer list-none rounded-xl border border-slate-100 bg-white px-3 py-2 text-xs font-semibold text-slate-600">
                           <div className="flex w-full items-center justify-between gap-3">
                             <span>{formatMonthLabel(year.year, month.month)}</span>
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-                              {formatCountLabel(
-                                month.days.reduce((sum, day) => sum + day.files.length, 0),
-                                'session',
-                              )}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              {(() => {
+                                const monthSessionCount = month.days.reduce((sum, day) => sum + day.files.length, 0);
+                                const monthActiveDays = month.days.length;
+                                const monthTotalDays = getDaysInMonth(year.year, month.month);
+
+                                return (
+                                  <>
+                                    {monthTotalDays && (
+                                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px]/[12px] font-medium text-slate-500">
+                                        <Calendar className="h-3 w-3" />
+                                        <span className="translate-y-[0.5px] inline-block min-w-[6ch] text-center tabular-nums">
+                                          {`${monthActiveDays}/${monthTotalDays}`}
+                                        </span>
+                                      </span>
+                                    )}
+                                    <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px]/[12px] font-medium text-slate-500">
+                                      <span className="translate-y-[0.5px] inline-flex items-center gap-1">
+                                        <span className="min-w-[4ch] text-center tabular-nums">
+                                          {monthSessionCount}
+                                        </span>
+                                        <span>{monthSessionCount === 1 ? 'session' : 'sessions'}</span>
+                                      </span>
+                                    </span>
+                                  </>
+                                );
+                              })()}
+                            </div>
                           </div>
                         </summary>
                         <div className="mt-2 space-y-2 pl-2">

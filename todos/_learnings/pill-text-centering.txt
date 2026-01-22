@@ -43,3 +43,7 @@ Current solution
 Notes for future
 - If the font or size changes, re-evaluate the offset.
 - A reusable “pill-text-optical” class could centralize the offset.
+- Also applies to summary pills in session headers (e.g., calendar day count + session count): make the pill container `inline-flex items-center` and apply `translate-y-[0.5px]` to the text span to match icon-aligned pills.
+- Alignment guideline for multi-part pills:
+  - Keep consistent elements (icons or fixed labels like “sessions”) aligned vertically across rows.
+  - Give variable values a fixed-width slot (`min-w-[Xch]` + `tabular-nums`) and center them inside that slot so counts don’t shift the pill group left/right.

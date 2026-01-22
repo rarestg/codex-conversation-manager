@@ -56,6 +56,22 @@ const toNumber = (value: string) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+export const getDaysInMonth = (year: string, month: string) => {
+  const yearNum = toNumber(year);
+  const monthNum = toNumber(month);
+  if (!yearNum || !monthNum) return null;
+  if (monthNum < 1 || monthNum > 12) return null;
+  const days = new Date(yearNum, monthNum, 0).getDate();
+  return Number.isFinite(days) ? days : null;
+};
+
+export const getDaysInYear = (year: string) => {
+  const yearNum = toNumber(year);
+  if (!yearNum) return null;
+  const isLeapYear = new Date(yearNum, 1, 29).getMonth() === 1;
+  return isLeapYear ? 366 : 365;
+};
+
 export const formatMonthLabel = (year: string, month: string) => {
   const monthNum = toNumber(month);
   if (!monthNum || monthNum < 1 || monthNum > 12) return month;
