@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from 'react';
+import { type KeyboardEvent, memo } from 'react';
 import type { SessionFileEntry, SessionTree, WorkspaceSearchGroup } from '../types';
 import { SearchPanel } from './SearchPanel';
 import { SessionsPanel } from './SessionsPanel';
@@ -19,7 +19,7 @@ interface SidebarProps {
   onClearWorkspace?: () => void;
 }
 
-export const Sidebar = ({
+const SidebarComponent = ({
   sessionsTree,
   sessionsRoot,
   sessionsLoading,
@@ -57,3 +57,5 @@ export const Sidebar = ({
     </aside>
   );
 };
+
+export const Sidebar = memo(SidebarComponent);

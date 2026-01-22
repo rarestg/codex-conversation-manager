@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { formatDate, formatTime, formatWorkspacePath } from '../format';
 import type { WorkspaceSummary } from '../types';
 import { GitHubIcon } from './GitHubIcon';
@@ -23,7 +24,7 @@ const getRepoLabel = (gitRepo?: string | null) => {
 const getWorkspaceTitle = (workspace: WorkspaceSummary) =>
   workspace.github_slug || getRepoLabel(workspace.git_repo) || workspace.cwd;
 
-export const WorkspacesPanel = ({
+const WorkspacesPanelComponent = ({
   workspaces,
   loading,
   sort,
@@ -145,3 +146,5 @@ export const WorkspacesPanel = ({
     </div>
   );
 };
+
+export const WorkspacesPanel = memo(WorkspacesPanelComponent);

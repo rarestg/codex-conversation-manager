@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { SessionFileEntry, Turn } from '../types';
 import { TurnCard } from './TurnCard';
 
@@ -9,7 +10,7 @@ interface TurnListProps {
   showFullContent: boolean;
 }
 
-export const TurnList = ({
+const TurnListComponent = ({
   filteredTurns,
   loadingSession,
   activeSession,
@@ -54,3 +55,5 @@ export const TurnList = ({
     </div>
   );
 };
+
+export const TurnList = memo(TurnListComponent);

@@ -1,5 +1,5 @@
 import { Home, Settings } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ConversationMain } from './ConversationMain';
 import { SearchPanel } from './components/SearchPanel';
 import { SessionsPanel } from './components/SessionsPanel';
@@ -53,36 +53,36 @@ export default function ConversationViewer() {
 
   useUrlSync(loadSession, clearSession);
 
-  const handleClearIndex = async () => {
+  const handleClearIndex = useCallback(async () => {
     const confirmed = window.confirm('This will clear the index and rebuild it from scratch. Continue?');
     if (!confirmed) return;
     await rebuildIndex();
     await loadWorkspaces();
-  };
+  }, [loadWorkspaces, rebuildIndex]);
 
-  const handleSaveRoot = async () => {
+  const handleSaveRoot = useCallback(async () => {
     await saveRoot();
     setActiveWorkspace(null);
     await loadWorkspaces();
-  };
+  }, [loadWorkspaces, saveRoot]);
 
-  const handleReindex = async () => {
+  const handleReindex = useCallback(async () => {
     await reindex();
     await loadWorkspaces();
-  };
+  }, [loadWorkspaces, reindex]);
 
-  const handleSelectWorkspace = (workspace: string) => {
+  const handleSelectWorkspace = useCallback((workspace: string) => {
     setActiveWorkspace((current) => (current === workspace ? null : workspace));
-  };
+  }, []);
 
-  const handleClearWorkspace = () => {
+  const handleClearWorkspace = useCallback(() => {
     setActiveWorkspace(null);
-  };
+  }, []);
 
-  const handleGoHome = () => {
+  const handleGoHome = useCallback(() => {
     clearSession();
     window.history.pushState(null, '', `${window.location.pathname}${window.location.hash || ''}`);
-  };
+  }, [clearSession]);
 
   const showHome = !activeSession;
 

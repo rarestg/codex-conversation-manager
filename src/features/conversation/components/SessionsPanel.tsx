@@ -1,6 +1,6 @@
 import { Calendar, Clock, Fingerprint, GitBranch, Github, Hourglass, Repeat2 } from 'lucide-react';
 import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
-import { type MouseEvent, useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { copyText } from '../copy';
 import {
   formatDayLabel,
@@ -13,8 +13,8 @@ import {
   getDaysInYear,
   isSameDay,
 } from '../format';
-import { useCopyFeedback } from '../hooks/useCopyFeedback';
 import type { SessionFileEntry, SessionTree } from '../types';
+import { CopyButton } from './CopyButton';
 
 const SESSIONS_SKELETON_KEYS = ['a', 'b', 'c', 'd', 'e'];
 
@@ -30,7 +30,7 @@ interface SessionsPanelProps {
   className?: string;
 }
 
-export const SessionsPanel = ({
+const SessionsPanelComponent = ({
   sessionsTree,
   sessionsRoot,
   loading,
@@ -43,7 +43,6 @@ export const SessionsPanel = ({
 }: SessionsPanelProps) => {
   const formatCountLabel = (count: number, label: string) => `${count} ${count === 1 ? label : `${label}s`}`;
   const now = new Date();
-  const { copiedId, showCopied } = useCopyFeedback();
   const listRef = useRef<HTMLDivElement | null>(null);
   const activeRowRef = useRef<HTMLDivElement | null>(null);
   const treeKey = sessionsTree?.years.length ?? 0;
@@ -66,12 +65,6 @@ export const SessionsPanel = ({
   const formatSessionId = (value: string) => {
     if (value.length <= 16) return value;
     return `${value.slice(0, 8)}...${value.slice(-4)}`;
-  };
-  const handleCopySessionId = async (event: MouseEvent<HTMLButtonElement>, value: string, id: string) => {
-    event.stopPropagation();
-    event.preventDefault();
-    await copyText(value);
-    showCopied(id, 1500);
   };
 
   useEffect(() => {
@@ -314,7 +307,17 @@ export const SessionsPanel = ({
                                   const repoLabel = getRepoLabel(file.gitRepo, file.cwd);
                                   const sessionId = file.sessionId;
                                   const sessionIdLabel = formatSessionId(sessionId);
-                                  const sessionCopyId = `session-id-${file.id}`;
+                                  const renderSessionIdLabel = (showCopied: boolean) => (
+                                    <>
+                                      <Fingerprint className="h-3 w-3" />
+                                      <span className="truncate">{sessionIdLabel}</span>
+                                      {showCopied && (
+                                        <span className="rounded-full bg-white/80 px-2 py-1 text-[10px] text-slate-500">
+                                          Copied
+                                        </span>
+                                      )}
+                                    </>
+                                  );
 
                                   return (
                                     <div
@@ -375,20 +378,14 @@ export const SessionsPanel = ({
                                           )}
                                         </div>
                                       </button>
-                                      <button
-                                        type="button"
-                                        onClick={(event) => handleCopySessionId(event, sessionId, sessionCopyId)}
+                                      <CopyButton
+                                        onCopy={() => copyText(sessionId)}
                                         title={sessionId}
                                         className="mt-2 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[10px] text-slate-600 hover:bg-slate-200"
+                                        copiedLabel={renderSessionIdLabel(true)}
                                       >
-                                        <Fingerprint className="h-3 w-3" />
-                                        <span className="truncate">{sessionIdLabel}</span>
-                                        {copiedId === sessionCopyId && (
-                                          <span className="rounded-full bg-white/80 px-2 py-1 text-[10px] text-slate-500">
-                                            Copied
-                                          </span>
-                                        )}
-                                      </button>
+                                        {renderSessionIdLabel(false)}
+                                      </CopyButton>
                                     </div>
                                   );
                                 })}
@@ -412,3 +409,5 @@ export const SessionsPanel = ({
     </div>
   );
 };
+
+export const SessionsPanel = memo(SessionsPanelComponent);
