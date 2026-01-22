@@ -43,7 +43,7 @@ export const SessionHeader = ({
     filteredTurnCount: filteredTurns.length,
   });
 
-  const sessionId = activeSession?.sessionId || sessionDetails.sessionId;
+  const sessionId = sessionDetails.sessionId || activeSession?.sessionId;
   const cwd = sessionDetails.cwd;
   const rawTitle = activeSession?.preview?.trim() || activeSession?.filename || 'Session viewer';
   const title = rawTitle.replace(/\s+/g, ' ').trim();
@@ -57,7 +57,8 @@ export const SessionHeader = ({
   const durationLabel = activeSession ? formatDuration(activeSession.startedAt, activeSession.endedAt) : '';
   const durationDisplay = durationLabel || (timeSource ? '-' : '');
   const sessionRoot = sessionsRoot?.trim() || '';
-  const pathSeparator = sessionRoot.includes('\\') ? '\\' : '/';
+  const fallbackId = activeSession?.id ?? '';
+  const pathSeparator = sessionRoot.includes('\\') ? '\\' : sessionRoot ? '/' : fallbackId.includes('\\') ? '\\' : '/';
   const trimmedRoot = sessionRoot.replace(/[\\/]+$/, '');
   const normalizedRoot = trimmedRoot || (/^[\\/]+$/.test(sessionRoot) ? pathSeparator : '');
   const normalizedId = activeSession?.id ? activeSession.id.replace(/[\\/]+/g, pathSeparator) : '';
