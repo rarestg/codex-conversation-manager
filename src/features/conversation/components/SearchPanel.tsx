@@ -1,5 +1,5 @@
 import type { KeyboardEvent } from 'react';
-import { formatTimestamp } from '../format';
+import { formatDate, formatTime, formatWorkspacePath } from '../format';
 import { renderSnippet } from '../markdown';
 import type { WorkspaceSearchGroup } from '../types';
 import { GitHubIcon } from './GitHubIcon';
@@ -58,28 +58,48 @@ export const SearchPanel = ({
           <div className="mt-4 space-y-4">
             {searchGroups.map((group) => (
               <div key={group.workspace.cwd} className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="flex items-start gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex min-w-0 items-start gap-3 sm:flex-1">
                     {group.workspace.github_slug && (
                       <div className="mt-0.5 rounded-full bg-slate-200 p-1 text-slate-600">
                         <GitHubIcon className="h-3.5 w-3.5" />
                       </div>
                     )}
-                    <div>
-                      <div className="text-sm font-semibold text-slate-800">{getWorkspaceTitle(group.workspace)}</div>
-                      <div className="mt-1 text-xs text-slate-500">{group.workspace.cwd}</div>
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-slate-800">
+                        {getWorkspaceTitle(group.workspace)}
+                      </div>
+                      <div className="mt-1 truncate text-xs text-slate-500" title={group.workspace.cwd}>
+                        {formatWorkspacePath(group.workspace.cwd)}
+                      </div>
                     </div>
                   </div>
-                  <div className="text-right text-xs text-slate-500">
+                  <div className="shrink-0 text-right text-xs text-slate-500">
                     <div>
                       {group.match_count} matches
                       {group.workspace.session_count ? ` · ${group.workspace.session_count} sessions` : ''}
                     </div>
-                    {group.workspace.last_seen && <div>{formatTimestamp(group.workspace.last_seen)}</div>}
+                    {group.workspace.last_seen && (
+                      <>
+                        <div>{formatDate(group.workspace.last_seen)}</div>
+                        <div>{formatTime(group.workspace.last_seen)}</div>
+                      </>
+                    )}
                   </div>
                 </div>
-                {group.workspace.git_repo && (
-                  <div className="mt-2 text-xs text-slate-500">{group.workspace.git_repo}</div>
+                {group.workspace.github_slug ? (
+                  <a
+                    href={`https://github.com/${group.workspace.github_slug}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 inline-flex items-center gap-2 text-xs font-medium text-teal-700 hover:text-teal-800"
+                  >
+                    Open on GitHub
+                  </a>
+                ) : (
+                  group.workspace.git_repo && (
+                    <div className="mt-2 text-xs text-slate-500">{group.workspace.git_repo}</div>
+                  )
                 )}
                 <div className="mt-3 space-y-2">
                   {group.results.map((result) => (
