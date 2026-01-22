@@ -8,7 +8,7 @@ As part of the “copy lag” fix, we will refactor the UI so copy feedback stat
 - `ConversationViewer` renders `<Sidebar />` and `<ConversationMain />` as siblings.
 - `ConversationMain` owns the main session view (SessionHeader + TurnList) and any remaining main-view state.
 - `TurnList` no longer accepts copy-related props.
-- `MessageCard` uses local copy state (via a `CopyButton` or local hook).
+- `MessageCard` uses local copy state (prefer `CopyButton`, which uses `useCopyFeedback`).
 
 Relevant code and how it connects
 The session viewer lives in src/features/conversation/ConversationViewer.tsx, but after the copy-lag refactor the main content is expected to be in src/features/conversation/ConversationMain.tsx. It uses useSession (src/features/conversation/hooks/useSession.ts) to load the session and track scroll-to-turn behavior via document.getElementById("turn-N"). It renders TurnList (src/features/conversation/components/TurnList.tsx), which maps each filtered Turn to a TurnCard (src/features/conversation/components/TurnCard.tsx). TurnCard renders the turn header and all MessageCard rows. MessageCard (src/features/conversation/components/MessageCard.tsx) renders MarkdownBlock for user/assistant/thought messages, which is heavy. TurnList is the correct insertion point for virtualization because it owns the list. The turn id is encoded as id=turn-${turn.id} on the TurnCard section, and useSession depends on that for deep-link scrolling.

@@ -199,6 +199,43 @@ This architecture prevents the entire app from re-rendering on a tiny UI interac
 - `src/features/conversation/hooks/useWhyDidYouRender.ts`
 - `src/vite-env.d.ts`
 
+---
+
+## Addendum (Jan 2026) — Final Fix + Current Guidance
+
+The investigation results above still stand as the root cause. We implemented the long‑term fix and validated it with the same logging:
+
+### What changed after this investigation
+- **Copy feedback is now local** via `CopyButton`, so copy clicks no longer trigger full‑tree renders.
+- **Structural isolation**: `ConversationViewer` renders `Sidebar` and `ConversationMain` as siblings, keeping copy state out of the sidebar tree.
+- **Memoization + stable callbacks**: heavy panels (`Sidebar`, `SessionsPanel`, `TurnList`, `WorkspacesPanel`) are memoized and callbacks are stabilized with `useCallback`.
+- **Sessions list copy** now uses local copy state per row, so copying a session ID does not repaint the full sessions tree.
+
+### Logging today (still available, but gated)
+- Render instrumentation still exists, but it is **gated behind `VITE_RENDER_DEBUG=1`** (dev only) to avoid noise.
+- `useRenderDebug` / `useWhyDidYouRender` are active only when that flag is set.
+- Message sampling logs remain for apples‑to‑apples comparison with the original investigation.
+
+### Validation outcome
+When `VITE_RENDER_DEBUG=1` is enabled, **copy actions produce no sidebar/turnlist render logs**, which is the expected signal that the heavy parents are no longer re‑rendering on copy.
+
+### Guidance for future performance investigations
+1. **Localize ephemeral UI state** (e.g., “Copied”) to the smallest possible component.
+2. **Avoid top‑level state for UI feedback** if it fans out to heavy trees.
+3. **Stabilize callbacks** before introducing `React.memo`.
+4. **Measure before/after** using the gated debug hooks, then disable logging for day‑to‑day work.
+5. **Keep StrictMode on** for normal development; temporarily disable only if you need noise‑free logs, then restore it.
+
+### Search panel performance notes (for future tuning)
+The search UI can be a similar hotspot because typing updates state frequently and can re-render large result trees.
+When optimizing search-related rendering:
+1. **Isolate the input from heavy results**: split SearchPanel into `SearchInput` and `SearchResults` so keystrokes only re-render the input when results don’t change.
+2. **Memoize result lists** with stable props (counts/ids over full objects) and keep callbacks wrapped in `useCallback`.
+3. **Avoid re-rendering the sessions tree on keystrokes**: keep `SessionsPanel` memoized and ensure only SearchPanel receives `searchQuery`.
+4. **Use `useDeferredValue` or debounced state** if render spikes appear while typing.
+5. **Consider virtualization** if search results become large (same strategy as turn list virtualization).
+6. **Measure with the same debug hooks** (counts, loading flags, result lengths) and avoid logging full result objects.
+
 **Modified:**
 - `src/features/conversation/hooks/useSession.ts`
 - `src/features/conversation/ConversationViewer.tsx`

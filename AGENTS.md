@@ -25,9 +25,14 @@ Fix commands when needed:
 
 ## Repository Layout
 - `src/main.tsx` - React entry.
-- `src/features/conversation/ConversationViewer.tsx` - main UI container; wires hooks + layout.
+- `src/features/conversation/ConversationViewer.tsx` - page layout + top-level hooks.
+- `src/features/conversation/ConversationMain.tsx` - active session view (header + filters + turns).
 - `src/features/conversation/components/` - UI building blocks:
   - `Sidebar.tsx` (search + sessions tree)
+  - `SearchPanel.tsx` (FTS search + results)
+  - `SessionsPanel.tsx` (session tree + session ID copy)
+  - `WorkspacesPanel.tsx` (workspace summaries + filters)
+  - `CopyButton.tsx` (localized copy feedback)
   - `SessionHeader.tsx` (session details + copy controls)
   - `TurnList.tsx` / `TurnCard.tsx` / `MessageCard.tsx` (turn + message rendering)
   - `SettingsModal.tsx` (sessions root + indexing actions)
@@ -37,23 +42,27 @@ Fix commands when needed:
   - `useSession.ts` (load/parse a session file)
   - `useSearch.ts` (FTS search + resolve session IDs)
   - `useUrlSync.ts` (URL deep-link sync)
-  - `useCopyFeedback.ts` (copied-to-clipboard feedback)
+  - `useWorkspaces.ts` (workspace summaries)
+  - `useCopyFeedback.ts` (copied-to-clipboard feedback; used locally via `CopyButton`)
+  - `useRenderDebug.ts` / `useWhyDidYouRender.ts` (dev-only render instrumentation; gated)
 - `src/features/conversation/parsing.ts` - JSONL parsing rules + turn grouping.
 - `src/features/conversation/api.ts` - client fetch helpers for API endpoints.
 - `src/features/conversation/markdown.tsx` - sanitized markdown rendering + snippet highlighting.
 - `src/features/conversation/copy.ts` - per-message + conversation export formatting.
 - `src/features/conversation/format.ts` - formatting helpers (timestamps, truncation).
+- `src/features/conversation/debug.ts` - render debug flag (`VITE_RENDER_DEBUG`).
 - `src/features/conversation/url.ts` - session/turn query-string helpers.
 - `src/index.css` - Tailwind entry, global theme, and animation utilities.
 - `vite.config.ts` - Vite config + API middleware + SQLite indexing.
 - `IMPLEMENTATION_PLAN.txt` / `DESIGN_APPENDIX.txt` - historical spec + schema notes.
 
 ## Architecture at a Glance
-- **Frontend**: `ConversationViewer` composes the page (sidebar + main viewer) and delegates to hooks.
+- **Frontend**: `ConversationViewer` composes the page (home vs. session). `ConversationMain` renders the active session view.
 - **Data flow**:
   - `useSessions` loads config + sessions tree and drives reindexing.
   - `useSession` loads a session file and parses it via `parseJsonl`.
   - `useSearch` queries FTS and resolves session IDs.
+  - `useWorkspaces` loads workspace summaries for filtering.
   - `useUrlSync` keeps `?session=...&turn=...` in sync with the browser history.
 - **Backend**: Vite dev-server middleware (in `vite.config.ts`) serves config, sessions, search, and indexing.
 - **Storage**: SQLite DB in user home directory; session JSONL files read from disk.
@@ -111,10 +120,12 @@ Fix commands when needed:
 - Optional config file: `~/.codex-formatter/config.json`.
 - SQLite DB: `~/.codex-formatter/codex_index.db`.
 - Debug logging: `CODEX_DEBUG=1`.
+- Render debug logging (dev only): `VITE_RENDER_DEBUG=1` (see `.env.example`).
 - **Path safety**: reject `..`, absolute paths, or paths outside root.
 
 ## UI Behavior
 - Sidebar: search + date-tree session browser.
+- Home view: search + workspaces panel + sessions panel.
 - Search:
   - Typing performs FTS search after a short debounce.
   - Pressing Enter attempts `/api/resolve-session` for direct session IDs.

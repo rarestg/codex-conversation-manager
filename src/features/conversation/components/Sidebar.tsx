@@ -1,4 +1,5 @@
 import { type KeyboardEvent, memo } from 'react';
+import { isRenderDebugEnabled } from '../debug';
 import { useRenderDebug } from '../hooks/useRenderDebug';
 import { useWhyDidYouRender } from '../hooks/useWhyDidYouRender';
 import type { SessionFileEntry, SessionTree, WorkspaceSearchGroup } from '../types';
@@ -36,7 +37,7 @@ const SidebarComponent = ({
   activeWorkspace,
   onClearWorkspace,
 }: SidebarProps) => {
-  const renderStart = import.meta.env.DEV ? performance.now() : 0;
+  const renderStart = isRenderDebugEnabled ? performance.now() : 0;
   useRenderDebug('Sidebar', {
     sessionsLoading,
     searchQuery,
@@ -65,7 +66,8 @@ const SidebarComponent = ({
     { includeFunctions: true },
   );
 
-  if (import.meta.env.DEV) {
+  if (isRenderDebugEnabled) {
+    // RAF captures layout/paint time for perceived cost, not just React render.
     requestAnimationFrame(() => {
       const duration = performance.now() - renderStart;
       console.debug('[render cost] Sidebar', { duration });

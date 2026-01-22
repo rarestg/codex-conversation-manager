@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import { copyText } from '../copy';
+import { isRenderDebugEnabled } from '../debug';
 import { MAX_PREVIEW_CHARS } from '../format';
 import { MarkdownBlock, markdownToPlainText } from '../markdown';
 import type { ParsedItem } from '../types';
@@ -12,7 +13,7 @@ interface MessageCardProps {
 }
 
 export const MessageCard = ({ item, itemIndex, showFullContent }: MessageCardProps) => {
-  if (import.meta.env.DEV && itemIndex === 0) {
+  if (isRenderDebugEnabled && itemIndex === 0) {
     console.debug('[render] MessageCard', { id: item.id, type: item.type });
   }
   const isMarkdownItem = ['user', 'assistant', 'thought'].includes(item.type);
