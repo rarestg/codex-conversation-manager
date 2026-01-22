@@ -97,7 +97,7 @@ export default function ConversationViewer() {
     window.history.pushState(null, '', `${window.location.pathname}${window.location.hash || ''}`);
   }, [clearSession]);
 
-  const showHome = !activeSession;
+  const showHome = !activeSession && !loadingSession;
 
   const headerClassName = showHome
     ? 'flex flex-col gap-3 rounded-3xl border border-white/70 bg-white/70 px-6 py-5 shadow-soft backdrop-blur'
