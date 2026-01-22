@@ -84,25 +84,25 @@ export const ConversationMain = ({
 
         <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <Toggle
-            label="Show thoughts"
+            label="Thoughts"
             description="Include agent reasoning inline."
             checked={showThoughts}
             onChange={setShowThoughts}
           />
           <Toggle
-            label="Show tools"
+            label="Tools"
             description="Tool calls and outputs inline."
             checked={showTools}
             onChange={setShowTools}
           />
           <Toggle
-            label="Show metadata"
+            label="Metadata"
             description="turn_context, session_meta, token_count."
             checked={showMeta}
             onChange={setShowMeta}
           />
           <Toggle
-            label="Show full content"
+            label="Full content"
             description="Disable truncation for long messages."
             checked={showFullContent}
             onChange={setShowFullContent}

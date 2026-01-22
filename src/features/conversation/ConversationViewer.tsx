@@ -99,19 +99,37 @@ export default function ConversationViewer() {
 
   const showHome = !activeSession;
 
+  const headerClassName = showHome
+    ? 'flex flex-col gap-3 rounded-3xl border border-white/70 bg-white/70 px-6 py-5 shadow-soft backdrop-blur'
+    : 'flex flex-col gap-1 rounded-3xl border border-white/70 bg-white/70 px-5 py-3 shadow-soft backdrop-blur';
+
+  const headerRowClassName = showHome
+    ? 'flex flex-wrap items-center justify-between gap-4'
+    : 'flex flex-wrap items-center justify-between gap-3';
+
   return (
     <div className="min-h-screen px-4 py-8 sm:px-8">
       <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
-        <header className="flex flex-col gap-3 rounded-3xl border border-white/70 bg-white/70 px-6 py-5 shadow-soft backdrop-blur">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+        <header className={headerClassName}>
+          <div className={headerRowClassName}>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-teal-700">
+              <p
+                className={
+                  showHome
+                    ? 'text-xs font-semibold uppercase tracking-[0.35em] text-teal-700'
+                    : 'text-sm font-semibold uppercase tracking-[0.3em] text-teal-700'
+                }
+              >
                 Codex Conversation Manager
               </p>
-              <h1 className="mt-2 text-3xl text-slate-900">Session Explorer & Conversation Viewer</h1>
-              <p className="mt-1 text-sm text-slate-600">
-                Browse local Codex JSONL sessions, inspect turns, and search across your own history.
-              </p>
+              {showHome && (
+                <>
+                  <h1 className="mt-2 text-3xl text-slate-900">Session Explorer & Conversation Viewer</h1>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Browse local Codex JSONL sessions, inspect turns, and search across your own history.
+                  </p>
+                </>
+              )}
             </div>
             <div className="flex items-center gap-2">
               {!showHome && (
