@@ -40,7 +40,8 @@ type YearsMap = Map<string, MonthsMap>;
 let cachedConfig: ConfigFile | null = null;
 let cachedRoot: { value: string; source: 'env' | 'config' | 'default' } | null = null;
 let db: Database.Database | null = null;
-let cwdNormalizationApplied = false;
+
+const DB_MIGRATION_VERSION = 1;
 
 const toPosix = (value: string) => value.split(path.sep).join('/');
 const DEBUG_ENABLED = ['1', 'true', 'yes', 'on'].includes(String(process.env.CODEX_DEBUG).toLowerCase());
@@ -95,6 +96,23 @@ const normalizeSessionCwds = (database: Database.Database) => {
     }
   });
   normalizeTransaction();
+};
+
+const runMigrations = (database: Database.Database) => {
+  const currentVersion = database.pragma('user_version', { simple: true }) as number;
+  if (currentVersion >= DB_MIGRATION_VERSION) return;
+  const migrate = database.transaction(() => {
+    if (currentVersion < 1) {
+      normalizeSessionCwds(database);
+    }
+    database.pragma(`user_version = ${DB_MIGRATION_VERSION}`);
+  });
+  try {
+    migrate();
+  } catch (error) {
+    console.error('[migrate] failed', error);
+    throw error;
+  }
 };
 
 const ensureDir = async (dir: string) => {
@@ -206,6 +224,7 @@ const initSchema = (database: Database.Database) => {
     CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
     CREATE INDEX IF NOT EXISTS idx_messages_turn ON messages(session_id, turn_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_timestamp ON sessions(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_sessions_cwd ON sessions(cwd);
   `);
   const sessionColumns = database.prepare('PRAGMA table_info(sessions)').all() as Array<{ name: string }>;
   const hasSessionId = sessionColumns.some((column) => column.name === 'session_id');
@@ -237,10 +256,7 @@ const ensureDb = () => {
   db.pragma('trusted_schema = ON');
   logDebug('db open', DB_PATH);
   initSchema(db);
-  if (!cwdNormalizationApplied) {
-    normalizeSessionCwds(db);
-    cwdNormalizationApplied = true;
-  }
+  runMigrations(db);
   return db;
 };
 
@@ -1044,10 +1060,12 @@ export const apiPlugin = (): Plugin => {
             const database = ensureDb();
             const clearTransaction = database.transaction(() => {
               clearDbSchema(database);
+              database.pragma('user_version = 0');
               initSchema(database);
             });
             logDebug('clear-index start', { root: rootInfo.value });
             clearTransaction();
+            runMigrations(database);
             const summary = await indexSessions(rootInfo.value);
             logDebug('clear-index done', summary);
             return sendJson(res, 200, { ok: true, summary });
