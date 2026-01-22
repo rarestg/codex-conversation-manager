@@ -12,6 +12,9 @@ interface MessageCardProps {
 }
 
 export const MessageCard = ({ item, itemIndex, showFullContent }: MessageCardProps) => {
+  if (import.meta.env.DEV && itemIndex === 0) {
+    console.debug('[render] MessageCard', { id: item.id, type: item.type });
+  }
   const isMarkdownItem = ['user', 'assistant', 'thought'].includes(item.type);
   const displayContent = item.content;
   const truncated =

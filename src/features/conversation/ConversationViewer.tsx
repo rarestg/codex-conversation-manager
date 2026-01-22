@@ -6,6 +6,7 @@ import { SessionsPanel } from './components/SessionsPanel';
 import { SettingsModal } from './components/SettingsModal';
 import { Sidebar } from './components/Sidebar';
 import { WorkspacesPanel } from './components/WorkspacesPanel';
+import { useRenderDebug } from './hooks/useRenderDebug';
 import { useSearch } from './hooks/useSearch';
 import { useSession } from './hooks/useSession';
 import { useSessions } from './hooks/useSessions';
@@ -52,6 +53,18 @@ export default function ConversationViewer() {
   } = useWorkspaces({ onError: setApiError });
 
   useUrlSync(loadSession, clearSession);
+
+  useRenderDebug('ConversationViewer', {
+    activeSessionId: activeSession?.id ?? null,
+    activeWorkspace,
+    settingsOpen,
+    loadingSessions,
+    loadingSession,
+    workspacesLoading,
+    workspacesSort,
+    searchQuery,
+    sessionsTreeRoot: sessionsTree?.root ?? null,
+  });
 
   const handleClearIndex = useCallback(async () => {
     const confirmed = window.confirm('This will clear the index and rebuild it from scratch. Continue?');

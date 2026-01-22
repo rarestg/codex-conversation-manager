@@ -13,6 +13,7 @@ import {
   getDaysInYear,
   isSameDay,
 } from '../format';
+import { useRenderDebug } from '../hooks/useRenderDebug';
 import type { SessionFileEntry, SessionTree } from '../types';
 import { CopyButton } from './CopyButton';
 
@@ -43,9 +44,24 @@ const SessionsPanelComponent = ({
 }: SessionsPanelProps) => {
   const formatCountLabel = (count: number, label: string) => `${count} ${count === 1 ? label : `${label}s`}`;
   const now = new Date();
+  const renderStart = import.meta.env.DEV ? performance.now() : 0;
   const listRef = useRef<HTMLDivElement | null>(null);
   const activeRowRef = useRef<HTMLDivElement | null>(null);
   const treeKey = sessionsTree?.years.length ?? 0;
+
+  useRenderDebug('SessionsPanel', {
+    loading,
+    treeKey,
+    sessionsRoot,
+    activeSessionId: activeSession?.id ?? null,
+    activeWorkspace: activeWorkspace ?? null,
+  });
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const duration = performance.now() - renderStart;
+    console.debug('[render cost] SessionsPanel', { duration });
+  });
 
   const getRepoLabel = (gitRepo?: string | null, cwd?: string | null) => {
     if (gitRepo) {

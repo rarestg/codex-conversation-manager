@@ -8,6 +8,7 @@ import {
   formatWorkspacePath,
   isSameDay,
 } from '../format';
+import { useRenderDebug } from '../hooks/useRenderDebug';
 import type { SessionDetails, SessionFileEntry, Turn } from '../types';
 import { CopyButton } from './CopyButton';
 
@@ -34,6 +35,14 @@ export const SessionHeader = ({
   stats,
   filteredTurns,
 }: SessionHeaderProps) => {
+  useRenderDebug('SessionHeader', {
+    activeSessionId: activeSession?.id ?? null,
+    sessionId: sessionDetails.sessionId ?? null,
+    cwd: sessionDetails.cwd ?? null,
+    visibleItemCount,
+    filteredTurnCount: filteredTurns.length,
+  });
+
   const sessionId = sessionDetails.sessionId;
   const cwd = sessionDetails.cwd;
   const rawTitle = activeSession?.preview?.trim() || activeSession?.filename || 'Session viewer';

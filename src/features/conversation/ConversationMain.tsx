@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { SessionHeader } from './components/SessionHeader';
 import { Toggle } from './components/Toggle';
 import { TurnList } from './components/TurnList';
+import { useRenderDebug } from './hooks/useRenderDebug';
 import type { SessionDetails, SessionFileEntry, Turn } from './types';
 
 interface ConversationMainProps {
@@ -57,6 +58,17 @@ export const ConversationMain = ({
 
     return { thoughtCount, toolCallCount, metaCount };
   }, [turns]);
+
+  useRenderDebug('ConversationMain', {
+    activeSessionId: activeSession?.id ?? null,
+    loadingSession,
+    showThoughts,
+    showTools,
+    showMeta,
+    showFullContent,
+    filteredTurnCount: filteredTurns.length,
+    visibleItemCount,
+  });
 
   return (
     <main className="flex-1 min-w-0 space-y-6">
