@@ -1,5 +1,6 @@
 import { Home, Settings } from 'lucide-react';
 import { useCallback, useState } from 'react';
+import { CanvasView } from './CanvasView';
 import { ConversationMain } from './ConversationMain';
 import { SearchPanel } from './components/SearchPanel';
 import { SessionsPanel } from './components/SessionsPanel';
@@ -92,12 +93,16 @@ export default function ConversationViewer() {
     setActiveWorkspace(null);
   }, []);
 
+  const locationPath = window.location.pathname.replace(/\/+$/, '') || '/';
+  const isCanvas = locationPath === '/canvas' || locationPath === '/layouts';
+
   const handleGoHome = useCallback(() => {
     clearSession();
-    window.history.pushState(null, '', `${window.location.pathname}${window.location.hash || ''}`);
-  }, [clearSession]);
+    const targetPath = isCanvas ? '/' : locationPath;
+    window.history.pushState(null, '', `${targetPath}${window.location.hash || ''}`);
+  }, [clearSession, isCanvas, locationPath]);
 
-  const showHome = !activeSession && !loadingSession;
+  const showHome = !activeSession && !loadingSession && !isCanvas;
 
   const headerClassName = showHome
     ? 'flex flex-col gap-3 rounded-3xl border border-white/70 bg-white/70 px-6 py-5 shadow-soft backdrop-blur'
@@ -160,7 +165,18 @@ export default function ConversationViewer() {
           )}
         </header>
 
-        {showHome ? (
+        {isCanvas ? (
+          <CanvasView
+            sessionsTree={sessionsTree}
+            sessionsRoot={sessionsRoot}
+            loadingSessions={loadingSessions}
+            onRefreshSessions={loadSessions}
+            onLoadSession={loadSession}
+            activeSession={activeSession}
+            sessionDetails={sessionDetails}
+            turns={turns}
+          />
+        ) : showHome ? (
           <div className="flex flex-col gap-6">
             <SearchPanel
               searchQuery={searchQuery}

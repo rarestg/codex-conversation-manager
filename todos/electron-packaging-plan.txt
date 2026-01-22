@@ -1,0 +1,94 @@
+Electron packaging plan (draft) — Jan 2026
+
+Goal
+- Ship Codex Conversation Manager as a standalone macOS app with production React build and local API.
+- Avoid Vite dev server in production while preserving current /api behavior.
+
+Why Electron (vs Tauri)
+- Current backend uses Node APIs + better-sqlite3. Electron supports this directly.
+- Tauri would require a Rust rewrite (or a sidecar Node server), which is a large lift.
+
+High-level approach
+1) Keep Vite/React as-is for the renderer.
+2) Move API middleware from Vite-only to a reusable Node handler.
+3) Run the API inside Electron main (HTTP server or IPC bridge).
+4) Load the built renderer (dist) in production; use Vite dev server only in dev.
+
+Recommended architecture (minimal rewrite)
+Option A (HTTP in main) — closest to today
+- Main process starts a local HTTP server on 127.0.0.1:<random or fixed>.
+- Renderer continues to call /api/* (point base URL to that server).
+- No need to rewrite fetch calls.
+Pros: minimal frontend changes. Cons: local HTTP server lifecycle + port mgmt.
+
+Option B (IPC bridge) — more secure, more refactor
+- Replace fetch('/api/...') with a thin client that calls window.api.* via preload.
+- IPC handlers in main call the same API functions.
+Pros: no HTTP server. Cons: more code changes.
+
+Suggested next steps (Option A first)
+1) Extract API logic from server/apiPlugin.ts
+   - New module: server/apiHandler.ts
+   - Expose: createApiHandler({ sessionsRootOverride?, userDataDir? })
+   - Handler signature: (req, res) => void (Node IncomingMessage/ServerResponse)
+   - Keep route logic identical to current /api/* behavior.
+2) Update Vite dev plugin to use the shared handler
+   - apiPlugin.configureServer(...) calls createApiHandler(...) and mounts it.
+3) Add Electron main
+   - Create electron/main.ts
+   - Start local HTTP server with createApiHandler.
+   - Create BrowserWindow and load:
+     - Dev: http://localhost:<vitePort>
+     - Prod: file://.../dist/index.html
+4) Update renderer API base URL
+   - Add a small config in src/features/conversation/api.ts to allow base URL override.
+   - In Electron, inject base URL via preload or query string.
+5) Package
+   - Add electron-builder or electron-forge config.
+   - Ensure better-sqlite3 native module rebuilt for Electron.
+     - Use electron-builder to rebuild native deps, or run
+       `npm rebuild better-sqlite3 --runtime=electron --target=<electron_version>`.
+
+File/data locations (important)
+- Current paths use os.homedir():
+  - ~/.codex-formatter (config + sqlite)
+  - ~/.codex/sessions (default sessions root)
+- For a packaged app, consider moving to app data:
+  - app.getPath('userData')/codex-formatter
+  - This avoids permission issues and follows macOS conventions.
+- If you change paths, add a migration or fallback to old locations.
+
+Security checklist (Electron)
+- BrowserWindow:
+  - contextIsolation: true
+  - nodeIntegration: false
+  - preload.js to expose a small API surface (if using IPC)
+- Set a strict Content-Security-Policy for the renderer.
+- If using local HTTP server, bind to 127.0.0.1 and randomize port.
+
+Dev vs Prod behavior
+- Dev:
+  - Start Vite dev server separately (npm run dev).
+  - Electron main loads Vite URL, API served by dev middleware.
+- Prod:
+  - Vite build -> dist
+  - Electron loads dist, API served by main HTTP server (or IPC).
+
+Operational notes
+- better-sqlite3 + Electron must match ABI. Ensure rebuild in packaging pipeline.
+- macOS notarization/signing required for distribution.
+- Avoid using npm run preview for production; use Electron prod build instead.
+
+Open questions
+- Do we want to keep ~/.codex-formatter path for backwards compatibility?
+- Is HTTP server acceptable, or should we commit to IPC?
+- Should we add a built-in “Select Sessions Root” dialog using Electron APIs?
+
+Suggested file additions
+- electron/main.ts
+- electron/preload.ts (if IPC)
+- server/apiHandler.ts (shared API logic)
+- package.json scripts:
+  - "dev:electron": start Vite + Electron
+  - "build:electron": Vite build + package
+
