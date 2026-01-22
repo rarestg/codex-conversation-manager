@@ -41,8 +41,6 @@ let cachedConfig: ConfigFile | null = null;
 let cachedRoot: { value: string; source: 'env' | 'config' | 'default' } | null = null;
 let db: Database.Database | null = null;
 
-const DB_MIGRATION_VERSION = 1;
-
 const toPosix = (value: string) => value.split(path.sep).join('/');
 const DEBUG_ENABLED = ['1', 'true', 'yes', 'on'].includes(String(process.env.CODEX_DEBUG).toLowerCase());
 const logDebug = (...args: unknown[]) => {
@@ -77,41 +75,6 @@ const normalizeCwd = (value?: string | null) => {
     return path.isAbsolute(normalized) ? path.resolve(normalized) : normalized;
   } catch (_error) {
     return trimmed;
-  }
-};
-
-const normalizeSessionCwds = (database: Database.Database) => {
-  const rows = database.prepare('SELECT id, cwd FROM sessions WHERE cwd IS NOT NULL AND cwd != ?').all('') as Array<{
-    id: string;
-    cwd?: string | null;
-  }>;
-  if (!rows.length) return;
-  const update = database.prepare('UPDATE sessions SET cwd = ? WHERE id = ?');
-  const normalizeTransaction = database.transaction(() => {
-    for (const row of rows) {
-      const normalized = normalizeCwd(row.cwd ?? null);
-      if (normalized && normalized !== row.cwd) {
-        update.run(normalized, row.id);
-      }
-    }
-  });
-  normalizeTransaction();
-};
-
-const runMigrations = (database: Database.Database) => {
-  const currentVersion = database.pragma('user_version', { simple: true }) as number;
-  if (currentVersion >= DB_MIGRATION_VERSION) return;
-  const migrate = database.transaction(() => {
-    if (currentVersion < 1) {
-      normalizeSessionCwds(database);
-    }
-    database.pragma(`user_version = ${DB_MIGRATION_VERSION}`);
-  });
-  try {
-    migrate();
-  } catch (error) {
-    console.error('[migrate] failed', error);
-    throw error;
   }
 };
 
@@ -226,22 +189,6 @@ const initSchema = (database: Database.Database) => {
     CREATE INDEX IF NOT EXISTS idx_sessions_timestamp ON sessions(timestamp);
     CREATE INDEX IF NOT EXISTS idx_sessions_cwd ON sessions(cwd);
   `);
-  const sessionColumns = database.prepare('PRAGMA table_info(sessions)').all() as Array<{ name: string }>;
-  const hasSessionId = sessionColumns.some((column) => column.name === 'session_id');
-  if (!hasSessionId) {
-    database.exec('ALTER TABLE sessions ADD COLUMN session_id TEXT');
-  }
-  const hasSessionIdChecked = sessionColumns.some((column) => column.name === 'session_id_checked');
-  if (!hasSessionIdChecked) {
-    database.exec('ALTER TABLE sessions ADD COLUMN session_id_checked INTEGER');
-    database.exec(
-      'UPDATE sessions SET session_id_checked = CASE WHEN session_id IS NOT NULL THEN 1 ELSE 0 END WHERE session_id_checked IS NULL',
-    );
-  }
-  const hasGitCommitHash = sessionColumns.some((column) => column.name === 'git_commit_hash');
-  if (!hasGitCommitHash) {
-    database.exec('ALTER TABLE sessions ADD COLUMN git_commit_hash TEXT');
-  }
   database.exec('CREATE INDEX IF NOT EXISTS idx_sessions_session_id ON sessions(session_id)');
 };
 
@@ -256,7 +203,6 @@ const ensureDb = () => {
   db.pragma('trusted_schema = ON');
   logDebug('db open', DB_PATH);
   initSchema(db);
-  runMigrations(db);
   return db;
 };
 
@@ -1060,12 +1006,10 @@ export const apiPlugin = (): Plugin => {
             const database = ensureDb();
             const clearTransaction = database.transaction(() => {
               clearDbSchema(database);
-              database.pragma('user_version = 0');
               initSchema(database);
             });
             logDebug('clear-index start', { root: rootInfo.value });
             clearTransaction();
-            runMigrations(database);
             const summary = await indexSessions(rootInfo.value);
             logDebug('clear-index done', summary);
             return sendJson(res, 200, { ok: true, summary });
