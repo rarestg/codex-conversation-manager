@@ -1,0 +1,300 @@
+# Workspaces + Landing Page Redesign Implementation Plan
+
+## Context
+
+We are improving Codex Conversation Manager to make the *home state* (no session selected) more useful for finding the right conversation. Today, the landing UI renders the full session viewer (including “Show thoughts/tools/meta/full content” toggles) even when no session is loaded. That is optimal once a session is open, but it is a poor discovery experience because search is visually compressed in the sidebar and there is no way to browse by repository/workspace. We want the landing page to behave like a discovery dashboard: a full-width search bar, then a two-card layout with sessions on the left and a workspace/repo-centric view on the right. The workspace view should show deduped directories where sessions were created (cwd), and, when possible, enrich each workspace with Git info such as repository name and upstream URL.
+
+We already store per-session metadata in the SQLite DB created by the Vite dev server middleware (`server/apiPlugin.ts`). JSONL session logs include `session_meta` and `turn_context` with `cwd` and optionally `git.repository_url`, `git.branch`, and `git.commit_hash`. This data is more reliable than filesystem scans because sessions might be resumed across different directories or deleted on disk. Therefore Git info should primarily come from `session_meta`. File system scanning is still useful for inferring `repo_root` (the top-level Git directory) when `cwd` is a subdirectory.
+
+This change touches:
+- **Backend (Vite dev server middleware)** for new APIs and DB queries.
+- **Frontend hooks and components** for new state (workspace filter), grouped search results, and the landing layout.
+- **Types and API helpers** to keep the code strongly typed and consistent.
+
+The key goal is: 90% of the feature set with 50% of the code. We will favor simple SQL aggregation over new tables, avoid over-abstracting, and keep workspace identity stable (start with `cwd` as the only key).
+
+## Relevant Codebase and Connections
+
+### Backend
+- `server/apiPlugin.ts`
+  - Owns the SQLite schema and indexing logic (sessions, files, messages, FTS).
+  - Parses JSONL session logs to fill tables.
+  - Serves API endpoints under `/api/*`.
+  - Already stores `sessions` with `cwd`, `git_branch`, and `git_repo` (see `getSessionsPreviewMap` query in file map).
+  - This is where we add workspace aggregation and search grouping.
+
+### Frontend
+- `src/features/conversation/ConversationViewer.tsx`
+  - Main UI container. Renders sidebar, header, toggles, list.
+  - Will become the place where “home mode” vs “session mode” is decided.
+
+- `src/features/conversation/components/Sidebar.tsx`
+  - Currently contains search + sessions tree.
+  - Will be refactored into a dedicated “Search card” and “Sessions card” that can be placed separately in the landing layout.
+
+- `src/features/conversation/hooks/useSessions.ts`
+  - Fetches sessions tree + handles reindexing.
+  - Needs to accept a workspace filter, and fetch sessions with `?workspace=...`.
+
+- `src/features/conversation/hooks/useSearch.ts`
+  - Performs FTS search via `/api/search`.
+  - Must pass workspace filter to search, and consume grouped results.
+
+- `src/features/conversation/api.ts`
+  - Adds `fetchWorkspaces`, `searchSessions` update for grouping.
+
+- `src/features/conversation/types.ts`
+  - Add types for Workspace and grouped search results.
+
+### How Data Flows
+- Indexing is performed by Vite middleware, and data is stored in SQLite.
+- The UI relies on `/api/sessions` (tree), `/api/search` (FTS), and `/api/session` (raw JSONL) to present UI.
+- We will add `/api/workspaces` (aggregated by cwd) and update `/api/search` to return grouped results by workspace.
+- The workspace view will set a client-side filter state, which is passed down to `/api/sessions` and `/api/search` for scoping.
+
+## The Plan (Execution Order)
+
+### Step 1: Fix Git Field Extraction and Schema Gaps (Pre-requisite)
+**What:** Update JSONL parsing to correctly extract nested git metadata and add storage for commit hash.\n**Where:** `server/apiPlugin.ts` (JSONL parsing + schema init).\n**Why:** Current parsing looks for `payload.git_branch` and `payload.git_repo`, but actual logs store git info under `payload.git.branch`, `payload.git.repository_url`, and `payload.git.commit_hash`. Without this fix, workspace metadata will be wrong or missing.\n\nRequired changes:\n- In `parseJsonlFile`, when extracting session metadata, read from `payload.git?.branch`, `payload.git?.repository_url`, and `payload.git?.commit_hash` in addition to the current flat keys.\n- Add a `git_commit_hash` column to the `sessions` table schema if it does not exist.\n- Ensure `getSessionsPreviewMap` and any insert/update statements include `git_commit_hash`.\n\n**Dependency:** None. This must happen before any workspace aggregation.\n\n### Step 2: Define Workspace and Grouped Search Types
+**What:** Add new TypeScript types to represent a workspace summary and grouped search results.
+**Where:** `src/features/conversation/types.ts`.
+**Why:** The new APIs return structured data (workspace metadata + grouped search results). Strong typing will prevent drift between server and client.
+
+Definition sketch:
+- `WorkspaceSummary`: cwd, repoRoot?, remoteUrl?, githubSlug?, gitBranch?, gitCommitHash?, sessionCount, lastSeen.
+- `WorkspaceSearchGroup`: workspace: WorkspaceSummary, results: SearchResult[].
+- Update `SearchResult` (if needed) to include workspaceId or cwd if returned in grouping.
+
+**Dependency:** None. This can be done first and used by later steps.
+
+### Step 3: Add Workspace Aggregation SQL
+**What:** Add a SQL query that aggregates sessions by workspace (`cwd`) and pulls the most recent Git metadata.
+**Where:** `server/apiPlugin.ts` inside the API handler.
+**Why:** We want a list of workspaces without introducing a new database table. Use existing sessions data.
+
+Expected output per workspace:
+- `cwd`
+- `session_count` = COUNT(*)
+- `last_seen` = MAX(timestamp)
+- `git_branch`, `git_repo`, `git_commit_hash` taken from the *most recent* session row.
+
+Implementation approach:
+- Use a CTE to rank sessions by `timestamp` within each `cwd` (window function) or use a correlated subquery with `MAX(timestamp)`.
+- This should remain SQLite compatible.
+
+**Dependency:** Requires Step 1 types to match output fields.
+
+### Step 4: Add Repo Root Detection Cache (Minimal)
+**What:** Introduce a small `workspace_git` table for repo root detection (only if needed).
+**Where:** `server/apiPlugin.ts` schema and helper functions.
+**Why:** `cwd` might be nested inside a repo; we want to show the repo root and (optionally) an upstream URL even when not available in session metadata.
+
+Rules:
+- Prefer Git info from `session_meta` when available.
+- Use filesystem scanning only to find `.git` directory and infer `repo_root`.
+- Cache `repo_root` and `remote_url` (if found) per `cwd` to avoid repeated scans.
+
+If we want to keep even leaner:
+- We can implement only `repo_root` detection (no remote URL parsing), because we already display repository URL from `session_meta`.
+- Remote parsing is optional and can be added later.
+
+**Dependency:** Step 2 can proceed without this, but the workspace view will look better with repo roots.
+
+### Step 5: Add `/api/workspaces` Endpoint
+**What:** Implement `GET /api/workspaces?sort=last_seen|session_count`.
+**Where:** `server/apiPlugin.ts` API router.
+**Why:** The UI needs workspace metadata and sorting for the right-hand card.
+
+Behavior:
+- Query workspace aggregates (from Step 2).
+- Optionally enrich each workspace with cached `repo_root` from Step 3.
+- Return `WorkspaceSummary[]`, sorted by the query param (default: `last_seen` DESC).
+
+**Dependency:** Steps 2 and (optionally) 3.
+
+### Step 6: Update `/api/sessions` to Support Workspace Filter
+**What:** Add `?workspace=...` to filter the sessions tree.
+**Where:** `server/apiPlugin.ts` in the `/api/sessions` handler and `buildSessionsTree` helper.
+**Why:** Clicking a workspace should filter the left sessions tree.
+
+Implementation details:
+- **Use `cwd` as the sole workspace key in this phase**. This keeps identity stable and avoids mismatches if repo_root detection is not implemented yet.\n- If the query includes `workspace`, filter the file entries to only those whose session row has matching `cwd`.\n- Prefer server-side filtering; do not filter on the client to avoid duplicating tree logic.\n\nFuture enhancement (separate iteration): Add a repo_root-based key once repo_root detection is fully implemented and stable across sessions.
+
+**Dependency:** `/api/workspaces` and repo_root logic if we choose to support repo_root filters. If we only filter by cwd, this can be simpler but less accurate.
+
+### Step 7: Grouped Search Results by Workspace
+**What:** Modify `/api/search` to return results grouped by workspace.
+**Where:** `server/apiPlugin.ts` search handler.
+**Why:** Requirement: search results should nest within a workspace container and include repo metadata.
+
+Implementation approach:
+- Keep the existing FTS query to get search hits.
+- Join search hits to sessions to fetch `cwd` and timestamp.
+- Group results in JS (Node) by workspace key; attach workspace metadata to each group.
+- Also honor `?workspace=...` to scope results to the active workspace filter.
+
+Output shape:
+```
+{
+  groups: [
+    {
+      workspace: { cwd, repo_root, github_slug, remote_url, session_count, last_seen, ... },
+      results: [...]
+    }
+  ]
+}
+```
+
+Note: If returning `groups`, the client must stop expecting a flat `results` array. This is a breaking change; update `useSearch` and `Sidebar` accordingly.
+
+**Dependency:** Step 2 (workspace data) and Step 5 (workspace filter semantics).
+
+### Step 8: Frontend API Helpers
+**What:** Add `fetchWorkspaces`, and update `searchSessions` to expect grouped results + workspace filter.
+**Where:** `src/features/conversation/api.ts`.
+**Why:** Keep API access centralized and typed.
+
+Changes:
+- `fetchWorkspaces(sort)` → `GET /api/workspaces?sort=...`.
+- `searchSessions(query, limit, workspace?)` → pass optional `workspace` param and parse grouped response.
+- Update return types accordingly.
+
+**Dependency:** Steps 4 and 6.
+
+### Step 9: Hook Updates (useSessions, useSearch)
+**What:**
+- `useSessions` should accept an `activeWorkspace` and pass it to `/api/sessions`.
+- `useSearch` should accept `activeWorkspace`, call grouped search, and store grouped results.
+
+**Where:**
+- `src/features/conversation/hooks/useSessions.ts`
+- `src/features/conversation/hooks/useSearch.ts`
+
+**Why:** Hooks are the core data source for the UI. This keeps UI components simple.
+
+**Dependency:** Steps 5–7.
+
+### Step 10: UI Layout for Home Mode
+**What:** Create a new “home layout” when no session is selected.
+**Where:** `src/features/conversation/ConversationViewer.tsx`.
+
+Behavior:
+- If `activeSession` is null: render
+  - Full-width search card at top.
+  - Below: two cards: Sessions (25%) and Workspaces (75%).
+- If a session is selected: render the existing session header, toggles, and turn list.
+
+**Dependency:** Step 8, because the UI will rely on the new workspace data.
+
+### Step 11: Workspaces Panel UI
+**What:** Build a `WorkspacesPanel` component to render workspace summaries and a sort dropdown.
+**Where:** `src/features/conversation/components/WorkspacesPanel.tsx` (new file).
+
+Behavior:
+- Displays list sorted by selected option.
+- Each row shows repo name (github slug or last path segment), cwd, session_count, last_seen.
+- Optional badges for git branch/commit.
+- Clicking a workspace sets active filter; shows a “Filtered by …” pill and a clear button.
+
+**Dependency:** Steps 4 and 8.
+
+### Step 12: Grouped Search UI
+**What:** Update the search result rendering to show workspace headers with nested results.
+**Where:** `src/features/conversation/components/Sidebar.tsx` (or split into a new `SearchResults.tsx`).
+
+Behavior:
+- For each workspace group, render a header with repo info and count.
+- List results inside the group.
+- Respect the active workspace filter (results should already be scoped, but still show the group header for clarity).
+
+**Dependency:** Steps 6 and 8.
+
+### Step 13: UX Enhancements for Filtering
+**What:** Add explicit “Filtered by workspace” indicator and clear action.
+**Where:** likely in the Sessions card header or just above the sessions list.
+
+Why:
+- Users need a visible way to know they are scoped to a workspace.
+- Prevents confusion when sessions disappear due to filters.
+
+**Dependency:** Steps 9–10.
+
+## Decisions & Tradeoffs
+
+1) **No standalone `workspaces` table**
+- Decision: derive workspace summaries directly from the `sessions` table.
+- Alternative: maintain a `workspaces` table with incremental updates.
+- Tradeoff: the query is slightly more complex, but avoids data duplication and extra migration logic.
+
+2) **Use session timestamp as `last_seen`**
+- Decision: `last_seen = MAX(session.timestamp)`.
+- Alternative: use git commit timestamps (requires expensive git scanning).
+- Tradeoff: `last_seen` reflects conversation activity rather than code activity, which is acceptable for a conversation viewer.
+
+3) **Git info from session metadata first**
+- Decision: `session_meta.git` is the primary source.
+- Alternative: always scan filesystem.
+- Tradeoff: metadata is more reliable, but may be missing. We accept partial data when it’s not present.
+
+4) **Workspace identity starts as `cwd` only**
+- Decision: use `cwd` as the workspace key for filtering and grouping.\n- Alternative: use `repo_root ?? cwd`.\n- Tradeoff: we avoid identity instability if repo_root detection is added later. Repo-root grouping can be introduced as a future enhancement.\n+\n+5) **Workspace filter is server-side**
+- Decision: add `?workspace=` to `/api/sessions` and `/api/search`.
+- Alternative: filter client-side from full data.
+- Tradeoff: server-side avoids large payloads and keeps tree logic consistent.
+
+6) **Grouped search results**
+- Decision: change API output to grouped by workspace.
+- Tradeoff: breaking change to the frontend, but matches the UX requirement and reduces client grouping code.
+
+## Landmines / Fragile Areas
+
+1) **Parsing rules**
+- `parseJsonl` and extraction functions are carefully ordered to avoid duplicates. Do not alter those rules without re-validating output.
+
+2) **SQLite schema updates**
+- `server/apiPlugin.ts` initializes schema with `CREATE TABLE IF NOT EXISTS` but does not run migrations. Be careful when adding new columns or tables; keep it additive.
+
+3) **Sessions tree structure**
+- The `buildSessionsTree` function expects a full list of session files. Filtering sessions must still produce a valid tree structure; a naive filter can break the UI or produce empty branches.
+
+4) **Search response shape**
+- Changing `/api/search` from a flat list to grouped results is breaking. Ensure `useSearch` and `Sidebar` are updated in the same change set.
+
+5) **Workspace identity**
+- In this phase, `cwd` is the only workspace key. Do not mix in repo_root until a deliberate migration is planned, or filters will become inconsistent.
+
+6) **Git metadata inconsistencies**
+- Sessions might contain inconsistent git metadata if users resume sessions across repos. Use the most recent session row as the “authoritative” metadata for a workspace.
+
+## Verification Strategy
+
+### After Step 5 (`/api/workspaces`)
+- Call `/api/workspaces` manually (browser devtools or curl) and verify:
+  - Each entry has `cwd`, `session_count`, `last_seen`.
+  - Git fields are present when `session_meta.git` exists.
+  - Sorting works (compare top entries under different sort params).
+
+### After Step 6 (`/api/sessions?workspace=`)
+- Set a workspace filter in UI and confirm the sessions tree shows only sessions from that workspace.
+- Clear the filter and confirm full tree restores.
+
+### After Step 7 (search grouping)
+- Perform a search with multiple workspaces present.
+- Verify results are grouped under workspace headers and include repo metadata.
+- Confirm filtering by workspace only shows groups for that workspace.
+
+### After Step 10 (home layout)
+- Load app with no session selected and verify:
+  - Search bar spans full width.
+  - Sessions card appears on the left and Workspaces on the right.
+  - Session viewer/toggles are not shown.
+- Select a session and verify the existing viewer layout returns.
+
+### Regression Testing
+- Open a session and confirm message rendering, toggles, and copy actions work as before.
+- Run `npm run dev` and open the UI to verify the endpoint changes did not break loading.
+- Run `npm run typecheck` and `npm run check` after backend changes to catch type and lint issues early.\n- (Optional) run `npm run build` to ensure full build passes.
+
+## Notes on Scope
+
+This plan deliberately avoids heavy abstractions. It prefers SQL aggregation over new data models, and minimal UI changes that keep existing components recognizable. The only structural changes are grouped search results and a new Workspaces panel. Any future enhancements (e.g., commit time lookup, deeper repo metadata) should be added behind optional endpoints and not block this iteration.

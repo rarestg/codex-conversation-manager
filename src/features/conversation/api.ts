@@ -1,4 +1,4 @@
-import type { IndexSummary, SearchResult, SessionTree } from './types';
+import type { IndexSummary, SessionTree, WorkspaceSearchGroup, WorkspaceSummary } from './types';
 
 const parseError = async (res: Response, fallback: string): Promise<never> => {
   let message = fallback;
@@ -19,8 +19,9 @@ export const fetchConfig = async () => {
   return (await res.json()) as { value?: string; source?: string };
 };
 
-export const fetchSessions = async () => {
-  const res = await fetch('/api/sessions');
+export const fetchSessions = async (workspace?: string | null) => {
+  const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : '';
+  const res = await fetch(`/api/sessions${query}`);
   if (!res.ok) {
     await parseError(res, 'Unable to load sessions.');
   }
@@ -35,13 +36,26 @@ export const fetchSession = async (sessionId: string) => {
   return await res.text();
 };
 
-export const searchSessions = async (query: string, limit = 40) => {
-  const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&limit=${limit}`);
+export const searchSessions = async (query: string, limit = 40, workspace?: string | null) => {
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
+  if (workspace) {
+    params.set('workspace', workspace);
+  }
+  const res = await fetch(`/api/search?${params.toString()}`);
   if (!res.ok) {
     await parseError(res, 'Search failed.');
   }
   const data = await res.json();
-  return (data?.results || []) as SearchResult[];
+  return (data?.groups || []) as WorkspaceSearchGroup[];
+};
+
+export const fetchWorkspaces = async (sort: 'last_seen' | 'session_count' = 'last_seen') => {
+  const res = await fetch(`/api/workspaces?sort=${encodeURIComponent(sort)}`);
+  if (!res.ok) {
+    await parseError(res, 'Unable to load workspaces.');
+  }
+  const data = await res.json();
+  return (data?.workspaces || []) as WorkspaceSummary[];
 };
 
 export const saveConfig = async (sessionsRoot: string) => {
@@ -75,8 +89,12 @@ export const clearIndex = async () => {
   return data.summary as IndexSummary;
 };
 
-export const resolveSession = async (query: string) => {
-  const res = await fetch(`/api/resolve-session?id=${encodeURIComponent(query)}`);
+export const resolveSession = async (query: string, workspace?: string | null) => {
+  const params = new URLSearchParams({ id: query });
+  if (workspace) {
+    params.set('workspace', workspace);
+  }
+  const res = await fetch(`/api/resolve-session?${params.toString()}`);
   if (!res.ok) {
     if (res.status === 404) return null;
     await parseError(res, 'Unable to resolve session.');

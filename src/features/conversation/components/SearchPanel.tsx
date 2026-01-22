@@ -1,0 +1,112 @@
+import type { KeyboardEvent } from 'react';
+import { formatTimestamp } from '../format';
+import { renderSnippet } from '../markdown';
+import type { WorkspaceSearchGroup } from '../types';
+import { GitHubIcon } from './GitHubIcon';
+
+interface SearchPanelProps {
+  searchQuery: string;
+  onSearchQueryChange: (value: string) => void;
+  onSearchKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
+  searchGroups: WorkspaceSearchGroup[];
+  searchLoading: boolean;
+  onLoadSession: (sessionId: string, turnId?: number) => void;
+  className?: string;
+}
+
+const getRepoLabel = (gitRepo?: string | null) => {
+  if (!gitRepo) return null;
+  const cleaned = gitRepo.replace(/\.git$/i, '');
+  const parts = cleaned.split(/[/:]/).filter(Boolean);
+  return parts[parts.length - 1] || cleaned;
+};
+
+const getWorkspaceTitle = (workspace: WorkspaceSearchGroup['workspace']) =>
+  workspace.github_slug || getRepoLabel(workspace.git_repo) || workspace.cwd;
+
+export const SearchPanel = ({
+  searchQuery,
+  onSearchQueryChange,
+  onSearchKeyDown,
+  searchGroups,
+  searchLoading,
+  onLoadSession,
+  className,
+}: SearchPanelProps) => {
+  return (
+    <div className={className}>
+      <div className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg text-slate-900">Search sessions</h2>
+            <p className="text-xs text-slate-500">Full-text search across user and assistant messages.</p>
+          </div>
+          {searchLoading && (
+            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-500">Searching…</span>
+          )}
+        </div>
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={(event) => onSearchQueryChange(event.target.value)}
+          onKeyDown={onSearchKeyDown}
+          placeholder="Search messages"
+          aria-label="Search sessions"
+          className="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-200"
+        />
+        {searchGroups.length > 0 && (
+          <div className="mt-4 space-y-4">
+            {searchGroups.map((group) => (
+              <div key={group.workspace.cwd} className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    {group.workspace.github_slug && (
+                      <div className="mt-0.5 rounded-full bg-slate-200 p-1 text-slate-600">
+                        <GitHubIcon className="h-3.5 w-3.5" />
+                      </div>
+                    )}
+                    <div>
+                      <div className="text-sm font-semibold text-slate-800">{getWorkspaceTitle(group.workspace)}</div>
+                      <div className="mt-1 text-xs text-slate-500">{group.workspace.cwd}</div>
+                    </div>
+                  </div>
+                  <div className="text-right text-xs text-slate-500">
+                    <div>
+                      {group.match_count} matches
+                      {group.workspace.session_count ? ` · ${group.workspace.session_count} sessions` : ''}
+                    </div>
+                    {group.workspace.last_seen && <div>{formatTimestamp(group.workspace.last_seen)}</div>}
+                  </div>
+                </div>
+                {group.workspace.git_repo && (
+                  <div className="mt-2 text-xs text-slate-500">{group.workspace.git_repo}</div>
+                )}
+                <div className="mt-3 space-y-2">
+                  {group.results.map((result) => (
+                    <button
+                      type="button"
+                      key={result.id}
+                      onClick={() => onLoadSession(result.session_id, result.turn_id)}
+                      className="w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left text-sm text-slate-700 transition hover:border-teal-200 hover:bg-white"
+                    >
+                      <div className="flex items-center justify-between text-xs text-slate-500">
+                        <span>{result.session_id}</span>
+                        <span>Turn {result.turn_id}</span>
+                      </div>
+                      <div className="mt-2 text-sm text-slate-700">{renderSnippet(result.snippet)}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {searchQuery && !searchLoading && searchGroups.length === 0 && (
+          <div className="mt-4 rounded-2xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-500">
+            No matches yet. Try another query or reindex.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};

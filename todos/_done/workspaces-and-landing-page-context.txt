@@ -1,0 +1,72 @@
+# Workspaces + Landing Page Context
+
+This document summarizes the work implemented in the “workspaces + landing page” changeset so a new engineer can quickly understand what was built, why it exists, and where to look if review comments arrive.
+
+## Why this exists
+
+The original UI rendered the session viewer (including toggle controls) even when no session was selected. That worked for “viewing,” but it was poor for discovery. The goal of this change was to turn the home state into a discovery dashboard: a full‑width search bar, then a 25/75 split with Sessions (left) and Workspaces/Repos (right). The Workspaces view lets you find conversations by working directory/repo context instead of only date.
+
+## What was implemented
+
+### Backend
+- **Git metadata extraction fix:** `session_meta.git` is nested, but the parser only read flat keys. We now extract:
+  - `git.branch` → `git_branch`
+  - `git.repository_url` → `git_repo`
+  - `git.commit_hash` → `git_commit_hash`
+- **Schema update:** added `git_commit_hash` column to `sessions` table (migrated with `ALTER TABLE IF NOT EXISTS` style inside schema init).
+- **Workspace aggregation:** new query builds workspace summaries directly from `sessions` (no separate workspaces table). Summaries include `cwd`, `session_count`, `last_seen`, and latest git fields, plus `github_slug` derived from the repo URL.
+- **New API:** `GET /api/workspaces?sort=last_seen|session_count` returns `{ workspaces }`.
+- **Workspace filtering:** `GET /api/sessions?workspace=...` filters the sessions tree by `cwd`.
+- **Grouped search:** `GET /api/search` now returns `{ groups }`, where each group is `{ workspace, match_count, results }`. Search can be scoped by `workspace`.
+- **Resolve scoped by workspace:** `GET /api/resolve-session?id=...&workspace=...` only resolves within the active workspace filter.
+- **CWD normalization:** `cwd` is normalized at ingest using `path.normalize`/`path.resolve` to reduce duplicate workspace entries caused by path variations.
+
+Key file: `server/apiPlugin.ts` (all schema, indexing, and API work).
+
+### Frontend
+- **Home mode layout:** when no session is selected, the UI renders:
+  - Full‑width search panel
+  - 25/75 grid: Sessions panel (left) + Workspaces panel (right)
+- **Session mode layout:** once a session is selected, the existing sidebar + viewer/toggles are shown.
+- **Workspace filter state:** selecting a workspace scopes sessions and search; “Clear” resets the filter.
+- **Grouped search UI:** search results display grouped by workspace, including repo metadata and match counts.
+- **Workspaces panel:** shows workspace list with repo info, session counts, last seen, and sorting (last seen / session count).
+- **Session root change behavior:** after saving a new sessions root, the active workspace filter is cleared and workspaces are reloaded.
+
+New or modified components/hooks:
+- `src/features/conversation/components/SearchPanel.tsx`
+- `src/features/conversation/components/SessionsPanel.tsx`
+- `src/features/conversation/components/WorkspacesPanel.tsx`
+- `src/features/conversation/components/GitHubIcon.tsx`
+- `src/features/conversation/hooks/useWorkspaces.ts`
+- `src/features/conversation/hooks/useSearch.ts` (grouped search + workspace scoped resolve)
+- `src/features/conversation/hooks/useSessions.ts` (workspace filter)
+- `src/features/conversation/ConversationViewer.tsx` (home vs session layout + workspace state)
+- `src/features/conversation/api.ts` and `src/features/conversation/types.ts`
+
+## UX Summary
+- **Discovery first:** Search is prominent on the home state and results are grouped by workspace for better context.
+- **Repo context surfaced:** The Workspaces panel and search groups show repo name/URL and GitHub badge when available.
+- **Scoped browsing:** Choosing a workspace filters sessions + search, and the filter is visible and removable.
+- **Avoids heavy abstractions:** Workspace summaries are aggregated from `sessions` instead of a new table.
+
+## Behavior Notes / Gotchas
+- **Workspace key is `cwd` only.** Repo root detection is not implemented yet; this avoids identity whiplash until a deliberate migration is planned.
+- **Schema is treated as baseline.** There are no migrations; use “Clear & Rebuild” to reset the DB when pulling changes.
+- **Reindex required for new git fields.** Existing session rows won’t populate `git_commit_hash` until a reindex/clear.
+- **Workspace list depends on session data.** If sessions root changes, reindex to see new workspaces.
+
+## How to Validate
+- Run `npm run typecheck` and `npm run check`.
+- Start dev server and:
+  1) Home state shows full‑width search + Sessions/Workspaces grid.
+  2) Workspaces list populates after Reindex.
+  3) Selecting a workspace filters sessions + search.
+  4) Search results are grouped with “X matches · Y sessions.”
+  5) Enter-to-resolve is scoped to active workspace.
+
+## If Review Comments Arrive
+- For issues about “stale workspace list,” confirm reindex is done and check the save‑root handler (clears filter + reloads workspaces).
+- For filter scope mismatches, inspect `/api/resolve-session` and `useSearch` (workspace parameter handling).
+- For ambiguous counts, check search groups’ `match_count` and UI label logic.
+- For duplicate workspaces, check `normalizeCwd` and any path normalization edge cases.
