@@ -31,6 +31,14 @@ interface SessionFileInfo {
   preview: string | null;
   timestamp: string | null;
   cwd: string | null;
+  gitBranch: string | null;
+  gitRepo: string | null;
+  gitCommitHash: string | null;
+  turnCount: number | null;
+  messageCount: number | null;
+  startedAt: string | null;
+  endedAt: string | null;
+  sessionId: string;
 }
 
 type DaysMap = Map<string, SessionFileInfo[]>;
@@ -63,6 +71,15 @@ const extractGithubSlug = (value?: string | null) => {
   if (httpsMatch) return httpsMatch[1];
   const sshUrlMatch = trimmed.match(/^ssh:\/\/git@github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/i);
   if (sshUrlMatch) return sshUrlMatch[1];
+  return null;
+};
+
+const extractSessionIdFromPath = (value?: string | null) => {
+  if (!value) return null;
+  const match = value.match(SESSION_ID_REGEX);
+  if (match) return match[0];
+  const prefixMatch = value.match(SESSION_ID_PREFIX_REGEX);
+  if (prefixMatch) return prefixMatch[0];
   return null;
 };
 
@@ -307,7 +324,8 @@ const extractSessionIdFromObject = (value: unknown, depth = 0): string | null =>
     obj.conversation_id ??
     obj.conversationId ??
     obj.resume_session_id ??
-    obj.resumeSessionId;
+    obj.resumeSessionId ??
+    obj.id;
   if (typeof direct === 'string' && direct.trim()) return normalizeSessionId(direct);
   if (typeof obj.session === 'string' && obj.session.trim()) return normalizeSessionId(obj.session);
   if (obj.session && typeof obj.session === 'object') {
@@ -587,7 +605,7 @@ const indexSessions = async (root: string) => {
         insertSession.run({
           id: file.relPath,
           path: file.relPath,
-          session_id: parsed.sessionMeta.session_id ?? null,
+          session_id: parsed.sessionMeta.session_id ?? extractSessionIdFromPath(file.relPath) ?? null,
           session_id_checked: 1,
           timestamp: parsed.sessionMeta.timestamp ?? null,
           cwd: parsed.sessionMeta.cwd ?? null,
@@ -674,14 +692,69 @@ const indexSessions = async (root: string) => {
 
 const getSessionsPreviewMap = (database: Database.Database) => {
   const rows = database
-    .prepare('SELECT id, first_user_message, timestamp, cwd, git_branch, git_repo FROM sessions')
-    .all() as Array<{ id: string; first_user_message?: string; timestamp?: string; cwd?: string }>;
-  const map = new Map<string, { preview?: string; timestamp?: string; cwd?: string }>();
+    .prepare(
+      `
+        SELECT
+          sessions.id AS id,
+          sessions.first_user_message AS first_user_message,
+          sessions.timestamp AS timestamp,
+          sessions.cwd AS cwd,
+          sessions.git_branch AS git_branch,
+          sessions.git_repo AS git_repo,
+          sessions.git_commit_hash AS git_commit_hash,
+          sessions.session_id AS session_id,
+          COALESCE(SUM(CASE WHEN messages.role = 'user' THEN 1 ELSE 0 END), 0) AS turn_count,
+          COUNT(messages.id) AS message_count,
+          MIN(messages.timestamp) AS started_at,
+          MAX(messages.timestamp) AS ended_at
+        FROM sessions
+        LEFT JOIN messages ON messages.session_id = sessions.id
+        GROUP BY sessions.id
+      `,
+    )
+    .all() as Array<{
+    id: string;
+    first_user_message?: string;
+    timestamp?: string;
+    cwd?: string;
+    git_branch?: string;
+    git_repo?: string;
+    git_commit_hash?: string;
+    session_id?: string;
+    turn_count?: number;
+    message_count?: number;
+    started_at?: string | null;
+    ended_at?: string | null;
+  }>;
+  const map = new Map<
+    string,
+    {
+      preview?: string;
+      timestamp?: string;
+      cwd?: string;
+      gitBranch?: string;
+      gitRepo?: string;
+      gitCommitHash?: string;
+      sessionId?: string;
+      turnCount?: number;
+      messageCount?: number;
+      startedAt?: string | null;
+      endedAt?: string | null;
+    }
+  >();
   for (const row of rows) {
     map.set(row.id, {
       preview: row.first_user_message,
       timestamp: row.timestamp,
       cwd: row.cwd,
+      gitBranch: row.git_branch,
+      gitRepo: row.git_repo,
+      gitCommitHash: row.git_commit_hash,
+      sessionId: row.session_id ?? '',
+      turnCount: row.turn_count,
+      messageCount: row.message_count,
+      startedAt: row.started_at ?? null,
+      endedAt: row.ended_at ?? null,
     });
   }
   return map;
@@ -741,7 +814,22 @@ const getWorkspaceSummaries = (database: Database.Database) => {
 const buildSessionsTree = (
   root: string,
   files: FileEntry[],
-  previewMap: Map<string, { preview?: string; timestamp?: string; cwd?: string }>,
+  previewMap: Map<
+    string,
+    {
+      preview?: string;
+      timestamp?: string;
+      cwd?: string;
+      gitBranch?: string;
+      gitRepo?: string;
+      gitCommitHash?: string;
+      sessionId?: string | null;
+      turnCount?: number;
+      messageCount?: number;
+      startedAt?: string | null;
+      endedAt?: string | null;
+    }
+  >,
 ) => {
   const yearsMap: YearsMap = new Map();
 
@@ -776,6 +864,14 @@ const buildSessionsTree = (
       preview: preview?.preview ?? null,
       timestamp: preview?.timestamp ?? null,
       cwd: preview?.cwd ?? null,
+      gitBranch: preview?.gitBranch ?? null,
+      gitRepo: preview?.gitRepo ?? null,
+      gitCommitHash: preview?.gitCommitHash ?? null,
+      sessionId: preview?.sessionId ?? '',
+      turnCount: preview?.turnCount ?? null,
+      messageCount: preview?.messageCount ?? null,
+      startedAt: preview?.startedAt ?? null,
+      endedAt: preview?.endedAt ?? null,
     });
   }
 
@@ -791,7 +887,16 @@ const buildSessionsTree = (
             .sort(([a], [b]) => b.localeCompare(a))
             .map(([day, dayFiles]) => ({
               day,
-              files: [...dayFiles].sort((a, b) => b.filename.localeCompare(a.filename)),
+              files: [...dayFiles].sort((a, b) => {
+                const aTime = Date.parse(a.startedAt ?? a.timestamp ?? '');
+                const bTime = Date.parse(b.startedAt ?? b.timestamp ?? '');
+                const aValid = Number.isFinite(aTime);
+                const bValid = Number.isFinite(bTime);
+                if (aValid && bValid && aTime !== bTime) return bTime - aTime;
+                if (aValid && !bValid) return -1;
+                if (!aValid && bValid) return 1;
+                return b.filename.localeCompare(a.filename);
+              }),
             })),
         })),
     }));
