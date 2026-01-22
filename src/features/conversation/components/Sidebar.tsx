@@ -67,6 +67,7 @@ const SidebarComponent = ({
   );
 
   if (isRenderDebugEnabled) {
+    // RAF captures layout/paint time for perceived cost, not just React render.
     requestAnimationFrame(() => {
       const duration = performance.now() - renderStart;
       console.debug('[render cost] Sidebar', { duration });

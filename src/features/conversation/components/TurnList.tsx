@@ -77,8 +77,8 @@ const TurnListComponent = ({
         </div>
       )}
 
-      {filteredTurns.map((turn, index) => (
-        <TurnCard key={`turn-${turn.id}-${index}`} turn={turn} showFullContent={showFullContent} />
+      {filteredTurns.map((turn) => (
+        <TurnCard key={`turn-${turn.id}`} turn={turn} showFullContent={showFullContent} />
       ))}
     </div>
   );

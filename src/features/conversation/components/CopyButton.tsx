@@ -22,8 +22,12 @@ export const CopyButton = ({
 
   const handleClick = async () => {
     if (disabled) return;
-    await onCopy();
-    showCopied(copyId, duration);
+    try {
+      await onCopy();
+      showCopied(copyId, duration);
+    } catch (error) {
+      console.error('Copy failed:', error);
+    }
   };
 
   return (

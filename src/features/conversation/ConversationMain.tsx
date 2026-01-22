@@ -51,7 +51,7 @@ export const ConversationMain = ({
     for (const turn of turns) {
       for (const item of turn.items) {
         if (item.type === 'thought') thoughtCount += 1;
-        if (item.type === 'tool_call') toolCallCount += 1;
+        if (item.type === 'tool_call' || item.type === 'tool_output') toolCallCount += 1;
         if (item.type === 'meta' || item.type === 'token_count') metaCount += 1;
       }
     }

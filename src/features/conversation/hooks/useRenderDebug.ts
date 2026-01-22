@@ -7,6 +7,7 @@ export const useRenderDebug = (label: string, snapshot: DebugSnapshot) => {
   const prevSnapshot = useRef<DebugSnapshot>(snapshot);
   const renderCount = useRef(0);
 
+  // DEV-only: incrementing ref during render is intentional for debug counts.
   renderCount.current += 1;
 
   useEffect(() => {
