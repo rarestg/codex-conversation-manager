@@ -93,7 +93,7 @@ export const MessageCard = ({ item, itemIndex, showFullContent, copiedId, onCopy
         {isMarkdownItem ? (
           <MarkdownBlock content={truncated} />
         ) : (
-          <pre className="whitespace-pre-wrap rounded-xl bg-white/70 p-3 text-xs text-slate-800">
+          <pre className="whitespace-pre-wrap break-words rounded-xl bg-white/70 p-3 text-xs text-slate-800">
             {truncated || '—'}
           </pre>
         )}

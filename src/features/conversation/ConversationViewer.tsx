@@ -1,3 +1,4 @@
+import { Home, Settings } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { SearchPanel } from './components/SearchPanel';
 import { SessionHeader } from './components/SessionHeader';
@@ -122,6 +123,11 @@ export default function ConversationViewer() {
     setActiveWorkspace(null);
   };
 
+  const handleGoHome = () => {
+    clearSession();
+    window.history.pushState(null, '', `${window.location.pathname}${window.location.hash || ''}`);
+  };
+
   const showHome = !activeSession;
 
   return (
@@ -138,13 +144,27 @@ export default function ConversationViewer() {
                 Browse local Codex JSONL sessions, inspect turns, and search across your own history.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setSettingsOpen(true)}
-              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
-            >
-              Settings
-            </button>
+            <div className="flex items-center gap-2">
+              {!showHome && (
+                <button
+                  type="button"
+                  onClick={handleGoHome}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
+                >
+                  <Home className="h-4 w-4" />
+                  Home
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+                aria-label="Open settings"
+                title="Settings"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
+              >
+                <Settings className="h-4 w-4" />
+              </button>
+            </div>
           </div>
           {apiError && (
             <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">

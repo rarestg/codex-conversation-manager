@@ -25,6 +25,14 @@ export interface SessionFileEntry {
   preview?: string | null;
   timestamp?: string | null;
   cwd?: string | null;
+  gitBranch?: string | null;
+  gitRepo?: string | null;
+  gitCommitHash?: string | null;
+  turnCount?: number | null;
+  messageCount?: number | null;
+  startedAt?: string | null;
+  endedAt?: string | null;
+  sessionId: string;
 }
 
 export interface SessionTree {

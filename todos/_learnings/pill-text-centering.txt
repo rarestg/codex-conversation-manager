@@ -1,0 +1,45 @@
+Pill text centering (Session cards) — what worked
+
+Context
+- Small 10px pill text in the Sessions list looked vertically low vs the pill’s centerline.
+- Icons were centered, text wasn’t, creating a visual mismatch.
+
+What we tried (did NOT fix it)
+1) line-height tweaks only
+   - text-[10px]/[12px]
+   - leading-none
+   Result: no visible change in text position.
+
+2) fixed-height pills
+   - h-5, items-center, removed py-* and used text-[10px]/[1]
+   Result: pill got taller but text still looked low.
+
+3) tiny optical nudge with positional offset
+   - relative -top-[0.5px]
+   Result: no visible change.
+
+4) stronger optical nudge (transform)
+   - translate-y-[-1px]
+   Result: moved text upward (worked), but overshot for this pill.
+
+5) larger downward nudges
+   - translate-y-[2px]
+   - translate-y-[1.5px]
+   - translate-y-[1px]
+   Result: still visually low.
+
+What worked
+- translate-y-[0.5px] on the text span itself (not the icon).
+- This gave the most balanced optical centering in the pill.
+
+Why this happens
+- The issue is font metrics / baseline (Sora at 10px) — the glyph sits low inside its line box.
+- Flexbox centers the line box, not the glyph. So padding/height/leading don’t fix the optical alignment.
+
+Current solution
+- Apply the offset to the text-only spans in the time / duration / turns pills:
+  - className="translate-y-[0.5px]"
+
+Notes for future
+- If the font or size changes, re-evaluate the offset.
+- A reusable “pill-text-optical” class could centralize the offset.

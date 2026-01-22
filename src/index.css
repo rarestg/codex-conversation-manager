@@ -94,3 +94,14 @@
     transform: translate3d(0, 0, 0);
   }
 }
+
+.os-theme-codex {
+  --os-size: 8px;
+  --os-padding-perpendicular: 2px;
+  --os-handle-border-radius: 999px;
+  --os-handle-bg: rgba(100, 116, 139, 0.35);
+  --os-handle-bg-hover: rgba(100, 116, 139, 0.55);
+  --os-handle-bg-active: rgba(100, 116, 139, 0.6);
+  --os-track-bg: transparent;
+  --os-track-bg-hover: transparent;
+}
