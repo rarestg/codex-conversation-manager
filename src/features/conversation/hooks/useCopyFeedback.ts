@@ -8,14 +8,8 @@ export const useCopyFeedback = () => {
     if (timeoutRef.current) {
       window.clearTimeout(timeoutRef.current);
     }
-    if (import.meta.env.DEV) {
-      console.debug('[copy] showCopied', { id, duration });
-    }
     setCopiedId(id);
     timeoutRef.current = window.setTimeout(() => {
-      if (import.meta.env.DEV) {
-        console.debug('[copy] clearCopied', { id });
-      }
       setCopiedId(null);
       timeoutRef.current = null;
     }, duration);

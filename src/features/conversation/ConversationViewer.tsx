@@ -1,31 +1,19 @@
 import { Home, Settings } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
+import { ConversationMain } from './ConversationMain';
 import { SearchPanel } from './components/SearchPanel';
-import { SessionHeader } from './components/SessionHeader';
 import { SessionsPanel } from './components/SessionsPanel';
 import { SettingsModal } from './components/SettingsModal';
 import { Sidebar } from './components/Sidebar';
-import { Toggle } from './components/Toggle';
-import { TurnList } from './components/TurnList';
 import { WorkspacesPanel } from './components/WorkspacesPanel';
-import { buildConversationExport, copyText } from './copy';
-import { useCopyFeedback } from './hooks/useCopyFeedback';
-import { useRenderDebug } from './hooks/useRenderDebug';
 import { useSearch } from './hooks/useSearch';
 import { useSession } from './hooks/useSession';
 import { useSessions } from './hooks/useSessions';
 import { useUrlSync } from './hooks/useUrlSync';
 import { useWorkspaces } from './hooks/useWorkspaces';
-import { markdownToPlainText } from './markdown';
-import type { ParsedItem } from './types';
 
 export default function ConversationViewer() {
-  const [showThoughts, setShowThoughts] = useState(true);
-  const [showTools, setShowTools] = useState(true);
-  const [showMeta, setShowMeta] = useState(false);
-  const [showFullContent, setShowFullContent] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
-  const { copiedId, showCopied } = useCopyFeedback();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeWorkspace, setActiveWorkspace] = useState<string | null>(null);
 
@@ -64,131 +52,6 @@ export default function ConversationViewer() {
   } = useWorkspaces({ onError: setApiError });
 
   useUrlSync(loadSession, clearSession);
-
-  useRenderDebug('ConversationViewer', {
-    copiedId,
-    activeSessionId: activeSession?.id ?? null,
-    activeWorkspace,
-    settingsOpen,
-    loadingSessions,
-    loadingSession,
-    workspacesLoading,
-    workspacesSort,
-    searchQuery,
-    sessionsTreeRoot: sessionsTree?.root ?? null,
-  });
-
-  const filteredTurns = useMemo(() => {
-    return turns.map((turn) => {
-      const items = turn.items.filter((item) => {
-        if (item.type === 'thought' && !showThoughts) return false;
-        if ((item.type === 'tool_call' || item.type === 'tool_output') && !showTools) return false;
-        if ((item.type === 'meta' || item.type === 'token_count') && !showMeta) return false;
-        return true;
-      });
-      return { ...turn, items };
-    });
-  }, [turns, showThoughts, showTools, showMeta]);
-
-  const visibleItemCount = useMemo(() => {
-    return filteredTurns.reduce((count, turn) => count + turn.items.length, 0);
-  }, [filteredTurns]);
-
-  const sessionStats = useMemo(() => {
-    let thoughtCount = 0;
-    let toolCallCount = 0;
-    let metaCount = 0;
-
-    for (const turn of turns) {
-      for (const item of turn.items) {
-        if (item.type === 'thought') thoughtCount += 1;
-        if (item.type === 'tool_call') toolCallCount += 1;
-        if (item.type === 'meta' || item.type === 'token_count') metaCount += 1;
-      }
-    }
-
-    return { thoughtCount, toolCallCount, metaCount };
-  }, [turns]);
-
-  const handleCopyConversation = async () => {
-    const debug = import.meta.env.DEV;
-    const label = 'copy-conversation';
-    if (debug) {
-      console.time(`${label}:total`);
-    }
-    const formatted = buildConversationExport(filteredTurns);
-    if (debug) {
-      console.time(`${label}:copyText`);
-    }
-    await copyText(formatted);
-    if (debug) {
-      console.timeEnd(`${label}:copyText`);
-      console.time(`${label}:showCopied`);
-    }
-    showCopied('conversation', 2000);
-    if (debug) {
-      console.timeEnd(`${label}:showCopied`);
-      console.timeEnd(`${label}:total`);
-    }
-  };
-
-  const handleCopyItem = async (item: ParsedItem, format: 'text' | 'markdown') => {
-    const debug = import.meta.env.DEV;
-    const labelBase = `copy-item:${item.id}:${format}`;
-    if (debug) {
-      console.time(`${labelBase}:total`);
-    }
-    const raw = item.content;
-    if (format === 'text') {
-      if (debug) {
-        console.time(`${labelBase}:markdownToPlainText`);
-      }
-      const text = await markdownToPlainText(raw);
-      if (debug) {
-        console.timeEnd(`${labelBase}:markdownToPlainText`);
-        console.time(`${labelBase}:copyText`);
-      }
-      await copyText(text);
-      if (debug) {
-        console.timeEnd(`${labelBase}:copyText`);
-      }
-    } else {
-      if (debug) {
-        console.time(`${labelBase}:copyText`);
-      }
-      await copyText(raw);
-      if (debug) {
-        console.timeEnd(`${labelBase}:copyText`);
-      }
-    }
-    if (debug) {
-      console.time(`${labelBase}:showCopied`);
-    }
-    showCopied(item.id + format, 1500);
-    if (debug) {
-      console.timeEnd(`${labelBase}:showCopied`);
-      console.timeEnd(`${labelBase}:total`);
-    }
-  };
-
-  const handleCopyMeta = async (value: string, id: string) => {
-    const debug = import.meta.env.DEV;
-    const label = `copy-meta:${id}`;
-    if (debug) {
-      console.time(`${label}:total`);
-      console.time(`${label}:copyText`);
-    }
-    await copyText(value);
-    if (debug) {
-      console.timeEnd(`${label}:copyText`);
-      console.time(`${label}:showCopied`);
-    }
-    showCopied(id, 1500);
-    if (debug) {
-      console.timeEnd(`${label}:showCopied`);
-      console.timeEnd(`${label}:total`);
-    }
-  };
 
   const handleClearIndex = async () => {
     const confirmed = window.confirm('This will clear the index and rebuild it from scratch. Continue?');
@@ -316,57 +179,14 @@ export default function ConversationViewer() {
               onClearWorkspace={handleClearWorkspace}
             />
 
-            <main className="flex-1 min-w-0 space-y-6">
-              <div className="rounded-3xl border border-white/70 bg-white/80 p-6 shadow-card backdrop-blur">
-                <SessionHeader
-                  activeSession={activeSession}
-                  sessionDetails={sessionDetails}
-                  sessionsRoot={sessionsTree?.root || sessionsRoot}
-                  visibleItemCount={visibleItemCount}
-                  stats={sessionStats}
-                  copiedId={copiedId}
-                  onCopyConversation={handleCopyConversation}
-                  onCopyMeta={handleCopyMeta}
-                />
-
-                <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  <Toggle
-                    label="Show thoughts"
-                    description="Include agent reasoning inline."
-                    checked={showThoughts}
-                    onChange={setShowThoughts}
-                  />
-                  <Toggle
-                    label="Show tools"
-                    description="Tool calls and outputs inline."
-                    checked={showTools}
-                    onChange={setShowTools}
-                  />
-                  <Toggle
-                    label="Show metadata"
-                    description="turn_context, session_meta, token_count."
-                    checked={showMeta}
-                    onChange={setShowMeta}
-                  />
-                  <Toggle
-                    label="Show full content"
-                    description="Disable truncation for long messages."
-                    checked={showFullContent}
-                    onChange={setShowFullContent}
-                  />
-                </div>
-              </div>
-
-              <TurnList
-                filteredTurns={filteredTurns}
-                loadingSession={loadingSession}
-                activeSession={activeSession}
-                parseErrors={parseErrors}
-                showFullContent={showFullContent}
-                copiedId={copiedId}
-                onCopyItem={handleCopyItem}
-              />
-            </main>
+            <ConversationMain
+              turns={turns}
+              parseErrors={parseErrors}
+              activeSession={activeSession}
+              sessionDetails={sessionDetails}
+              sessionsRoot={sessionsTree?.root || sessionsRoot}
+              loadingSession={loadingSession}
+            />
           </div>
         )}
       </div>

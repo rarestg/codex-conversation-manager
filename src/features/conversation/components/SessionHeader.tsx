@@ -1,4 +1,5 @@
 import { Brain, Check, Clock, Copy, Eye, GitBranch, Github, Hourglass, Info, Repeat2, Wrench } from 'lucide-react';
+import { buildConversationExport, copyText } from '../copy';
 import {
   formatDuration,
   formatRelativeTime,
@@ -7,8 +8,8 @@ import {
   formatWorkspacePath,
   isSameDay,
 } from '../format';
-import { useRenderDebug } from '../hooks/useRenderDebug';
-import type { SessionDetails, SessionFileEntry } from '../types';
+import type { SessionDetails, SessionFileEntry, Turn } from '../types';
+import { CopyButton } from './CopyButton';
 
 interface SessionStats {
   thoughtCount: number;
@@ -22,9 +23,7 @@ interface SessionHeaderProps {
   sessionsRoot: string;
   visibleItemCount: number;
   stats: SessionStats;
-  copiedId: string | null;
-  onCopyConversation: () => void;
-  onCopyMeta: (value: string, id: string) => void;
+  filteredTurns: Turn[];
 }
 
 export const SessionHeader = ({
@@ -33,17 +32,8 @@ export const SessionHeader = ({
   sessionsRoot,
   visibleItemCount,
   stats,
-  copiedId,
-  onCopyConversation,
-  onCopyMeta,
+  filteredTurns,
 }: SessionHeaderProps) => {
-  useRenderDebug('SessionHeader', {
-    activeSessionId: activeSession?.id ?? null,
-    sessionId: sessionDetails.sessionId ?? null,
-    cwd: sessionDetails.cwd ?? null,
-    copiedId,
-  });
-
   const sessionId = sessionDetails.sessionId;
   const cwd = sessionDetails.cwd;
   const rawTitle = activeSession?.preview?.trim() || activeSession?.filename || 'Session viewer';
@@ -78,6 +68,14 @@ export const SessionHeader = ({
     return parts[parts.length - 1] ?? null;
   };
   const repoLabel = activeSession ? getRepoLabel(activeSession.gitRepo, activeSession.cwd) : null;
+  const handleCopyMeta = async (value: string) => {
+    await copyText(value);
+  };
+  const handleCopyConversation = async () => {
+    if (!visibleItemCount) return;
+    const formatted = buildConversationExport(filteredTurns);
+    await copyText(formatted);
+  };
 
   return (
     <div className="flex flex-wrap items-start justify-between gap-4">
@@ -98,19 +96,15 @@ export const SessionHeader = ({
                 <span className="chip-value" title={sessionId}>
                   {sessionId}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => onCopyMeta(sessionId, 'session-id')}
+                <CopyButton
+                  onCopy={() => handleCopyMeta(sessionId)}
                   className="chip-action"
                   aria-label="Copy session id"
                   title="Copy session id"
+                  copiedLabel={<Check className="h-3.5 w-3.5 text-emerald-600" />}
                 >
-                  {copiedId === 'session-id' ? (
-                    <Check className="h-3.5 w-3.5 text-emerald-600" />
-                  ) : (
-                    <Copy className="h-3.5 w-3.5" />
-                  )}
-                </button>
+                  <Copy className="h-3.5 w-3.5" />
+                </CopyButton>
               </div>
             )}
             {cwd && (
@@ -119,19 +113,15 @@ export const SessionHeader = ({
                 <span className="chip-value" title={cwd}>
                   {formatWorkspacePath(cwd)}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => onCopyMeta(cwd, 'session-cwd')}
+                <CopyButton
+                  onCopy={() => handleCopyMeta(cwd)}
                   className="chip-action"
                   aria-label="Copy session directory"
                   title="Copy session directory"
+                  copiedLabel={<Check className="h-3.5 w-3.5 text-emerald-600" />}
                 >
-                  {copiedId === 'session-cwd' ? (
-                    <Check className="h-3.5 w-3.5 text-emerald-600" />
-                  ) : (
-                    <Copy className="h-3.5 w-3.5" />
-                  )}
-                </button>
+                  <Copy className="h-3.5 w-3.5" />
+                </CopyButton>
               </div>
             )}
             {activeSession?.filename && (
@@ -140,19 +130,15 @@ export const SessionHeader = ({
                 <span className="chip-value" title={filePath || activeSession.filename}>
                   {activeSession.filename}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => onCopyMeta(filePath || activeSession.filename, 'session-file')}
+                <CopyButton
+                  onCopy={() => handleCopyMeta(filePath || activeSession.filename)}
                   className="chip-action"
                   aria-label="Copy session file path"
                   title="Copy session file path"
+                  copiedLabel={<Check className="h-3.5 w-3.5 text-emerald-600" />}
                 >
-                  {copiedId === 'session-file' ? (
-                    <Check className="h-3.5 w-3.5 text-emerald-600" />
-                  ) : (
-                    <Copy className="h-3.5 w-3.5" />
-                  )}
-                </button>
+                  <Copy className="h-3.5 w-3.5" />
+                </CopyButton>
               </div>
             )}
           </div>
@@ -231,14 +217,14 @@ export const SessionHeader = ({
         )}
       </div>
       <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={onCopyConversation}
+        <CopyButton
+          onCopy={handleCopyConversation}
+          duration={2000}
           disabled={!visibleItemCount}
           className="inline-flex min-w-[170px] items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-50"
         >
-          {copiedId === 'conversation' ? 'Copied' : 'Copy conversation'}
-        </button>
+          Copy conversation
+        </CopyButton>
       </div>
     </div>
   );

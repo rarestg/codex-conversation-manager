@@ -2,9 +2,9 @@ Implementation Plan — Best Fix for Copy Lag and Re-render Churn
 
 Context
 
-We are solving a UX/performance problem: copy buttons (session ID, filename, message copy, etc.) cause the UI to lag noticeably. The copy operation itself is fast, but the UI re-renders large, expensive subtrees on every copy state change. Investigation logs confirm this: top-level `copiedId` state in ConversationViewer triggers a full render, and heavy components (`Sidebar`, `SessionsPanel`, `TurnList`) each take hundreds of milliseconds to render. That cost is incurred twice (on “copied” and on clearing), which matches the delay the user experiences.
+We are solving a UX/performance problem: copy buttons (session ID, filename, message copy, etc.) cause noticeable lag. The copy operation itself is fast, but the UI re-renders large, expensive subtrees on every copy state change. Investigation logs confirm this: top-level `copiedId` state in ConversationViewer triggers a full page render, and heavy components (`Sidebar`, `SessionsPanel`, `TurnList`) each take hundreds of milliseconds to render. That cost is incurred twice (on “copied” and on clearing), which matches the user’s delay.
 
-This is now a known issue (see `todos/_learnings/copy-lag-investigation.md` for evidence). We are implementing the **best long-term fix**, not a minimal patch: keep ephemeral UI state local, memoize heavy components, and stabilize props so unrelated actions do not re-render expensive subtrees.
+This plan implements the **best long-term fix**: localize copy feedback state, structurally isolate heavy panels from copy state, and only add memoization after re-profiling. The goal is clean, maintainable code, not a blanket “memo everything” approach.
 
 Relevant code and data flow
 
@@ -13,177 +13,192 @@ Relevant code and data flow
 - `src/features/conversation/components/MessageCard.tsx` uses `copiedId` for per-message “Copied” state.
 - `src/features/conversation/components/TurnList.tsx` renders all conversation cards and is expensive.
 - `src/features/conversation/components/SessionsPanel.tsx` renders a large tree of sessions and is expensive.
-- `src/features/conversation/components/Sidebar.tsx` holds the search + sessions panels; expensive when SessionsPanel re-renders.
+- `src/features/conversation/components/Sidebar.tsx` holds search + sessions panels; expensive when SessionsPanel re-renders.
 - `src/features/conversation/hooks/useCopyFeedback.ts` currently provides global `copiedId` and `showCopied` used by ConversationViewer.
-- Debug logging added in this investigation should be removed/disabled after the fix.
+- Debug logging was added during the investigation; it should be removed after the fix is validated.
 
-The key architectural change is to **move copy feedback state down** to where it is used (SessionHeader and MessageCard) and to **memoize heavy components** with stable props so they do not re-render on unrelated local UI changes.
+The architectural change is twofold:
+1) Localize copy feedback state so copy actions do not trigger full-tree renders.
+2) Structure the component tree to isolate Sidebar from copy state even before memoization.
 
 The Plan
 
-Step 1: Create a localized CopyButton (or local copy feedback hook) for message and header actions
-
-Where:
-- Option A (preferred): new component in `src/features/conversation/components/CopyButton.tsx`.
-- Option B: reuse `useCopyFeedback` inside `SessionHeader` and `MessageCard` directly.
-
-What to do:
-- Create a small `CopyButton` component that encapsulates:
-  - internal copied state (`useState` or `useCopyFeedback` inside the component)
-  - calling `copyText` / `markdownToPlainText` (if text copy needed)
-  - showing “Copy” vs “Copied” label
-- The component should accept:
-  - `label` (display text)
-  - `onCopy` (async function)
-  - optional `aria-label` / `title`
-  - optional `successLabel` or `duration` override
-- On click, the button should:
-  - await the copy operation
-  - show “Copied” locally for a short duration
-- This isolates copy feedback state to the button itself.
-
-Why:
-- Eliminates the need for `copiedId` to live in ConversationViewer, preventing whole-app re-rendering on copy actions.
-
-Dependencies:
-- None. This can be implemented first without touching other components yet.
-
-Step 2: Remove global copy feedback state from ConversationViewer
+Step 1: Split ConversationViewer into Sidebar + ConversationMain siblings
 
 Where:
 - `src/features/conversation/ConversationViewer.tsx`
-- `src/features/conversation/hooks/useCopyFeedback.ts` (no longer used at top level)
+- New file: `src/features/conversation/ConversationMain.tsx`
 
 What to do:
-- Remove `const { copiedId, showCopied } = useCopyFeedback();` from ConversationViewer.
-- Remove all `copiedId` props passed to `SessionHeader`, `TurnList`, and `MessageCard`.
-- Delete `handleCopyConversation`, `handleCopyMeta`, and `handleCopyItem` or simplify them to just do copy without state changes (depending on how Step 1 is implemented).
-- If copy logic is moved to `CopyButton`, those handlers can become local to each component.
+- Extract the main content area (SessionHeader + TurnList + copy handlers) into a new `ConversationMain` component.
+- `ConversationViewer` should render `<Sidebar />` and `<ConversationMain />` as siblings.
+- Only `ConversationMain` should own copy state. Sidebar must not receive copy-related props or state.
 
 Why:
-- Prevents top-level state changes that trigger large re-renders.
+- Structural isolation means copy state changes can no longer trigger Sidebar/SessionsPanel re-renders. This alone removes the largest lag source.
 
 Dependencies:
-- Step 1 must be in place so header and message copy still function without global state.
+- This step should happen before moving copy state down so we can keep responsibilities clear.
 
-Step 3: Update SessionHeader to use localized copy feedback
+Step 2: Introduce a localized CopyButton (preferred) or local copy hook
+
+Where:
+- Preferred: new component `src/features/conversation/components/CopyButton.tsx`
+- Alternative: use `useCopyFeedback` inside `SessionHeader` and `MessageCard` directly.
+
+What to do:
+- Create a small `CopyButton` that owns its own copied state (internally uses `useCopyFeedback` or a local `useState`).
+- `CopyButton` should accept:
+  - `onCopy: () => Promise<void> | void`
+  - `label` (default text)
+  - `copiedLabel` (optional, default “Copied”)
+  - optional `duration` for feedback
+  - optional `aria-label` / `title`
+- On click:
+  - await the copy operation
+  - show “Copied” locally for a short duration
+
+Why:
+- Copy feedback state should be as local as possible. A reusable button keeps the UI consistent and prevents future regressions.
+
+Dependencies:
+- None. This can be implemented independently.
+
+Step 3: Move copy behavior into SessionHeader
 
 Where:
 - `src/features/conversation/components/SessionHeader.tsx`
+- `src/features/conversation/ConversationMain.tsx` (if created)
 
 What to do:
-- Replace chip copy buttons with `CopyButton` (or local `useCopyFeedback`).
-- Replace “Copy conversation” button to use local feedback state.
-- Remove `copiedId` and `onCopyMeta` / `onCopyConversation` props if no longer needed.
+- Replace the “Copy session id”, “Copy dir”, “Copy file”, and “Copy conversation” buttons with `CopyButton` instances.
+- Remove `copiedId`, `onCopyMeta`, and `onCopyConversation` props from `SessionHeader`.
+- If `ConversationMain` still provides a shared `handleCopyConversation` function, pass it down; otherwise keep logic local to SessionHeader.
 
 Why:
-- Session header copy actions should not trigger global renders.
+- Keeps header feedback isolated so a chip copy doesn’t re-render the message list or sidebar.
 
 Dependencies:
-- Must follow Step 1 (copy UI available).
-- Must follow Step 2 to adjust props.
+- Step 2 must be done first.
 
-Step 4: Update MessageCard and TurnList for localized copy feedback
+Step 4: Move copy behavior into MessageCard
 
 Where:
 - `src/features/conversation/components/MessageCard.tsx`
 - `src/features/conversation/components/TurnList.tsx`
 
 What to do:
-- Replace `copiedId` prop usage with local `CopyButton` or local hook.
-- `MessageCard` should manage its own “Copied” state per button. A new instance of CopyButton per message is acceptable; it only re-renders locally.
-- Remove `copiedId` and `onCopyItem` props from `TurnList` and `MessageCard` once the copy logic is localized.
+- Replace the per-message copy buttons with `CopyButton` instances.
+- Remove `copiedId` and `onCopyItem` props from `TurnList` and `MessageCard`.
+- Ensure `markdownToPlainText` is called locally for “Copy text”.
 
 Why:
-- Eliminates mass re-renders of TurnList when any message is copied.
+- Prevents message copy from re-rendering every message card.
 
 Dependencies:
-- Step 1 (CopyButton/local hook) and Step 2 (remove global state) must be done.
+- Step 2 must be done first.
 
-Step 5: Memoize heavy components and stabilize handler props
+Step 5: Re-profile before adding memoization
 
 Where:
-- `src/features/conversation/components/SessionsPanel.tsx`
+- React DevTools Profiler
+- (Optional) temporarily keep lightweight logging from `useRenderDebug`
+
+What to do:
+- After Steps 1–4, test copy actions again.
+- If Sidebar/SessionsPanel no longer re-render on copy, memoization is likely unnecessary for this bug.
+- Only add memoization if profiling shows continued unnecessary re-renders.
+
+Why:
+- Avoids “memo everywhere” and keeps the codebase clean.
+
+Dependencies:
+- Steps 1–4 must be complete to accurately measure the new behavior.
+
+Step 6: If needed, add targeted memoization (cleanly)
+
+Where:
 - `src/features/conversation/components/Sidebar.tsx`
+- `src/features/conversation/components/SessionsPanel.tsx`
 - `src/features/conversation/components/TurnList.tsx`
 - (Optional) `src/features/conversation/components/WorkspacesPanel.tsx`
 
 What to do:
-- Wrap components in `React.memo`.
-- Ensure props passed to them are stable:
-  - Wrap callbacks in `useCallback` in ConversationViewer (`handleClearWorkspace`, `handleSelectWorkspace`, `handleGoHome`, etc.).
-  - Use `useMemo` for derived props if necessary (e.g., filtered data or expensive transforms).
-- For `SessionsPanel` and `Sidebar`, ensure their props do not change on unrelated UI state changes.
+- Memoize only the components that still re-render unnecessarily after Step 5.
+- Ensure callback props are stable (`useCallback`) before memoization; otherwise memoization is ineffective.
+- Use a clean memo style:
+  - Define component normally, then export `React.memo(Component)`.
+  - Avoid large inline `memo(() => ...)` blocks.
 
 Why:
-- Even with localized copy state, memoization reduces future regressions and protects against unnecessary re-renders.
+- Keeps memo usage minimal and readable while still protecting performance.
 
 Dependencies:
-- Can be done after Step 2, but before removal of logging so you can verify with the instrumentation.
+- Step 5 (profiling) must show a real need for memoization.
 
-Step 6: Remove investigation logging and StrictMode toggle
+Step 7: Remove investigation logging and restore StrictMode
 
 Where:
 - `src/features/conversation/hooks/useRenderDebug.ts`
 - `src/features/conversation/hooks/useWhyDidYouRender.ts`
-- All components where these hooks are used
-- `src/features/conversation/components/MessageCard.tsx` (remove console.debug)
-- `src/features/conversation/hooks/useCopyFeedback.ts` (remove console.debug)
+- All components that reference them
+- `src/features/conversation/components/MessageCard.tsx` (remove debug console)
+- `src/features/conversation/hooks/useCopyFeedback.ts` (remove debug console)
 - `src/main.tsx` (re-enable StrictMode)
 
 What to do:
-- Remove render/cost logging instrumentation once fix is validated.
-- Restore `<React.StrictMode>` in `src/main.tsx` and re-add `import React from 'react';` only if necessary (React 19 does not require it, so you may not need it).
+- Remove all investigation-only logging.
+- Restore `<React.StrictMode>` in `src/main.tsx`.
 
 Why:
-- Logging is for investigation only. It should not remain in production.
+- Logging is for diagnosis only; StrictMode should remain on in development.
 
 Dependencies:
-- Do this last, after verification is complete.
+- Do this last, after the fix has been validated.
 
 Decisions & Tradeoffs
 
-Chosen approach: Localize copy feedback state + memoize heavy components.
+Chosen approach: Localize copy feedback state + structural isolation + targeted memoization only if needed.
 
 Why this approach:
-- It prevents unrelated re-renders by scoping ephemeral UI state to the smallest component that needs it.
-- It aligns with React best practices: data state at top, transient UI state local.
-- Memoization reduces future regressions and improves responsiveness for all interactions.
+- Local state prevents unrelated re-renders by design.
+- Structural separation ensures Sidebar is unaffected by copy state even before memoization.
+- Memoization becomes a surgical tool instead of scattered optimization noise.
 
 Alternatives considered:
-- “Minimal fix” by stabilizing handlers only (useCallback) without moving copy state. This reduces some re-renders but still re-renders the entire tree on every copy; not sufficient.
-- Global state with fine-grained subscriptions (e.g., external store). This is heavier than needed; localized state is simpler and more idiomatic.
+- “Minimal fix” by stabilizing handlers only. Not sufficient because global `copiedId` still triggers a full render.
+- Global external store with fine-grained subscriptions. Overkill; local UI state is simpler and more idiomatic.
 
 Tradeoffs accepted:
-- Slightly more components and props (CopyButton) in exchange for dramatically improved UI responsiveness.
-- Local per-button state means multiple simultaneous “Copied” indicators can be visible. This is acceptable and arguably clearer than a single global indicator.
+- Slightly more components (`ConversationMain`, `CopyButton`) in exchange for dramatically improved responsiveness.
+- Local “Copied” indicators can appear simultaneously in multiple places (acceptable and consistent with UX).
 
 Landmines & Non‑obvious Notes
 
-- Do not leave copy feedback state in ConversationViewer. Even if handlers are memoized, the copiedId change will still trigger full re-render.
-- `TurnList` and `SessionsPanel` are expensive; if memoization is added but props are unstable, memoization will not help. Ensure callbacks are stable and derived props are memoized.
-- Be careful when removing `onCopyItem` from MessageCard/TurnList; update all call sites accordingly.
-- The copy logic for “text” uses `markdownToPlainText` (async). Ensure it stays inside the localized copy path so it doesn’t bubble up into parent state.
-- StrictMode was disabled for logging; re-enable it at the end to keep dev-time safety checks.
+- Do not leave `copiedId` in ConversationViewer. Even with memoization, the top-level state change will still force a render of the entire tree.
+- If memoization is added, ensure props are stable. Memoizing with unstable callbacks is ineffective and misleading.
+- Do not keep logging hooks after finishing; they distort performance and clutter logs.
+- `markdownToPlainText` is async and relatively small (~10ms). The real issue is render cost.
+- StrictMode must be re-enabled once debugging is complete; leaving it off hides issues.
 
 Verification
 
 Functional checks:
-1. Start dev server (`npm run dev`).
-2. Open a session and click “Copy session id”.
-   - The button should show “Copied” instantly.
-   - No visible lag in the sidebar or message list.
-3. Copy a message as text and as markdown.
-   - “Copied” should be fast; no full-page repaint.
-   - Message list should not re-render entirely (optional: use React DevTools to confirm).
-4. Interact with workspaces filter and session list to confirm memoization didn’t break functionality.
+1. Run the app (`npm run dev`).
+2. Load a session, click “Copy session id.”
+   - The “Copied” indicator should appear immediately.
+   - Sidebar should not re-render.
+3. Copy a message as text and markdown.
+   - Only the local message card should re-render.
+   - No full list repaint or large main-thread spikes.
+4. Ensure search, workspace filtering, and session selection still work.
 
 Performance checks:
-- With logging removed, verify that DevTools no longer logs `[Violation] 'message' handler` spikes on copy.
-- Use React Profiler: copy button should only re-render the local card/header, not Sidebar/SessionsPanel/TurnList.
+- React Profiler should show the copy action re-rendering only the local button/card/header.
+- No `[Violation] 'message' handler` spikes on copy in normal use.
 
 Regression checks:
+- Session header copy actions still work and copy correct values.
 - Copy conversation still works.
-- Session header metadata chips still copy correct values.
-- No loss of functionality when `sessionsTree` reloads or workspace filter changes.
+- StrictMode warnings (if any) are addressed after re-enabling StrictMode.
 
