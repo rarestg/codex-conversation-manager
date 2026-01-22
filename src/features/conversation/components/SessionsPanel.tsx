@@ -218,14 +218,14 @@ export const SessionsPanel = ({
                           return (
                             <>
                               {yearTotalDays && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-white/80 px-2 py-0.5 text-[10px]/[12px] font-medium text-slate-500">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-white/80 px-2 py-1 text-[10px]/[12px] font-medium text-slate-500">
                                   <Calendar className="h-3 w-3" />
                                   <span className="translate-y-[0.5px] inline-block min-w-[6ch] text-center tabular-nums">
                                     {`${yearActiveDays}/${yearTotalDays}`}
                                   </span>
                                 </span>
                               )}
-                              <span className="inline-flex items-center rounded-full bg-white/80 px-2 py-0.5 text-[10px]/[12px] font-medium text-slate-500">
+                              <span className="inline-flex items-center rounded-full bg-white/80 px-2 py-1 text-[10px]/[12px] font-medium text-slate-500">
                                 <span className="translate-y-[0.5px] inline-flex items-center gap-1">
                                   <span className="min-w-[4ch] text-center tabular-nums">{yearSessionCount}</span>
                                   <span>{yearSessionCount === 1 ? 'session' : 'sessions'}</span>
@@ -258,14 +258,14 @@ export const SessionsPanel = ({
                                 return (
                                   <>
                                     {monthTotalDays && (
-                                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px]/[12px] font-medium text-slate-500">
+                                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[10px]/[12px] font-medium text-slate-500">
                                         <Calendar className="h-3 w-3" />
                                         <span className="translate-y-[0.5px] inline-block min-w-[6ch] text-center tabular-nums">
                                           {`${monthActiveDays}/${monthTotalDays}`}
                                         </span>
                                       </span>
                                     )}
-                                    <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px]/[12px] font-medium text-slate-500">
+                                    <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-[10px]/[12px] font-medium text-slate-500">
                                       <span className="translate-y-[0.5px] inline-flex items-center gap-1">
                                         <span className="min-w-[4ch] text-center tabular-nums">
                                           {monthSessionCount}
@@ -292,7 +292,7 @@ export const SessionsPanel = ({
                               <summary className="cursor-pointer list-none rounded-xl bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500">
                                 <div className="flex w-full items-center justify-between gap-3">
                                   <span>{formatDayLabel(year.year, month.month, day.day)}</span>
-                                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                                  <span className="rounded-full bg-white px-2 py-1 text-[10px] font-medium text-slate-500">
                                     {formatCountLabel(day.files.length, 'session')}
                                   </span>
                                 </div>
@@ -300,8 +300,9 @@ export const SessionsPanel = ({
                               <div className="mt-2 space-y-2 pl-2">
                                 {day.files.map((file) => {
                                   const title = file.preview?.trim() || 'Session';
-                                  const durationLabel = formatDuration(file.startedAt, file.endedAt);
                                   const timeSource = file.startedAt ?? file.timestamp ?? '';
+                                  const durationLabel = formatDuration(file.startedAt, file.endedAt);
+                                  const durationDisplay = durationLabel || (timeSource ? '0m' : '');
                                   const timeLabel = timeSource
                                     ? isSameDay(timeSource, now)
                                       ? formatRelativeTime(timeSource, now)
@@ -334,31 +335,37 @@ export const SessionsPanel = ({
                                         </div>
                                         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
                                           {timeLabel && (
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[10px]/[12px] text-slate-600 shadow-sm">
+                                            <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[10px]/[12px] text-slate-600 shadow-sm">
                                               <Clock className="h-3 w-3" />
-                                              <span className="translate-y-[0.5px]">{timeLabel}</span>
+                                              <span className="translate-y-[0.5px] inline-block min-w-[7ch] text-center tabular-nums">
+                                                {timeLabel}
+                                              </span>
                                             </span>
                                           )}
-                                          {durationLabel && (
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[10px]/[12px] text-slate-600 shadow-sm">
+                                          {timeSource && (
+                                            <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[10px]/[12px] text-slate-600 shadow-sm">
                                               <Hourglass className="h-3 w-3" />
-                                              <span className="translate-y-[0.5px]">{durationLabel}</span>
+                                              <span className="translate-y-[0.5px] inline-block min-w-[6ch] text-center tabular-nums">
+                                                {durationDisplay}
+                                              </span>
                                             </span>
                                           )}
                                           {file.turnCount !== null && file.turnCount !== undefined && (
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[10px]/[12px] text-slate-600 shadow-sm">
+                                            <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[10px]/[12px] text-slate-600 shadow-sm">
                                               <Repeat2 className="h-3 w-3" />
-                                              <span className="translate-y-[0.5px]">{file.turnCount}</span>
+                                              <span className="translate-y-[0.5px] inline-block min-w-[4ch] text-center tabular-nums">
+                                                {file.turnCount}
+                                              </span>
                                             </span>
                                           )}
                                           {repoLabel && (
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[10px] leading-none text-slate-600 shadow-sm">
+                                            <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[10px] leading-none text-slate-600 shadow-sm">
                                               <Github className="h-3 w-3" />
                                               {repoLabel}
                                             </span>
                                           )}
                                           {file.gitBranch && (
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[10px] leading-none text-slate-600 shadow-sm">
+                                            <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[10px] leading-none text-slate-600 shadow-sm">
                                               <GitBranch className="h-3 w-3" />
                                               {file.gitBranch}
                                             </span>
@@ -369,12 +376,12 @@ export const SessionsPanel = ({
                                         type="button"
                                         onClick={(event) => handleCopySessionId(event, sessionId, sessionCopyId)}
                                         title={sessionId}
-                                        className="mt-2 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-200"
+                                        className="mt-2 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[10px] text-slate-600 hover:bg-slate-200"
                                       >
                                         <Fingerprint className="h-3 w-3" />
                                         <span className="truncate">{sessionIdLabel}</span>
                                         {copiedId === sessionCopyId && (
-                                          <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] text-slate-500">
+                                          <span className="rounded-full bg-white/80 px-2 py-1 text-[10px] text-slate-500">
                                             Copied
                                           </span>
                                         )}

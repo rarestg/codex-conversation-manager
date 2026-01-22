@@ -80,6 +80,22 @@ export default function ConversationViewer() {
     return filteredTurns.reduce((count, turn) => count + turn.items.length, 0);
   }, [filteredTurns]);
 
+  const sessionStats = useMemo(() => {
+    let thoughtCount = 0;
+    let toolCallCount = 0;
+    let metaCount = 0;
+
+    for (const turn of turns) {
+      for (const item of turn.items) {
+        if (item.type === 'thought') thoughtCount += 1;
+        if (item.type === 'tool_call') toolCallCount += 1;
+        if (item.type === 'meta' || item.type === 'token_count') metaCount += 1;
+      }
+    }
+
+    return { thoughtCount, toolCallCount, metaCount };
+  }, [turns]);
+
   const handleCopyConversation = async () => {
     const formatted = buildConversationExport(filteredTurns);
     await copyText(formatted);
@@ -229,7 +245,9 @@ export default function ConversationViewer() {
                 <SessionHeader
                   activeSession={activeSession}
                   sessionDetails={sessionDetails}
+                  sessionsRoot={sessionsTree?.root || sessionsRoot}
                   visibleItemCount={visibleItemCount}
+                  stats={sessionStats}
                   copiedId={copiedId}
                   onCopyConversation={handleCopyConversation}
                   onCopyMeta={handleCopyMeta}

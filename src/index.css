@@ -53,15 +53,15 @@
   }
 
   .chip-label {
-    @apply text-[10px]/[1] font-semibold uppercase tracking-[0.25em] text-slate-400;
+    @apply text-[10px]/[1] font-semibold uppercase tracking-[0.25em] text-slate-400 translate-y-[0.5px];
   }
 
   .chip-value {
-    @apply min-w-0 flex-1 truncate font-mono text-slate-700 leading-none;
+    @apply min-w-0 flex-1 truncate font-mono text-slate-700 leading-none translate-y-[0.5px];
   }
 
   .chip-action {
-    @apply inline-flex shrink-0 items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px]/[1] font-semibold uppercase tracking-[0.2em] text-slate-500 leading-none;
+    @apply inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-500 shadow-sm transition hover:border-slate-300 hover:text-slate-700;
   }
 }
 
