@@ -13,6 +13,7 @@ A local web app for parsing, visualizing, and searching Codex JSONL sessions. It
 - Markdown rendering with sanitized output and code highlighting.
 - Per-message and conversation-wide copy actions.
 - Session settings modal (set root, reindex, clear/rebuild index).
+- Workspace summary panel for filtering sessions by working directory.
 - URL deep links to sessions and turns (`?session=...&turn=...`).
 
 ## Getting Started
@@ -37,12 +38,17 @@ pre-commit run --all-files
 - Optional config file: `~/.codex-formatter/config.json`.
 - SQLite index: `~/.codex-formatter/codex_index.db`.
 - Debug logging: set `CODEX_DEBUG=1`.
+- Render debug logging (dev only): `VITE_RENDER_DEBUG=1`.
 
 ## Code Tour
 - `src/main.tsx` wires up the app and imports the feature entry.
-- `src/features/conversation/ConversationViewer.tsx` is the main container composing hooks + UI.
+- `src/features/conversation/ConversationViewer.tsx` lays out the page and data hooks.
+- `src/features/conversation/ConversationMain.tsx` renders the active session view (header + filters + turns).
 - `src/features/conversation/components/` holds the UI building blocks:
   - `Sidebar.tsx` (search + session browser)
+  - `SearchPanel.tsx` (FTS search + results)
+  - `SessionsPanel.tsx` (session tree + session ID copy)
+  - `WorkspacesPanel.tsx` (workspace summaries + filters)
   - `SessionHeader.tsx` (session metadata + copy controls)
   - `TurnList.tsx` / `TurnCard.tsx` / `MessageCard.tsx` (conversation rendering)
   - `SettingsModal.tsx` (session root + indexing actions)

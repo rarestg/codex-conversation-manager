@@ -1,0 +1,25 @@
+Best-fix copy-lag plan — implementation context (Jan 2026)
+
+What was implemented
+- Split the session view into a dedicated main pane (`ConversationMain`) so the sidebar is isolated from copy state.
+- Localized copy feedback with `CopyButton`, so each copy action only re-renders the button itself.
+- Moved session header and message copy logic into their local components.
+- Updated the sessions list to use local copy feedback per row (session ID copy no longer repaints the whole tree).
+- Added targeted memoization for heavy panels (`Sidebar`, `SessionsPanel`, `TurnList`, `WorkspacesPanel`) and stabilized callbacks with `useCallback`.
+- Restored render/debug hooks for profiling, and gated them behind `VITE_RENDER_DEBUG=1`.
+- Kept StrictMode enabled for normal development (disabled briefly only for clean log comparisons).
+
+Why these choices
+- The root cause was top-level `copiedId` state triggering full-tree re-renders.
+- Localizing copy feedback is the most durable fix and avoids "memo everything" anti-patterns.
+- Structural isolation (sidebar vs. main) prevents copy state from impacting the sidebar tree.
+- Memoization helps avoid unrelated re-renders after the main fix, and only works with stable callbacks.
+
+Deviations or additions vs. the plan
+- We kept the render debug hooks in the codebase, but gated them with `VITE_RENDER_DEBUG=1` so they are opt-in.
+- We added `useWhyDidYouRender` to `SessionsPanel` for deeper insight during the final comparison.
+- We ran memoization immediately after re-profiling and reviewer feedback, rather than as a later optional step.
+
+Outcome
+- Copy actions no longer trigger heavy parent re-renders (confirmed by absence of render logs on copy when debug is enabled).
+- The sessions tree and turn list remain heavy on initial load, but are no longer impacted by copy feedback.
