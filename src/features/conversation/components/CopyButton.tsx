@@ -140,6 +140,9 @@ export const CopyButton = ({
   const leadingClassNameMerged = ['shrink-0', leadingClassName].filter(Boolean).join(' ');
   const labelWrapperClassNameMerged = ['relative inline-grid min-w-0', labelWrapperClassName].filter(Boolean).join(' ');
   const labelClassNameMerged = ['min-w-0 truncate', labelClassName].filter(Boolean).join(' ');
+  const labelOverlayClassNameMerged = ['min-w-0', labelClassName, 'overflow-visible text-clip']
+    .filter(Boolean)
+    .join(' ');
   const reserveLabelNode = (
     <span aria-hidden className={`${labelClassNameMerged} col-start-1 row-start-1 opacity-0`}>
       {resolvedReserveLabel}
@@ -169,7 +172,7 @@ export const CopyButton = ({
         <span
           aria-hidden
           data-state={status}
-          className={`${labelClassNameMerged} col-start-1 row-start-1 opacity-0 transition-opacity duration-150 data-[state=copied]:opacity-100`}
+          className={`${labelOverlayClassNameMerged} col-start-1 row-start-1 opacity-0 transition-opacity duration-150 data-[state=copied]:opacity-100`}
         >
           {resolvedCopiedLabelNode}
         </span>
@@ -178,7 +181,7 @@ export const CopyButton = ({
         <span
           aria-hidden
           data-state={status}
-          className={`${labelClassNameMerged} col-start-1 row-start-1 opacity-0 transition-opacity duration-150 data-[state=error]:opacity-100`}
+          className={`${labelOverlayClassNameMerged} col-start-1 row-start-1 opacity-0 transition-opacity duration-150 data-[state=error]:opacity-100`}
         >
           {resolvedFailedLabelNode}
         </span>
