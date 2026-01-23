@@ -92,9 +92,9 @@ export const SessionHeaderVariantB = ({
     .filter(Boolean)
     .join(' ');
   const actionsClassNameMerged = ['flex items-center gap-2', actionsClassName].filter(Boolean).join(' ');
-  const subtitleItemClassName = 'inline-flex min-w-0 items-center gap-1 text-xs text-slate-500';
+  const subtitleItemClassName = 'flex min-w-0 items-center gap-1 text-left text-xs text-slate-500';
   const subtitleButtonClassName = `${subtitleItemClassName} hover:text-slate-700`;
-  const subtitleLabelWrapperClassName = 'min-w-0';
+  const subtitleLabelWrapperClassName = 'min-w-0 flex-1';
   const subtitleLabelClassName = 'min-w-0 truncate';
 
   const timeNode = (
@@ -168,11 +168,17 @@ export const SessionHeaderVariantB = ({
             {title}
           </h2>
           <div className="flex w-full items-center text-xs text-slate-500">
-            {timeNode}
-            <div className="flex-1 px-2 text-center text-slate-300">•</div>
-            {repoNode}
-            <div className="flex-1 px-2 text-center text-slate-300">•</div>
-            {branchNode}
+            <div className="flex-1" />
+            <div className="min-w-0">{timeNode}</div>
+            <div className="flex justify-center px-2 text-slate-300" style={{ flex: '2 1 0%' }}>
+              •
+            </div>
+            <div className="min-w-0">{repoNode}</div>
+            <div className="flex justify-center px-2 text-slate-300" style={{ flex: '2 1 0%' }}>
+              •
+            </div>
+            <div className="min-w-0">{branchNode}</div>
+            <div className="flex-1" />
           </div>
         </div>
       </div>

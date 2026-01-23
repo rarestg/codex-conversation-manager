@@ -146,7 +146,7 @@ export const CopyButton = ({
     </span>
   );
   const labelStack = (
-    <>
+    <span className="absolute inset-0 grid">
       <span
         aria-hidden
         data-state={status}
@@ -183,7 +183,7 @@ export const CopyButton = ({
           {resolvedFailedLabelNode}
         </span>
       )}
-    </>
+    </span>
   );
 
   return (
