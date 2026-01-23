@@ -1,11 +1,21 @@
 repos:
-  - repo: https://github.com/biomejs/pre-commit
-    rev: v2.3.11
-    hooks:
-      - id: biome-check
   - repo: https://github.com/DavidAnson/markdownlint-cli2
     rev: v0.20.0
     hooks:
       - id: markdownlint-cli2
         args: ["--config", ".markdownlint-cli2.jsonc"]
         files: "\\.md$"
+  - repo: local
+    hooks:
+      - id: npm-check
+        name: npm run check
+        entry: npm run check
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: npm-typecheck
+        name: npm run typecheck
+        entry: npm run typecheck
+        language: system
+        pass_filenames: false
+        always_run: true
