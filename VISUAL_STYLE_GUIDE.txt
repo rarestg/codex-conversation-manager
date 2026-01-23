@@ -1,0 +1,101 @@
+Codex Formatter UI Style Guide (Visual Rhythm + Copy UX)
+
+Purpose
+This guide captures the visual rhythm and interaction standards established while refining SessionHeaderVariantB, CopyButton, and the Canvas layout. Follow these rules when adding or modifying UI so spacing, alignment, and copy interactions remain consistent and scalable.
+
+Core Principles
+1) One spacing system per stack
+   - Use a single parent gap (gap-* or space-y-*) to control vertical rhythm inside a section.
+   - Avoid mixing parent gaps with ad-hoc child margins (mt-*, mb-*) unless there is a specific, documented exception.
+   - If you need a distinct spacing unit, change the parent gap instead of adding margins on children.
+
+2) Visual rhythm (spacing cadence)
+   - For stacked content blocks in headers, use gap-3 (12px) as the baseline.
+   - For higher-level section separation (e.g., header vs. toggles), use the same gap value unless the entire section should be intentionally looser.
+   - If you see mismatched measurements (e.g., 44px above and 62px below), it almost always means margins and parent gaps are being combined.
+
+3) Constrain content width in grids
+   - Grid layouts must define explicit columns on small screens (e.g., grid-cols-1 or grid-cols-[minmax(0,1fr)]).
+   - Wrap grid items with min-w-0 so long text can shrink/truncate.
+   - Rationale: grids without explicit columns default to max-content width, which causes horizontal bleed on narrow screens.
+
+CopyButton UX Standard
+1) Single control with overlay labels
+   - CopyButton swaps idle/hover/copied/failed labels using overlay spans.
+   - The button’s width must remain stable during label swaps.
+
+2) Inline success/failure icons
+   - Success/failure icons render inline with the copied/failed labels (e.g., “Copied ✓”).
+   - Do NOT reserve a right-side icon slot.
+   - If a label is longer, set reserveLabel to prevent width jumps.
+
+3) Hover label handling
+   - hoverLabel defaults to “Copy”.
+   - Set hoverLabel={null} to disable hover swapping and keep the idle label visible on hover.
+
+4) Accessible feedback
+   - Use <output aria-live="polite"> to announce success/failure.
+   - If idleLabel is not a string, always provide ariaLabel.
+
+Centered label layout (CopyButton)
+- Do not use absolute positioning for centered labels.
+- For centerLabel buttons, use a two-column grid:
+  - grid-cols-[auto_minmax(0,1fr)]
+  - leading icon in column 1
+  - label stack in column 2, centered via justify-self-center
+- This prevents label overlap with the leading icon and keeps the label centered in the remaining space.
+
+SessionHeaderVariantB Rhythm Rules
+1) Header stack
+   - headerClassName uses space-y-3.
+   - Title + subtitle/copy row are wrapped in a flex-col gap-3 container.
+   - Avoid title mb-*, copy row mt-* in this block. Let the gap govern spacing.
+
+2) Subtitle/copy row (date/repo/branch)
+   - All three items are CopyButton instances for consistent layout and affordance.
+   - Use hoverLabel={null} so the label does not change on hover.
+   - Use a shared subtitle class for consistent icon + text sizing.
+
+3) Stats row and action button
+   - The stats row and the copy-conversation action should align on the same row.
+   - Maintain consistent icon sizing (h-3.5 w-3.5) and pill spacing.
+
+4) Meta rows (Session/Dir/File)
+   - Keep meta rows in a single vertical stack with gap-2.
+   - Do not add extra top margins; spacing is controlled by the parent gap.
+
+SessionOverview Spacing Rules
+- The header block and toggle block must be wrapped in a flex-col gap-3 parent.
+- Toggle grid should not carry mt-* spacing; that gap is handled by the parent.
+- Compact toggle layout uses flex wrap with gap-2 and no extra top margin.
+
+Canvas Layout Rules
+- For variant grids:
+  - Always define grid-cols-1 on smaller screens.
+  - Use lg:grid-cols-2 when side-by-side variants are desired.
+  - Wrap each variant card with min-w-0 to prevent overflow.
+
+Checklist for future changes
+- Are you mixing space-y/gap with mt/mb in the same stack? If yes, consolidate.
+- Are grid columns explicitly defined at all breakpoints? If not, add grid-cols-1.
+- Do CopyButtons reserve width for labels and avoid layout shift? If not, add reserveLabel.
+- Are centered CopyButtons using grid layout (not absolute overlays)? If not, refactor.
+- Do repeated rows (date/repo/branch) share a unified layout style? If not, extract shared classes.
+
+
+Spacing Audit Playbook (Debugging)
+- If a gap looks off, inspect BOTH boundaries that form it.
+- Look for stacked spacing: parent space-y/gap plus child mt/mb is the most common source of imbalance.
+- Normalize spacing by consolidating to a single parent gap wherever possible.
+- Use temporary outlines (e.g., outline: 1px solid magenta) on adjacent blocks to measure gaps reliably.
+
+Spacing Tokens + Rules of Thumb
+- Header internal stack: gap-3 (baseline rhythm).
+- Title/subtitle block: no mt/mb; rely on the parent gap.
+- Toggle stacks inherit the parent gap; toggle grids should not carry mt-* unless explicitly documented.
+- If you see 44px vs 62px (or similar), it likely indicates mixed spacing systems.
+
+Component Consistency Rules
+- Subtitle rows (date/repo/branch) should use the same component type (CopyButton) for consistent alignment and affordance.
+- If you convert a text row to CopyButton and want no hover text swap, set hoverLabel={null}.
+- Centered CopyButtons must use the grid-based layout; do not reintroduce absolute overlays.

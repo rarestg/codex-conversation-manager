@@ -1,4 +1,4 @@
-import { Clock, Copy, Eye, GitBranch, Github, Hourglass, Repeat2 } from 'lucide-react';
+import { CalendarClock, Clock, Copy, Eye, GitBranch, Github, Hourglass, Repeat2 } from 'lucide-react';
 import { buildConversationExport } from '../copy';
 import { formatDuration, formatRelativeTime, formatTimestamp, formatWorkspacePath, isSameDay } from '../format';
 import { useRenderDebug } from '../hooks/useRenderDebug';
@@ -83,7 +83,7 @@ export const SessionHeaderVariantB = ({
     return parts[parts.length - 1] ?? null;
   };
   const repoLabel = activeSession ? getRepoLabel(activeSession.gitRepo, activeSession.cwd) : null;
-  const headerClassNameMerged = ['space-y-4', headerClassName].filter(Boolean).join(' ');
+  const headerClassNameMerged = ['space-y-3', headerClassName].filter(Boolean).join(' ');
   const titleClassNameMerged = ['text-xl text-slate-900 leading-snug line-clamp-2', titleClassName]
     .filter(Boolean)
     .join(' ');
@@ -92,19 +92,38 @@ export const SessionHeaderVariantB = ({
     .filter(Boolean)
     .join(' ');
   const actionsClassNameMerged = ['flex items-center gap-2', actionsClassName].filter(Boolean).join(' ');
+  const subtitleItemClassName = 'inline-flex min-w-0 items-center gap-1 text-xs text-slate-500';
+  const subtitleButtonClassName = `${subtitleItemClassName} hover:text-slate-700`;
+  const subtitleLabelWrapperClassName = 'min-w-0';
+  const subtitleLabelClassName = 'min-w-0 truncate';
 
-  const timeNode = timestampLabel ? <span className="min-w-0 truncate">{timestampLabel}</span> : <span />;
+  const timeNode = (
+    <CopyButton
+      text={timestampLabel}
+      idleLabel={timestampLabel}
+      reserveLabel={timestampLabel}
+      hoverLabel={null}
+      ariaLabel="Copy session timestamp"
+      title={timestampLabel}
+      leading={<CalendarClock className="h-3.5 w-3.5" />}
+      labelWrapperClassName={subtitleLabelWrapperClassName}
+      labelClassName={subtitleLabelClassName}
+      className={subtitleButtonClassName}
+      disabled={!timeSource}
+    />
+  );
   const repoNode = repoLabel ? (
     <CopyButton
       text={repoLabel}
       idleLabel={repoLabel}
       reserveLabel={repoLabel}
+      hoverLabel={null}
       ariaLabel="Copy repo"
       title={repoLabel}
       leading={<Github className="h-3.5 w-3.5" />}
-      labelWrapperClassName="min-w-0"
-      labelClassName="min-w-0 truncate"
-      className="inline-flex min-w-0 items-center gap-1 text-xs text-slate-500 hover:text-slate-700"
+      labelWrapperClassName={subtitleLabelWrapperClassName}
+      labelClassName={subtitleLabelClassName}
+      className={subtitleButtonClassName}
     />
   ) : (
     <span className="truncate text-slate-400">no repo</span>
@@ -114,12 +133,13 @@ export const SessionHeaderVariantB = ({
       text={activeSession.gitBranch}
       idleLabel={activeSession.gitBranch}
       reserveLabel={activeSession.gitBranch}
+      hoverLabel={null}
       ariaLabel="Copy branch"
       title={activeSession.gitBranch}
       leading={<GitBranch className="h-3.5 w-3.5" />}
-      labelWrapperClassName="min-w-0"
-      labelClassName="min-w-0 truncate"
-      className="inline-flex min-w-0 items-center gap-1 text-xs text-slate-500 hover:text-slate-700"
+      labelWrapperClassName={subtitleLabelWrapperClassName}
+      labelClassName={subtitleLabelClassName}
+      className={subtitleButtonClassName}
     />
   ) : (
     <span className="truncate text-slate-400">no branch</span>
@@ -136,18 +156,18 @@ export const SessionHeaderVariantB = ({
       leadingClassName="w-16 shrink-0 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400"
       labelWrapperClassName="min-w-0 flex-1"
       labelClassName="min-w-0 truncate text-xs text-slate-700"
-      className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white/70 px-3 py-2 text-left"
+      className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white/70 px-3 py-1.5 text-left"
     />
   );
 
   return (
     <div className={headerClassNameMerged}>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 w-full">
-          <h2 className={`${titleClassNameMerged} mb-1`} title={title}>
+        <div className="min-w-0 w-full flex flex-col gap-3">
+          <h2 className={titleClassNameMerged} title={title}>
             {title}
           </h2>
-          <div className="mt-3 flex w-full items-center text-xs text-slate-500">
+          <div className="flex w-full items-center text-xs text-slate-500">
             {timeNode}
             <div className="flex-1 px-2 text-center text-slate-300">•</div>
             {repoNode}

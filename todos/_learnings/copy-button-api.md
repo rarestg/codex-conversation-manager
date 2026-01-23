@@ -12,7 +12,7 @@ Core behavior
 - Click anywhere on the control to copy (no nested interactive elements).
 - Labels swap via overlay (idle / hover / copied / failed) without changing width.
 - Copy success/failure is announced via an `aria-live="polite"` region.
-- Defaults to green check on success and red X on failure (icons are reserved to avoid shift).
+- Defaults to green check on success and red X on failure (icons are inline with the copied/failed labels).
 
 How to use
 Choose exactly one copy source:
@@ -37,13 +37,12 @@ Label props
 - `hoverLabel` (optional): defaults to "Copy"; set to `null` to disable hover swapping.
 - `copiedLabel` (optional): defaults to "Copied!".
 - `failedLabel` (optional): defaults to "Copy failed".
-- `reserveLabel` (optional): width anchor; defaults to `idleLabel`.
+- `reserveLabel` (optional): width anchor; defaults to the widest known label (string labels only) to prevent layout shifts.
 
 Icons
-- `rightIcon` (optional): shown in idle/hover state.
-- `copiedIcon` (optional): defaults to a green check.
-- `failedIcon` (optional): defaults to a red X.
-- Icons are rendered in a fixed-width slot to avoid layout shifts.
+- `copiedIcon` (optional): inline icon appended to the copied label (defaults to a green check).
+- `failedIcon` (optional): inline icon appended to the failed label (defaults to a red X).
+- Set either to `null` to render the label without an icon.
 
 Accessibility notes
 - All visible labels are `aria-hidden` for clean screen-reader output.

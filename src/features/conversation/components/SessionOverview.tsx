@@ -36,7 +36,7 @@ const CompactToggle = ({ label, checked, count, onChange }: CompactToggleProps) 
     {count !== undefined && (
       <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500 tabular-nums">{count}</span>
     )}
-    <span className="relative inline-flex h-5 w-9 shrink-0 items-center overflow-hidden rounded-full">
+    <span className="relative inline-flex h-4 w-8 shrink-0 items-center overflow-hidden rounded-full">
       <input
         type="checkbox"
         checked={checked}
@@ -44,7 +44,7 @@ const CompactToggle = ({ label, checked, count, onChange }: CompactToggleProps) 
         className="peer sr-only"
       />
       <span className="absolute inset-0 rounded-full bg-slate-200 transition-colors peer-checked:bg-teal-600" />
-      <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-4" />
+      <span className="absolute left-0.5 top-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-4" />
     </span>
   </label>
 );
@@ -114,7 +114,7 @@ export const SessionOverview = ({
     .join(' ');
   const isCompactToggleLayout = toggleVariant === 'compact';
   const toggleGridClassNameMerged = [
-    isCompactToggleLayout ? 'mt-4 flex flex-wrap items-center gap-2' : 'mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4',
+    isCompactToggleLayout ? 'flex flex-wrap items-center gap-2' : 'grid gap-3 md:grid-cols-2 xl:grid-cols-4',
     toggleGridClassName,
   ]
     .filter(Boolean)
@@ -137,7 +137,7 @@ export const SessionOverview = ({
           {variantHint && <span className="text-xs text-slate-400">{variantHint}</span>}
         </div>
       )}
-      <div className={hasVariantHeader ? 'mt-4' : undefined}>
+      <div className={[hasVariantHeader ? 'mt-4' : null, 'flex flex-col gap-3'].filter(Boolean).join(' ')}>
         <HeaderComponent
           activeSession={activeSession}
           sessionDetails={sessionDetails}
