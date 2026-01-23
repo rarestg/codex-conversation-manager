@@ -109,7 +109,13 @@ export const MarkdownBlock = ({ content }: { content: string }) => {
                   style={prismStyle}
                   language={match[1]}
                   PreTag="div"
-                  customStyle={{ margin: 0, borderRadius: '12px', background: 'transparent' }}
+                  customStyle={{
+                    margin: 0,
+                    borderRadius: '12px',
+                    background: 'transparent',
+                    fontFamily: '"JetBrains Mono", monospace',
+                  }}
+                  codeTagProps={{ style: { fontFamily: '"JetBrains Mono", monospace' } }}
                 >
                   {String(children).replace(/\n$/, '')}
                 </SyntaxHighlighter>
@@ -129,17 +135,13 @@ export const MarkdownBlock = ({ content }: { content: string }) => {
           return <ol className="ml-6 list-decimal space-y-1">{children}</ol>;
         },
         p({ children }) {
-          return <p className="mb-2 whitespace-pre-wrap last:mb-0">{children}</p>;
+          return <p>{children}</p>;
         },
         li({ children }) {
-          return <li className="whitespace-pre-wrap">{children}</li>;
+          return <li>{children}</li>;
         },
         blockquote({ children }) {
-          return (
-            <blockquote className="border-l-2 border-slate-300 pl-4 text-slate-600 whitespace-pre-wrap">
-              {children}
-            </blockquote>
-          );
+          return <blockquote className="border-l-2 border-slate-300 pl-4 text-slate-600">{children}</blockquote>;
         },
       }}
     >
