@@ -1,5 +1,5 @@
 Context
-We are changing how the session picker (the Sessions panel in the UI) gets its data. Today, every time the picker loads, the backend endpoint GET /api/sessions scans the entire sessions root on disk to find .jsonl files. That full filesystem walk happens on every picker load, even if the SQLite index is already up to date. The scan is expensive and unnecessary for normal use when the database already contains indexed sessions. Additionally, the preview text shown in the picker (the first user message) can be thousands of characters, which causes oversized DOM nodes and poor UX. We want to render the picker directly from the database and only reindex when the user explicitly triggers it. We also want to hard-cut preview text to 1000 characters to avoid huge previews. Finally, because DB-only listings can include stale entries (files deleted on disk), the UI should surface a clear “file missing—please reindex” error when a user clicks a ghost session.
+We are changing how the session picker (the Sessions panel in the UI) gets its data. Today, every time the picker loads, the backend endpoint GET /api/sessions scans the entire sessions root on disk to find .jsonl files. That full filesystem walk happens on every picker load, even if the SQLite index is already up to date. The scan is expensive and unnecessary for normal use when the database already contains indexed sessions. Additionally, the preview text shown in the picker (the first user message) can be thousands of characters, which causes oversized DOM nodes and poor UX. We want to render the picker directly from the database and only reindex when the user explicitly triggers it. We also want to hard-cut preview text to 1000 characters and cap it to a maximum number of lines (e.g., 50) to avoid huge previews. Finally, because DB-only listings can include stale entries (files deleted on disk), the UI should surface a clear “file missing—please reindex” error when a user clicks a ghost session.
 
 Relevant code and how it connects
 - server/apiPlugin.ts
@@ -18,19 +18,21 @@ Relevant code and how it connects
   - Holds the error state and renders API errors in the UI. If the session load fails with 404, we can surface a specific message.
 
 The Plan
-Step 1: Add a preview truncation helper and limit constant in server/apiPlugin.ts.
-- Add a constant MAX_PREVIEW_CHARS = 1000 near other constants.
-- Add a helper function truncatePreview(value: string | null | undefined): string | null to hard-cut any string longer than MAX_PREVIEW_CHARS.
-- Rationale: centralizes the limit and avoids scattered truncation logic.
+Step 1: Add preview truncation helpers and limit constants in server/apiPlugin.ts.
+- Add constants MAX_PREVIEW_CHARS = 1000 and MAX_PREVIEW_LINES = 50 near other constants.
+- Add a helper function truncatePreview(value: string | null | undefined): string | null that:
+  - Hard-cuts by characters (MAX_PREVIEW_CHARS), and
+  - Caps by line count (MAX_PREVIEW_LINES) by splitting on newlines, slicing, and rejoining.
+- Rationale: centralizes the limit and avoids scattered truncation logic; protects both long lines and large multi-line prompts.
 
 Step 2: Apply truncation at indexing time in parseJsonlFile().
 - When setting firstUserMessage, run it through truncatePreview before storing it in the return object.
 - Rationale: ensures SQLite never stores unbounded previews for new indexing operations. This is the most important clamp for DB health.
 
 Step 3: Apply truncation when building responses in any preview path.
-- When mapping rows into response structures, pass row.first_user_message through truncatePreview.
-- Keep truncatePreview usage limited to preview fields (sessions.first_user_message). Do not touch messages table content.
-- Rationale: protects against older database entries that already contain huge previews; ensures UI safety.
+- When mapping sessions.first_user_message into response structures, pass it through truncatePreview.
+- Keep truncatePreview usage limited to preview fields (sessions.first_user_message). Do not touch messages table content used for search/full rendering.
+- Rationale: protects against older database entries that already contain huge previews; ensures UI safety even with legacy data.
 
 Step 4: Refactor buildSessionsTree to accept minimal entries (no fake size).
 - Define a SessionTreeEntry (or SessionMinimalEntry) type that contains only the fields used in the tree (id/relPath, filename, preview, timestamp, cwd, git info, counts, startedAt/endedAt, sessionId).
@@ -39,7 +41,7 @@ Step 4: Refactor buildSessionsTree to accept minimal entries (no fake size).
 - Rationale: avoids “lying” to buildSessionsTree with dummy size/mtime values and makes data flow explicit.
 
 Step 5: Create a dedicated DB query for the tree data and make /api/sessions DB-only.
-- Add a helper like getSessionsForTree(database, workspace?) that returns the exact rows needed for the picker in one SQL query, including message counts and timestamps.
+- Add a helper like getSessionsForTree(database, workspace?) that returns the exact rows needed for the picker in one SQL query (including counts and timestamps).
 - Build SessionTreeEntry[] directly from that query, then call buildSessionsTree to produce the tree.
 - Remove scanSessionFiles and readFirstUserMessage usage from GET /api/sessions.
 - Rationale: one SQL query, no disk scanning on picker load. Sessions shown are exactly what the index contains.
@@ -57,10 +59,10 @@ Decisions and tradeoffs
 - Chosen approach: DB-only session picker.
   - Pros: very fast on load, no disk traversal, relies on existing index, simple to reason about.
   - Cons: picker can be stale until reindex. This is acceptable and is mitigated by clear error messaging when a file is missing.
-- Preview length limit: hard cut at 1000 chars.
-  - Pros: prevents huge DOM nodes and keeps UI snappy. Hard cut is deterministic and cheap.
+- Preview limits: hard cut at 1000 chars plus 50-line max.
+  - Pros: prevents huge DOM nodes and keeps UI snappy; limits multi-line prompt explosions.
   - Cons: no visual indication of truncation. If needed, a “(truncated)” hint can be added later.
-- We are not adding filesystem watchers or OS-specific APIs.
+- We are not adding filesystem watchers or OS-specific APIs in this change.
   - Pros: avoids complexity and long-running processes.
   - Cons: no automatic refresh when new files appear.
 
@@ -75,5 +77,5 @@ Verification
 - Click sessions that exist: they should load normally.
 - Click a session whose file was deleted: the UI should show “Session file not found. Please reindex.”
 - Reindex via Settings: new sessions appear, deleted sessions are removed.
-- Confirm preview strings are hard-cut at 1000 characters in the Sessions list (no ellipsis).
+- Confirm previews are hard-cut at 1000 characters and at MAX_PREVIEW_LINES lines (no ellipsis).
 - Optional: run `npm run typecheck` and `npm run check`.
