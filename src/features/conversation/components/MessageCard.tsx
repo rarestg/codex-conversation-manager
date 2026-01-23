@@ -1,5 +1,4 @@
 import type { CSSProperties } from 'react';
-import { copyText } from '../copy';
 import { isRenderDebugEnabled } from '../debug';
 import { MAX_PREVIEW_CHARS } from '../format';
 import { MarkdownBlock, markdownToPlainText } from '../markdown';
@@ -49,14 +48,12 @@ export const MessageCard = ({ item, itemIndex, showFullContent }: MessageCardPro
             : item.type === 'tool_output'
               ? 'border-rose-200/70 bg-rose-50/80 text-rose-900'
               : 'border-slate-200/70 bg-slate-50/80 text-slate-800';
-  const handleCopy = async (format: 'text' | 'markdown') => {
+  const getCopyText = async (format: 'text' | 'markdown') => {
     const raw = item.content;
     if (format === 'text') {
-      const text = await markdownToPlainText(raw);
-      await copyText(text);
-      return;
+      return markdownToPlainText(raw);
     }
-    await copyText(raw);
+    return raw;
   };
 
   return (
@@ -73,29 +70,29 @@ export const MessageCard = ({ item, itemIndex, showFullContent }: MessageCardPro
         {isMarkdownItem && (
           <div className="flex items-center gap-2">
             <CopyButton
-              onCopy={() => handleCopy('text')}
-              aria-label={`Copy ${roleLabel} message as text`}
+              getText={() => getCopyText('text')}
+              idleLabel="Copy text"
+              hoverLabel="Copy text"
+              ariaLabel={`Copy ${roleLabel} message as text`}
               className="rounded-full border border-white/70 bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm"
-            >
-              Copy text
-            </CopyButton>
+            />
             <CopyButton
-              onCopy={() => handleCopy('markdown')}
-              aria-label={`Copy ${roleLabel} message as markdown`}
+              getText={() => getCopyText('markdown')}
+              idleLabel="Copy MD"
+              hoverLabel="Copy MD"
+              ariaLabel={`Copy ${roleLabel} message as markdown`}
               className="rounded-full border border-white/70 bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm"
-            >
-              Copy MD
-            </CopyButton>
+            />
           </div>
         )}
         {['tool_call', 'tool_output', 'meta', 'token_count'].includes(item.type) && (
           <CopyButton
-            onCopy={() => handleCopy('markdown')}
-            aria-label={`Copy ${roleLabel} content`}
+            getText={() => getCopyText('markdown')}
+            idleLabel="Copy"
+            hoverLabel="Copy"
+            ariaLabel={`Copy ${roleLabel} content`}
             className="rounded-full border border-white/70 bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm"
-          >
-            Copy
-          </CopyButton>
+          />
         )}
       </div>
 

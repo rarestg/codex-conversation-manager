@@ -72,10 +72,6 @@
   .chip-value {
     @apply min-w-0 flex-1 truncate font-mono text-slate-700 leading-none translate-y-[0.5px];
   }
-
-  .chip-action {
-    @apply inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-500 shadow-sm transition hover:border-slate-300 hover:text-slate-700;
-  }
 }
 
 @layer utilities {
