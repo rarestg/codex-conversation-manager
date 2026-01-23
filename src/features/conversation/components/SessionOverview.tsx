@@ -1,3 +1,4 @@
+import type { ComponentType } from 'react';
 import type { SessionDetails, SessionFileEntry, Turn } from '../types';
 import { SessionHeader } from './SessionHeader';
 import { Toggle } from './Toggle';
@@ -7,6 +8,46 @@ interface SessionStats {
   toolCallCount: number;
   metaCount: number;
 }
+
+type SessionHeaderComponent = ComponentType<{
+  activeSession: SessionFileEntry | null;
+  sessionDetails: SessionDetails;
+  sessionsRoot: string;
+  visibleItemCount: number;
+  stats: SessionStats;
+  filteredTurns: Turn[];
+  headerClassName?: string;
+  titleClassName?: string;
+  metaGridClassName?: string;
+  statsRowClassName?: string;
+  actionsClassName?: string;
+}>;
+
+interface CompactToggleProps {
+  label: string;
+  checked: boolean;
+  count?: number;
+  onChange: (checked: boolean) => void;
+}
+
+const CompactToggle = ({ label, checked, count, onChange }: CompactToggleProps) => (
+  <label className="group inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 shadow-sm transition hover:border-slate-300">
+    <span className="font-medium text-slate-900">{label}</span>
+    {count !== undefined && (
+      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500 tabular-nums">{count}</span>
+    )}
+    <span className="relative inline-flex h-5 w-9 shrink-0 items-center overflow-hidden rounded-full">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="peer sr-only"
+      />
+      <span className="absolute inset-0 rounded-full bg-slate-200 transition-colors peer-checked:bg-teal-600" />
+      <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-4" />
+    </span>
+  </label>
+);
 
 export interface SessionOverviewProps {
   activeSession: SessionFileEntry | null;
@@ -25,6 +66,9 @@ export interface SessionOverviewProps {
   onShowFullContentChange: (value: boolean) => void;
   variantLabel?: string;
   variantHint?: string;
+  HeaderComponent?: SessionHeaderComponent;
+  toggleVariant?: 'default' | 'compact';
+  showToggleCountsWhenOff?: boolean;
   containerClassName?: string;
   headerClassName?: string;
   titleClassName?: string;
@@ -51,6 +95,9 @@ export const SessionOverview = ({
   onShowFullContentChange,
   variantLabel,
   variantHint,
+  HeaderComponent = SessionHeader,
+  toggleVariant = 'default',
+  showToggleCountsWhenOff = false,
   containerClassName,
   headerClassName,
   titleClassName,
@@ -65,9 +112,16 @@ export const SessionOverview = ({
   ]
     .filter(Boolean)
     .join(' ');
-  const toggleGridClassNameMerged = ['mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4', toggleGridClassName]
+  const isCompactToggleLayout = toggleVariant === 'compact';
+  const toggleGridClassNameMerged = [
+    isCompactToggleLayout ? 'mt-4 flex flex-wrap items-center gap-2' : 'mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4',
+    toggleGridClassName,
+  ]
     .filter(Boolean)
     .join(' ');
+  const thoughtCount = showToggleCountsWhenOff ? stats.thoughtCount : undefined;
+  const toolCount = showToggleCountsWhenOff ? stats.toolCallCount : undefined;
+  const metaCount = showToggleCountsWhenOff ? stats.metaCount : undefined;
 
   const hasVariantHeader = Boolean(variantLabel || variantHint);
 
@@ -84,7 +138,7 @@ export const SessionOverview = ({
         </div>
       )}
       <div className={hasVariantHeader ? 'mt-4' : undefined}>
-        <SessionHeader
+        <HeaderComponent
           activeSession={activeSession}
           sessionDetails={sessionDetails}
           sessionsRoot={sessionsRoot}
@@ -99,30 +153,46 @@ export const SessionOverview = ({
         />
 
         <div className={toggleGridClassNameMerged}>
-          <Toggle
-            label="Thoughts"
-            description="Include agent reasoning inline."
-            checked={showThoughts}
-            onChange={onShowThoughtsChange}
-          />
-          <Toggle
-            label="Tools"
-            description="Tool calls and outputs inline."
-            checked={showTools}
-            onChange={onShowToolsChange}
-          />
-          <Toggle
-            label="Metadata"
-            description="turn_context, session_meta, token_count."
-            checked={showMeta}
-            onChange={onShowMetaChange}
-          />
-          <Toggle
-            label="Full content"
-            description="Disable truncation for long messages."
-            checked={showFullContent}
-            onChange={onShowFullContentChange}
-          />
+          {isCompactToggleLayout ? (
+            <>
+              <CompactToggle
+                label="Thoughts"
+                checked={showThoughts}
+                count={thoughtCount}
+                onChange={onShowThoughtsChange}
+              />
+              <CompactToggle label="Tools" checked={showTools} count={toolCount} onChange={onShowToolsChange} />
+              <CompactToggle label="Metadata" checked={showMeta} count={metaCount} onChange={onShowMetaChange} />
+              <CompactToggle label="Full content" checked={showFullContent} onChange={onShowFullContentChange} />
+            </>
+          ) : (
+            <>
+              <Toggle
+                label="Thoughts"
+                description="Include agent reasoning inline."
+                checked={showThoughts}
+                onChange={onShowThoughtsChange}
+              />
+              <Toggle
+                label="Tools"
+                description="Tool calls and outputs inline."
+                checked={showTools}
+                onChange={onShowToolsChange}
+              />
+              <Toggle
+                label="Metadata"
+                description="turn_context, session_meta, token_count."
+                checked={showMeta}
+                onChange={onShowMetaChange}
+              />
+              <Toggle
+                label="Full content"
+                description="Disable truncation for long messages."
+                checked={showFullContent}
+                onChange={onShowFullContentChange}
+              />
+            </>
+          )}
         </div>
       </div>
     </section>

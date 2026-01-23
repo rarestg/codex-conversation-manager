@@ -92,7 +92,7 @@ export const CanvasView = ({
   const demoSession = demoRequiresSession ? activeSession : null;
   const demoSessionDetails = demoRequiresSession ? sessionDetails : {};
   const resolvedSessionsRoot = sessionsTree?.root || sessionsRoot;
-  const variantGridClassName = selectedVariants.length > 1 ? 'grid gap-6 lg:grid-cols-2' : 'grid gap-6';
+  const variantGridClassName = selectedVariants.length > 1 ? 'grid gap-6 lg:grid-cols-2 items-start' : 'grid gap-6';
   const canvasContext: CanvasContext = {
     activeSession: demoSession,
     sessionDetails: demoSessionDetails,
