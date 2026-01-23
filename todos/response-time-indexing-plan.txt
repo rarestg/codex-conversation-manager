@@ -1,0 +1,150 @@
+Active Session Time Indexing Plan (Handoff-Ready)
+
+Context
+We are changing how “time spent” is calculated for indexed sessions. Today the hourglass value is derived from the span between MIN and MAX message timestamps in SQLite (server indexing), which measures session duration including idle time. This is misleading for our use: we want “active session time,” defined as the time between a user’s message and the assistant’s response, summed across turns. The client-side fallback used when a session is not indexed (or missing metadata) will remain unchanged for now, but we must document that it uses min/max timestamps and note how to replace it later.
+
+Relevant code and data flow
+- Server indexing lives in server/apiPlugin.ts.
+  - parseJsonlFile() streams JSONL and extracts messages, session meta, and timestamps.
+  - indexSessions() writes sessions, files, messages to SQLite.
+  - getSessionsPreviewMap() reads sessions metadata (timestamp, cwd, git info) plus MIN/MAX message timestamps.
+- SQLite schema is initialized in initSchema() inside server/apiPlugin.ts.
+- The UI renders the hourglass in:
+  - src/features/conversation/components/SessionHeader.tsx
+  - src/features/conversation/components/SessionHeaderVariantB.tsx
+  - src/features/conversation/components/SessionsPanel.tsx
+  Each uses formatDuration(startedAt, endedAt).
+- Shared formatting helpers live in src/features/conversation/format.ts.
+- The session fallback metadata is computed in src/features/conversation/hooks/useSession.ts (buildDerivedMeta). This uses min/max timestamps across parsed turns; it must stay but be called out as a fallback.
+
+Key system behavior and alignment
+- Primary conversation content is derived from event_msg entries (user_message and agent_message). response_item messages are not used for core display and should also be ignored for timing to keep semantics consistent.
+- Turn boundaries are defined by user_message: a turn starts at each event_msg user_message and ends immediately before the next user_message (or EOF). This is already how parsing groups turns in the UI.
+
+Plan (execution order)
+
+1) Define “active session time” algorithm (server-side)
+What to do: Codify the duration algorithm that matches turn semantics.
+Where: server/apiPlugin.ts, inside parseJsonlFile().
+Why: This is the place where JSONL is streamed and turn boundaries are already tracked.
+Algorithm (must be implemented exactly):
+- Consider only event_msg entries.
+- When a user_message appears, that starts a new turn. Record its timestamp as the “turn start time.”
+- For each turn, find the last event_msg agent_message before the next user_message or EOF.
+- If there is at least one agent_message in the turn, compute duration = last_assistant_ts - user_ts.
+- Ignore negative durations; allow zero duration.
+- If no assistant message exists in the turn, skip adding any duration for that turn.
+- Sum durations across turns for the session.
+
+Notes:
+- This includes tool time implicitly because the last assistant message in the turn is after any tool calls.
+- If the assistant speaks multiple times in one turn, only the last assistant timestamp should be paired with the user timestamp.
+
+2) Add a persistent column for active session time
+What to do: Store total active session time in SQLite as an integer number of milliseconds.
+Where: server/apiPlugin.ts in initSchema() and the database initialization path.
+Why: This lets the UI use the accurate value for indexed sessions without recomputing.
+Implementation details:
+- Add a new column to sessions table, e.g. active_duration_ms INTEGER, both in the initial CREATE TABLE and in the ALTER TABLE migration path.
+- Since this is a local single-user app, a simple ALTER TABLE is acceptable. Still, implement a safe guard that only runs if the column does not exist.
+- Use PRAGMA table_info(sessions) to check for the column during DB initialization (right after ensureDb() opens the database, before initSchema() or immediately after). If missing, run ALTER TABLE sessions ADD COLUMN active_duration_ms INTEGER.
+
+3) Update indexing to compute and store the new value
+What to do: Ensure parseJsonlFile() returns activeDurationMs, and insert it into sessions.
+Where:
+- server/apiPlugin.ts: parseJsonlFile() should return { messages, firstUserMessage, sessionMeta, activeDurationMs }.
+- server/apiPlugin.ts: indexSessions() → insertSession should set active_duration_ms: parsed.activeDurationMs ?? null.
+ - server/apiPlugin.ts: add activeDurationMs to the SessionFileInfo type so types stay aligned.
+Why: This ties the new computed metric to the existing indexing pipeline and persists it.
+
+4) Expose active session time in the sessions preview
+What to do: Include active_duration_ms in getSessionsPreviewMap() and return it in the preview object.
+Where: server/apiPlugin.ts, getSessionsPreviewMap() SELECT and mapping.
+Why: The UI uses this preview map for headers and list rows; it’s the best place to attach the field.
+Note: map activeDurationMs: row.active_duration_ms ?? null, and pass it through buildSessionsTree into each SessionFileInfo entry.
+
+5) Update types to include activeDurationMs
+What to do: Add an optional field for activeDurationMs in SessionFileEntry and any other relevant types.
+Where: src/features/conversation/types.ts.
+Why: Keeps TypeScript correct and documents the meaning of the new value.
+
+6) Add a formatter for ms durations and switch the UI to prefer the new value
+What to do:
+- Add formatDurationMs(ms?: number | null): string in src/features/conversation/format.ts, mirroring formatDuration’s output format (<1m, Xm, Xh, Xh Ym).
+- Update UI components to use activeDurationMs when present; otherwise fall back to formatDuration(startedAt, endedAt).
+Where:
+- src/features/conversation/components/SessionHeader.tsx
+- src/features/conversation/components/SessionHeaderVariantB.tsx
+- src/features/conversation/components/SessionsPanel.tsx
+Why: This ensures the hourglass uses the new active-session-time semantics for indexed sessions, while keeping backward compatibility for older DBs or sessions without the new field. Consider a small label tweak or inline comment so future readers don’t assume the hourglass still means total session span.
+
+7) Document the fallback in useSession.ts
+What to do: Add a short, explicit comment in buildDerivedMeta() explaining that the client-side duration uses min/max timestamps and is only a fallback when indexed activeDurationMs is missing. Include a one-line note on how to replace it in the future (e.g., compute active session time from turns client-side if needed).
+Where: src/features/conversation/hooks/useSession.ts.
+Why: This makes the fallback and its limitations explicit for future maintainers.
+
+Dependencies
+- Step 2 (DB schema) must be done before step 3 (storing the new value).
+- Step 3 must happen before step 4 (reading and exposing the value).
+- Step 4 and 5 must happen before step 6 (UI can only use the field once types and API data include it).
+- Step 7 can be done at any time but should be completed before finishing to ensure the fallback is documented.
+
+Decisions & tradeoffs
+- We store active duration in milliseconds as an INTEGER to avoid float drift and keep formatting precise. This also makes it easy to reuse in the UI.
+- We compute active session time using event_msg user_message/agent_message only, ignoring response_item content. This aligns with the existing parsing rule that primary content comes from event_msg, and keeps semantics consistent between display and timing.
+- We pair each user message with the last assistant message in the same turn to capture tool time and full response latency. This is chosen over “first assistant message” to better represent when the assistant actually completed its response.
+- We keep the client fallback as min/max timestamps to avoid introducing expensive client-side computation for large sessions. This is a tradeoff: fallback duration remains “session span,” not active session time. The comment should make this explicit for future work.
+- For sessions with no assistant replies in any turn, store NULL rather than 0 to distinguish “missing/unknown” from a valid zero-duration session. This allows the UI to fall back or hide the metric instead of showing “0m.”
+
+Landmines and non-obvious behavior
+- Schema changes: SQLite won’t error if you run ALTER TABLE twice, but you must guard to avoid crashes in older DBs. Use PRAGMA table_info(sessions) to check for the column.
+- parseJsonlFile() is a streaming parser; be careful to reset per-turn timing state when a new user_message arrives.
+- Agent messages can exist before any user_message (preamble). These must be ignored to avoid nonsensical durations.
+- If timestamps are missing or invalid, skip those durations; do not throw.
+- The UI currently uses startedAt/endedAt for other display purposes (time labels, sorting). Do not change those semantics; only change what the hourglass uses.
+- Don’t accidentally change response_item handling, since that would diverge from existing content logic.
+
+Verification
+- Rebuild index (POST /api/clear-index or /api/reindex). Then:
+  - Check SQLite sessions.active_duration_ms is populated for sessions with user/assistant turns.
+  - For a known session, manually compute one turn’s user→last assistant delta and confirm the sum matches the displayed hourglass value.
+  - Ensure sessions lacking assistant replies show no duration (empty string or fallback behavior).
+- UI checks:
+  - SessionHeader, SessionHeaderVariantB, SessionsPanel should all show the same hourglass value for a given session.
+  - If active_duration_ms is missing (older DB or fallback), hourglass should fall back to the previous min/max-based duration.
+- Regression check:
+  - Search and session previews still load correctly; no SQL errors after schema update.
+
+Edge-case expectations (based on interrupted/aborted flows)
+- Turns with no assistant reply (user message followed by tool calls/aborts and then a new user message) contribute no duration; this intentionally undercounts “effort” when no assistant response exists.
+- Permission prompts or other short assistant replies still count as the response for that turn; the metric is “time to assistant reply,” not “time to final task completion.”
+- Multiple assistant messages in a single turn use the last assistant timestamp to capture full tool time and any delayed final responses.
+- Assistant messages in the preamble (before the first user_message) are ignored.
+- Aborted tool calls do not directly affect the duration; they only matter if an assistant response arrives afterward.
+- Out-of-order or invalid timestamps are skipped (negative deltas ignored), so response time may be reduced in malformed logs.
+- turn_aborted handling: turn_aborted is an event_msg but does not start/end a turn (only user_message does). The accompanying <turn_aborted> guidance arrives as a response_item user message, which is ignored for timing; these aborts do not contribute duration unless an assistant reply occurs before the next real user_message.
+- Tool call events are usually response_item only; they never close a turn and only influence duration indirectly via the assistant’s eventual response.
+- Multiple turn_context entries can occur mid-turn; do not treat them as boundaries.
+
+Sketch from an interrupted session (illustrative, not strict JSON)
+- Key idea: only event_msg user_message/agent_message define response-time pairs.
+
+[
+  { type: "event_msg", payload: { type: "user_message", message: "what's the date?" }, ts: T1 },
+  { type: "response_item", payload: { type: "function_call", name: "shell_command" }, ts: T1+ },
+  { type: "response_item", payload: { type: "function_call_output", output: "aborted by user" }, ts: T1+ },
+  { type: "event_msg", payload: { type: "turn_aborted", reason: "interrupted" }, ts: T1+ },
+  { type: "response_item", payload: { type: "message", role: "user", content: "<turn_aborted>..." }, ts: T1+ },
+  { type: "event_msg", payload: { type: "user_message", message: "what do you think the date is actually" }, ts: T2 },
+  { type: "event_msg", payload: { type: "agent_message", message: "Want me to run `date` again?" }, ts: T3 },
+  { type: "event_msg", payload: { type: "user_message", message: "ok" }, ts: T4 },
+  { type: "response_item", payload: { type: "function_call", name: "shell_command" }, ts: T4+ },
+  { type: "response_item", payload: { type: "function_call_output", output: "aborted by user" }, ts: T4+ },
+  { type: "event_msg", payload: { type: "turn_aborted", reason: "interrupted" }, ts: T4+ }
+]
+
+What to watch for in this sketch
+- The first turn (T1) has no event_msg agent_message before the next user_message (T2) → contributes 0 duration.
+- The <turn_aborted> guidance is response_item (user role) and should not create a new turn.
+- The second turn (T2 → T3) is valid and contributes (T3 - T2).
+- Later tool-only sequences after a user_message that never get an agent_message contribute 0.

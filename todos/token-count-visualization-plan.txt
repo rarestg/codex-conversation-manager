@@ -1,0 +1,207 @@
+Token Count Visualization Plan (Handoff-Ready)
+
+Context
+Token count items currently arrive as event_msg payloads with type "token_count". The UI parses them but treats them as "meta", and they only show when the Meta toggle is enabled. We want token_count to be a first‑class item type: counted separately, toggleable separately, and rendered using a dedicated visual component (with 1–2 variants via the Canvas registry). Token count rendering should be off by default, but still counted in the stats row (count shown in compact “k” format).
+
+Key decisions (explicit)
+- Token Count is NOT Meta. It gets its own toggle and its own item renderer.
+- The stats row should display a compact count of token_count items (e.g., 23k for 23,000).
+- Toggle behavior: the token count toggle controls visibility of token_count items only; it does not affect meta items.
+- Token count items are hidden by default (toggle off initially).
+- In most sessions, token_count appears repeatedly; the final token_count entry reflects total_token_usage for the conversation. We should assume the last token_count item in the session is the most useful aggregate.
+
+Relevant code and data flow
+- Client JSONL parsing: src/features/conversation/parsing.ts
+  - event_msg with payload.type === 'token_count' currently becomes ParsedItem type 'token_count'.
+  - This is already distinct from 'meta' (turn_context/session_meta), but the UI filters/labels lump it under Meta.
+- Rendering:
+  - Turn + message rendering is in components like TurnCard.tsx and MessageCard.tsx (Token Count needs a dedicated renderer).
+- Stats + toggles:
+  - ConversationMain.tsx (or equivalent) computes counts and toggles for Thoughts/Tools/Meta/etc.
+- Canvas:
+  - Canvas registry: src/features/conversation/canvas/registry.tsx
+  - CanvasView: src/features/conversation/CanvasView.tsx
+  - Variants live in src/features/conversation/canvas/*.tsx
+  - See todos/canvas-registry-plan-context.txt for architecture constraints.
+
+Goals
+1) Token Count gets its own toggle and count, independent of Meta.
+2) Token Count items are hidden by default.
+3) Token Count items render with a specialized component (TokenCountCard) rather than raw JSON text.
+4) Two visual variants can be compared in Canvas (A/B), with shared parsing/formatting logic.
+
+Plan (execution order)
+
+1) Audit existing parsing and routing
+- Confirm parseJsonl already emits ParsedItem.type === 'token_count' for event_msg token_count.
+- Confirm MessageCard (or the item renderer) routes token_count into the same UI path as meta today.
+- Confirm stats/toggles currently only include Meta and not Token Count separately.
+
+2) Add dedicated toggle state and counts
+Where: src/features/conversation/ConversationMain.tsx (or wherever other toggles are stored).
+What to do:
+- Introduce a showTokenCounts boolean, default false.
+- Count token_count items from filtered turns (or original turns) and surface as tokenCount.
+- Add UI toggle for Token Count alongside existing toggles (Thoughts/Tools/Meta/Full).
+Behavior:
+- Token Count toggle controls only ParsedItem.type === 'token_count'.
+- Meta toggle should only include ParsedItem.type === 'meta'.
+- The toggle label should include the count of token_count items (not total tokens).
+
+3) Adjust filtering logic
+Where: same filtering logic used to derive filteredTurns.
+What to do:
+- Ensure filtering checks:
+  - if !showMeta: exclude ParsedItem.type === 'meta'
+  - if !showTokenCounts: exclude ParsedItem.type === 'token_count'
+- Confirm the default state hides token_count items even if meta is shown.
+- Verify that toggling token_count does not affect other content.
+
+4) Update stats row to include Token Count item count
+Where: SessionHeader.tsx and SessionHeaderVariantB.tsx (stats row).
+What to do:
+- Add a stat chip (icon + number) for token_count item count.
+- Use compact formatting: 23k for 23,000. (see formatting helper below)
+- This stat is not the same as total_tokens; it is the count of token_count entries in the session.
+
+5) Add formatting helpers
+Where: src/features/conversation/format.ts
+What to do:
+- Add a helper to format counts for display, e.g. formatCompactCount(23000) => "23k".
+- Keep it simple (base‑10 k/m). Example rules:
+  - < 1000 => "999"
+  - 1,000–999,999 => "12k" (round or floor, pick one and document)
+  - 1,000,000+ => "1.2m" or "1m" (pick one; consistency matters)
+- Use this helper in stats chips and toggle labels.
+
+6) Create TokenCountCard component
+Where: src/features/conversation/components/TokenCountCard.tsx
+What to do:
+- Build a structured renderer for token_count items using ParsedItem.raw.
+- Parse:
+  - info.total_token_usage, info.last_token_usage, info.model_context_window
+  - rate_limits.primary/secondary/credits, if present
+- Display:
+  - Context window usage (bar + %)
+  - Last turn stats (input/cached/reasoning/output)
+  - Rate limit usage bars
+- Fallback: if raw data is missing or invalid, show a minimal “Token usage unavailable” box with the raw JSON string.
+
+7) Route token_count items to TokenCountCard
+Where: src/features/conversation/components/MessageCard.tsx (or the switch that chooses item renderers).
+What to do:
+- Add a case for ParsedItem.type === 'token_count' that renders TokenCountCard.
+- Ensure token_count items respect showTokenCounts filter (from step 3).
+
+8) Add shared token_count parsing utility
+Where: src/features/conversation/format.ts or new file src/features/conversation/tokenCounts.ts
+What to do:
+- Create a function to normalize the raw token_count entry into a single shape:
+  - totalTokens, inputTokens, cachedTokens, outputTokens, reasoningTokens
+  - lastTokens (same shape)
+  - contextWindowSize
+  - rate limit usage percent for primary/secondary
+  - derived values: cache hit rate, context usage percent
+- Both TokenCountCard and Canvas variants should use this helper.
+
+9) Canvas variants for design exploration
+Where:
+- src/features/conversation/canvas/tokenCountVariants.tsx (new)
+- src/features/conversation/canvas/registry.tsx (add demo)
+What to do:
+- Create two variants:
+  - Variant A: compact “pill + bar” layout
+  - Variant B: panel layout matching the ASCII mock (header + sections + bars)
+- Each variant should:
+  - Accept { context } as defined in canvas/types.ts
+  - Find a token_count item from context (prefer the last token_count entry in the session)
+  - Fall back to a hardcoded fixture if no session data exists
+- Add a new canvas demo entry:
+  - id: "token-count"
+  - label: "Token Count"
+  - description: "Visualize token usage + rate limits"
+  - requiresSessionData: true (or false if you include fixture)
+  - variants: [VariantA, VariantB]
+
+10) Token count in conversation export (optional decision)
+Default proposal:
+- Keep token_count items included in the export only when the Token Count toggle is enabled (consistent with other hidden items).
+- If changes are needed, update src/features/conversation/copy.ts accordingly.
+
+Implementation details and guidance
+- Token Count entries are event_msg only; response_item token_count is not a thing.
+- turn_context entries can appear mid‑turn; do not treat them as boundaries.
+- The “last token_count” entry likely includes the full total_token_usage; consider using that for a “summary view” in Canvas even if you render each token_count item in the conversation view.
+- Keep the token_count renderer resilient to missing fields; real logs can be incomplete.
+
+Edge cases to test
+- Sessions with no token_count events: counts should be zero, toggle present but no items.
+- Sessions with one token_count entry: render should work, stats show "1".
+- Sessions with many token_count entries: toggling on should show many token cards (ensure scroll performance is acceptable).
+- Missing info or rate_limits fields: renderer should not crash.
+
+Suggested file touch list (likely)
+- src/features/conversation/ConversationMain.tsx (toggle state + filtering + stats)
+- src/features/conversation/components/MessageCard.tsx (route token_count to TokenCountCard)
+- src/features/conversation/components/TokenCountCard.tsx (new)
+- src/features/conversation/format.ts (formatCompactCount + token count parsing helpers)
+- src/features/conversation/canvas/tokenCountVariants.tsx (new)
+- src/features/conversation/canvas/registry.tsx (add demo)
+- src/features/conversation/CanvasView.tsx (no change if registry already supports demo/variants)
+- src/features/conversation/types.ts (if you add any new types for token_count parsing)
+- src/features/conversation/copy.ts (optional)
+
+Verification checklist
+- Toggle behavior:
+  - Token Count toggle shows/hides only token_count items.
+  - Meta toggle shows/hides only meta items.
+  - Token Count defaults to off.
+- Stats row:
+  - Token Count stat chip shows compact count (k/m formatting).
+  - Count matches number of token_count items in the session.
+- Rendering:
+  - TokenCountCard renders correctly and doesn’t break on missing fields.
+  - Fallback rendering works when data is malformed or absent.
+- Canvas:
+  - /canvas demo for Token Count loads.
+  - Variant A/B render using real session data when selected.
+  - Variants render with fixture data if no session is loaded (if enabled).
+
+Notes for engineers with no prior context
+- This app parses raw JSONL client‑side; SQLite is used only for previews/search.
+- Token Count is a special event_msg payload; you should never parse response_item for it.
+- All toggles filter the already‑parsed turn items; toggles should not mutate the raw parsed data.
+- Canvas is a separate playground for swapping component variants; it must not change production behavior.
+
+Token count JSON shape reference
+- Parser location: src/features/conversation/parsing.ts
+- Event form (illustrative, not strict JSON):
+  {
+    "type": "event_msg",
+    "payload": {
+      "type": "token_count",
+      "info": {
+        "total_token_usage": {
+          "input_tokens": 8888,
+          "cached_input_tokens": 6656,
+          "output_tokens": 16,
+          "reasoning_output_tokens": 0,
+          "total_tokens": 8904
+        },
+        "last_token_usage": {
+          "input_tokens": 8888,
+          "cached_input_tokens": 6656,
+          "output_tokens": 16,
+          "reasoning_output_tokens": 0,
+          "total_tokens": 8904
+        },
+        "model_context_window": 258400
+      },
+      "rate_limits": {
+        "primary": { "used_percent": 2, "window_minutes": 300, "resets_at": 1769217200 },
+        "secondary": { "used_percent": 27, "window_minutes": 10080, "resets_at": 1769372011 },
+        "credits": { "has_credits": false, "unlimited": false, "balance": null },
+        "plan_type": null
+      }
+    }
+  }
