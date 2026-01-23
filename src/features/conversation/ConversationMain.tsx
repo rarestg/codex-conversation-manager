@@ -1,3 +1,4 @@
+import { SessionHeaderVariantB } from './components/SessionHeaderVariantB';
 import { SessionOverview } from './components/SessionOverview';
 import { TurnList } from './components/TurnList';
 import { useRenderDebug } from './hooks/useRenderDebug';
@@ -49,6 +50,9 @@ export const ConversationMain = ({
   return (
     <main className="flex-1 min-w-0 space-y-6">
       <SessionOverview
+        HeaderComponent={SessionHeaderVariantB}
+        toggleVariant="compact"
+        showToggleCountsWhenOff
         activeSession={activeSession}
         sessionDetails={sessionDetails}
         sessionsRoot={sessionsRoot}

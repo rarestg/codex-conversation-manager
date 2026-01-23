@@ -36,8 +36,9 @@ Label props
 - `idleLabel` (required): default visible label.
 - `hoverLabel` (optional): defaults to "Copy"; set to `null` to disable hover swapping.
 - `copiedLabel` (optional): defaults to "Copied!".
-- `failedLabel` (optional): defaults to "Copy failed".
+- `failedLabel` (optional): defaults to "Failed".
 - `reserveLabel` (optional): width anchor; defaults to the widest known label (string labels only) to prevent layout shifts.
+- Hover/copied/failed labels intentionally render without truncation so they can overflow the reserved width if needed.
 
 Icons
 - `copiedIcon` (optional): inline icon appended to the copied label (defaults to a green check).

@@ -53,7 +53,7 @@ export const CopyButton = ({
   const { status, message, showFeedback } = useCopyFeedback();
   const resolvedHoverLabel = hoverLabel === undefined ? 'Copy' : hoverLabel;
   const resolvedCopiedLabel = copiedLabel === undefined ? 'Copied!' : copiedLabel;
-  const resolvedFailedLabel = failedLabel === undefined ? 'Copy failed' : failedLabel;
+  const resolvedFailedLabel = failedLabel === undefined ? 'Failed' : failedLabel;
   const resolvedCopiedIcon = copiedIcon === undefined ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : copiedIcon;
   const resolvedFailedIcon = failedIcon === undefined ? <X className="h-3.5 w-3.5 text-rose-500" /> : failedIcon;
   const hasHoverLabel = resolvedHoverLabel !== null && resolvedHoverLabel !== false;
@@ -140,13 +140,17 @@ export const CopyButton = ({
   const leadingClassNameMerged = ['shrink-0', leadingClassName].filter(Boolean).join(' ');
   const labelWrapperClassNameMerged = ['relative inline-grid min-w-0', labelWrapperClassName].filter(Boolean).join(' ');
   const labelClassNameMerged = ['min-w-0 truncate', labelClassName].filter(Boolean).join(' ');
+  // Copied/failed labels can overflow the reserved width to avoid truncating status text.
+  const labelOverlayClassNameMerged = ['min-w-0', labelClassName, 'overflow-visible text-clip']
+    .filter(Boolean)
+    .join(' ');
   const reserveLabelNode = (
     <span aria-hidden className={`${labelClassNameMerged} col-start-1 row-start-1 opacity-0`}>
       {resolvedReserveLabel}
     </span>
   );
   const labelStack = (
-    <>
+    <span className="absolute inset-0 grid">
       <span
         aria-hidden
         data-state={status}
@@ -160,7 +164,7 @@ export const CopyButton = ({
         <span
           aria-hidden
           data-state={status}
-          className={`${labelClassNameMerged} col-start-1 row-start-1 opacity-0 transition-opacity duration-150 data-[state=copied]:opacity-0 data-[state=error]:opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100`}
+          className={`${labelOverlayClassNameMerged} col-start-1 row-start-1 opacity-0 transition-opacity duration-150 data-[state=copied]:opacity-0 data-[state=error]:opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100`}
         >
           {resolvedHoverLabel}
         </span>
@@ -169,7 +173,7 @@ export const CopyButton = ({
         <span
           aria-hidden
           data-state={status}
-          className={`${labelClassNameMerged} col-start-1 row-start-1 opacity-0 transition-opacity duration-150 data-[state=copied]:opacity-100`}
+          className={`${labelOverlayClassNameMerged} col-start-1 row-start-1 opacity-0 transition-opacity duration-150 data-[state=copied]:opacity-100`}
         >
           {resolvedCopiedLabelNode}
         </span>
@@ -178,12 +182,12 @@ export const CopyButton = ({
         <span
           aria-hidden
           data-state={status}
-          className={`${labelClassNameMerged} col-start-1 row-start-1 opacity-0 transition-opacity duration-150 data-[state=error]:opacity-100`}
+          className={`${labelOverlayClassNameMerged} col-start-1 row-start-1 opacity-0 transition-opacity duration-150 data-[state=error]:opacity-100`}
         >
           {resolvedFailedLabelNode}
         </span>
       )}
-    </>
+    </span>
   );
 
   return (

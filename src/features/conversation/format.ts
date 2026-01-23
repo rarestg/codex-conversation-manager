@@ -137,5 +137,24 @@ const HOME_PATH_REGEX = /^(?:\/Users\/[^/]+|\/home\/[^/]+|[A-Za-z]:\\Users\\[^\\
 
 export const formatWorkspacePath = (value?: string | null) => {
   if (!value) return '';
-  return value.replace(HOME_PATH_REGEX, '~');
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  const match = trimmed.match(HOME_PATH_REGEX);
+  if (!match) return trimmed;
+  const home = match[0].replace(/[\\/]+$/, '');
+  const cleaned = trimmed.replace(/[\\/]+$/, '');
+  if (cleaned === home) return cleaned;
+  return `~${cleaned.slice(home.length)}`;
+};
+
+export const formatRepoFallbackPath = (value?: string | null) => {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const match = trimmed.match(HOME_PATH_REGEX);
+  if (!match) return trimmed;
+  const home = match[0].replace(/[\\/]+$/, '');
+  const cleaned = trimmed.replace(/[\\/]+$/, '');
+  if (cleaned === home) return cleaned;
+  return `~${cleaned.slice(home.length)}`;
 };
