@@ -85,6 +85,8 @@ export const SessionHeaderVariantB = ({
     }
     return formatRepoFallbackPath(cwdValue);
   };
+  // Note: if a session hasn't been indexed yet, activeSession.cwd may be null even when
+  // sessionDetails.cwd exists, so the repo fallback can show "no repo" until indexing fills it.
   const repoLabel = activeSession ? getRepoLabel(activeSession.gitRepo, activeSession.cwd) : null;
   const isRepoFromGit = Boolean(activeSession?.gitRepo?.trim());
   const headerClassNameMerged = ['space-y-3', headerClassName].filter(Boolean).join(' ');
@@ -131,7 +133,10 @@ export const SessionHeaderVariantB = ({
       className={subtitleButtonClassName}
     />
   ) : (
-    <span className={`${subtitleItemClassName} text-slate-400`}>no repo</span>
+    <span className={`${subtitleItemClassName} text-slate-400`}>
+      <Minus className="h-3.5 w-3.5" />
+      <span className={subtitleLabelClassName}>no repo</span>
+    </span>
   );
   const branchNode = activeSession?.gitBranch ? (
     <CopyButton

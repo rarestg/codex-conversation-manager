@@ -76,7 +76,7 @@ Checklist for future changes
 - Are you mixing space-y/gap with mt/mb in the same stack? If yes, consolidate.
 - Are grid columns explicitly defined at all breakpoints? If not, add grid-cols-1.
 - Do CopyButtons reserve width for labels and avoid layout shift? If not, add reserveLabel.
-- Are centered CopyButtons using grid layout (not absolute overlays)? If not, refactor.
+- Are CopyButtons left-aligned and using reserveLabel to prevent layout shift? If not, refactor.
 - Do repeated rows (date/repo/branch) share a unified layout style? If not, extract shared classes.
 
 
