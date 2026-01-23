@@ -92,7 +92,8 @@ export const CanvasView = ({
   const demoSession = demoRequiresSession ? activeSession : null;
   const demoSessionDetails = demoRequiresSession ? sessionDetails : {};
   const resolvedSessionsRoot = sessionsTree?.root || sessionsRoot;
-  const variantGridClassName = selectedVariants.length > 1 ? 'grid gap-6 lg:grid-cols-2 items-start' : 'grid gap-6';
+  const variantGridClassName =
+    selectedVariants.length > 1 ? 'grid gap-6 grid-cols-1 lg:grid-cols-2 items-start' : 'grid gap-6 grid-cols-1';
   const canvasContext: CanvasContext = {
     activeSession: demoSession,
     sessionDetails: demoSessionDetails,
@@ -247,7 +248,9 @@ export const CanvasView = ({
       {selectedVariants.length ? (
         <div className={variantGridClassName}>
           {selectedVariants.map((variant) => (
-            <CanvasVariantCard key={variant.id} variant={variant} context={canvasContext} />
+            <div key={variant.id} className="min-w-0">
+              <CanvasVariantCard variant={variant} context={canvasContext} />
+            </div>
           ))}
         </div>
       ) : (

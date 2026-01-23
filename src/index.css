@@ -91,13 +91,6 @@
   .shadow-card {
     box-shadow: 0 18px 35px -25px rgba(15, 23, 42, 0.4);
   }
-
-  .line-clamp-2 {
-    display: -webkit-box;
-    overflow: hidden;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-  }
 }
 
 @keyframes rise {
