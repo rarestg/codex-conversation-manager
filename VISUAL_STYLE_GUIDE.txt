@@ -37,13 +37,10 @@ CopyButton UX Standard
    - Use <output aria-live="polite"> to announce success/failure.
    - If idleLabel is not a string, always provide ariaLabel.
 
-Centered label layout (CopyButton)
-- Do not use absolute positioning for centered labels.
-- For centerLabel buttons, use a two-column grid:
-  - grid-cols-[auto_minmax(0,1fr)]
-  - leading icon in column 1
-  - label stack in column 2, centered via justify-self-center
-- This prevents label overlap with the leading icon and keeps the label centered in the remaining space.
+Label alignment (CopyButton)
+- CopyButton labels are left-aligned within their slot by default.
+- Do not add text-center or absolute overlays to center labels.
+- If a button needs visual balance, adjust padding or overall layout instead of centering the label stack.
 
 SessionHeaderVariantB Rhythm Rules
 1) Header stack
@@ -98,4 +95,3 @@ Spacing Tokens + Rules of Thumb
 Component Consistency Rules
 - Subtitle rows (date/repo/branch) should use the same component type (CopyButton) for consistent alignment and affordance.
 - If you convert a text row to CopyButton and want no hover text swap, set hoverLabel={null}.
-- Centered CopyButtons must use the grid-based layout; do not reintroduce absolute overlays.
