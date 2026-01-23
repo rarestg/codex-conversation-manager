@@ -1,0 +1,79 @@
+Context
+We are changing how the session picker (the Sessions panel in the UI) gets its data. Today, every time the picker loads, the backend endpoint GET /api/sessions scans the entire sessions root on disk to find .jsonl files. That full filesystem walk happens on every picker load, even if the SQLite index is already up to date. The scan is expensive and unnecessary for normal use when the database already contains indexed sessions. Additionally, the preview text shown in the picker (the first user message) can be thousands of characters, which causes oversized DOM nodes and poor UX. We want to render the picker directly from the database and only reindex when the user explicitly triggers it. We also want to hard-cut preview text to 1000 characters to avoid huge previews. Finally, because DB-only listings can include stale entries (files deleted on disk), the UI should surface a clear “file missing—please reindex” error when a user clicks a ghost session.
+
+Relevant code and how it connects
+- server/apiPlugin.ts
+  - GET /api/sessions is the endpoint used by the picker. It currently calls scanSessionFiles (recursive filesystem walk), gets session metadata from SQLite via getSessionsPreviewMap, and then builds the tree with buildSessionsTree.
+  - parseJsonlFile() is used during indexing (POST /api/reindex, POST /api/clear-index). It extracts the first user message and stores it in sessions.first_user_message.
+  - readFirstUserMessage() is used on GET /api/sessions as a fallback for files that are not in the database. This is a file read and currently has no content length clamp.
+  - getSessionsPreviewMap() queries the sessions table and joins messages for counts and timestamps, then returns preview and metadata for each session.
+  - buildSessionsTree() groups sessions into the year/month/day UI tree based on the session file path (sessions.path) which is stored as the relative path of the JSONL file.
+- src/features/conversation/components/SessionsPanel.tsx
+  - Renders the picker UI using the tree returned by GET /api/sessions. The preview text shown in the title line is file.preview.
+- src/features/conversation/hooks/useSessions.ts
+  - Fetches /api/sessions and drives the data in the picker. The UI refresh button currently re-fetches /api/sessions.
+- src/features/conversation/hooks/useSession.ts
+  - Calls GET /api/session?path=... to load the selected session file. This is where we can surface “file missing” errors for ghost sessions.
+- src/features/conversation/ConversationViewer.tsx
+  - Holds the error state and renders API errors in the UI. If the session load fails with 404, we can surface a specific message.
+
+The Plan
+Step 1: Add a preview truncation helper and limit constant in server/apiPlugin.ts.
+- Add a constant MAX_PREVIEW_CHARS = 1000 near other constants.
+- Add a helper function truncatePreview(value: string | null | undefined): string | null to hard-cut any string longer than MAX_PREVIEW_CHARS.
+- Rationale: centralizes the limit and avoids scattered truncation logic.
+
+Step 2: Apply truncation at indexing time in parseJsonlFile().
+- When setting firstUserMessage, run it through truncatePreview before storing it in the return object.
+- Rationale: ensures SQLite never stores unbounded previews for new indexing operations. This is the most important clamp for DB health.
+
+Step 3: Apply truncation when building responses in any preview path.
+- When mapping rows into response structures, pass row.first_user_message through truncatePreview.
+- Keep truncatePreview usage limited to preview fields (sessions.first_user_message). Do not touch messages table content.
+- Rationale: protects against older database entries that already contain huge previews; ensures UI safety.
+
+Step 4: Refactor buildSessionsTree to accept minimal entries (no fake size).
+- Define a SessionTreeEntry (or SessionMinimalEntry) type that contains only the fields used in the tree (id/relPath, filename, preview, timestamp, cwd, git info, counts, startedAt/endedAt, sessionId).
+- Update buildSessionsTree to accept SessionTreeEntry[] instead of FileEntry[].
+- Update call sites accordingly.
+- Rationale: avoids “lying” to buildSessionsTree with dummy size/mtime values and makes data flow explicit.
+
+Step 5: Create a dedicated DB query for the tree data and make /api/sessions DB-only.
+- Add a helper like getSessionsForTree(database, workspace?) that returns the exact rows needed for the picker in one SQL query, including message counts and timestamps.
+- Build SessionTreeEntry[] directly from that query, then call buildSessionsTree to produce the tree.
+- Remove scanSessionFiles and readFirstUserMessage usage from GET /api/sessions.
+- Rationale: one SQL query, no disk scanning on picker load. Sessions shown are exactly what the index contains.
+
+Step 6: Add ghost session UX on the frontend.
+- In useSession (or the API error handling path), detect a 404/400 from GET /api/session for a selected session. Provide a clear user-facing message such as “Session file not found. Please reindex.”
+- Ensure the error is distinguishable from generic network errors.
+- Rationale: DB-only picker can show stale sessions; the UI should guide users to reindex when a file is missing.
+
+Step 7: Leave reindex explicit.
+- No change to POST /api/reindex or POST /api/clear-index. These remain the explicit mechanism to refresh DB contents from disk.
+- The Sessions “Refresh” button will only re-fetch the DB view unless we intentionally change it later.
+
+Decisions and tradeoffs
+- Chosen approach: DB-only session picker.
+  - Pros: very fast on load, no disk traversal, relies on existing index, simple to reason about.
+  - Cons: picker can be stale until reindex. This is acceptable and is mitigated by clear error messaging when a file is missing.
+- Preview length limit: hard cut at 1000 chars.
+  - Pros: prevents huge DOM nodes and keeps UI snappy. Hard cut is deterministic and cheap.
+  - Cons: no visual indication of truncation. If needed, a “(truncated)” hint can be added later.
+- We are not adding filesystem watchers or OS-specific APIs.
+  - Pros: avoids complexity and long-running processes.
+  - Cons: no automatic refresh when new files appear.
+
+Landmines
+- buildSessionsTree groups by path segments (year/month/day). If sessions.path does not follow that convention, grouping will be odd. This is the current behavior; do not change it unintentionally.
+- getSessionsForTree must include the same fields the UI expects (sessionId, timestamps, counts). Missing fields will degrade display.
+- The UI currently assumes preview exists; truncation will shorten it. If any tests or snapshots assume full content, they need updates.
+- DB-only listing means deleted files can remain visible until reindex. The ghost-session UX is required to avoid confusing failures.
+
+Verification
+- Load the app: the Sessions panel should render quickly without disk scanning.
+- Click sessions that exist: they should load normally.
+- Click a session whose file was deleted: the UI should show “Session file not found. Please reindex.”
+- Reindex via Settings: new sessions appear, deleted sessions are removed.
+- Confirm preview strings are hard-cut at 1000 characters in the Sessions list (no ellipsis).
+- Optional: run `npm run typecheck` and `npm run check`.

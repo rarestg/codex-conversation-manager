@@ -129,10 +129,10 @@ export const MarkdownBlock = ({ content }: { content: string }) => {
           );
         },
         ul({ children }) {
-          return <ul className="ml-6 list-disc space-y-1">{children}</ul>;
+          return <ul className="list-disc">{children}</ul>;
         },
         ol({ children }) {
-          return <ol className="ml-6 list-decimal space-y-1">{children}</ol>;
+          return <ol className="list-decimal">{children}</ol>;
         },
         p({ children }) {
           return <p>{children}</p>;
