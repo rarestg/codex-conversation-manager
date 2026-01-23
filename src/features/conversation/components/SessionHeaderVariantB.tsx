@@ -83,7 +83,7 @@ export const SessionHeaderVariantB = ({
     return parts[parts.length - 1] ?? null;
   };
   const repoLabel = activeSession ? getRepoLabel(activeSession.gitRepo, activeSession.cwd) : null;
-  const headerClassNameMerged = ['space-y-4', headerClassName].filter(Boolean).join(' ');
+  const headerClassNameMerged = ['space-y-3', headerClassName].filter(Boolean).join(' ');
   const titleClassNameMerged = ['text-xl text-slate-900 leading-snug line-clamp-2', titleClassName]
     .filter(Boolean)
     .join(' ');
@@ -156,18 +156,18 @@ export const SessionHeaderVariantB = ({
       leadingClassName="w-16 shrink-0 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400"
       labelWrapperClassName="min-w-0 flex-1"
       labelClassName="min-w-0 truncate text-xs text-slate-700"
-      className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white/70 px-3 py-2 text-left"
+      className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white/70 px-3 py-1.5 text-left"
     />
   );
 
   return (
     <div className={headerClassNameMerged}>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 w-full">
-          <h2 className={`${titleClassNameMerged} mb-1`} title={title}>
+        <div className="min-w-0 w-full flex flex-col gap-3">
+          <h2 className={titleClassNameMerged} title={title}>
             {title}
           </h2>
-          <div className="mt-3 flex w-full items-center text-xs text-slate-500">
+          <div className="flex w-full items-center text-xs text-slate-500">
             {timeNode}
             <div className="flex-1 px-2 text-center text-slate-300">•</div>
             {repoNode}
