@@ -239,8 +239,6 @@ export const SessionHeader = ({
           reserveLabel="Copy conversation"
           ariaLabel="Copy conversation"
           leading={<Copy className="h-3.5 w-3.5" />}
-          centerLabel
-          labelClassName="text-center"
           className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-50"
         />
       </div>

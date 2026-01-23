@@ -22,7 +22,6 @@ type CopyButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type' | 'o
     copiedIcon?: ReactNode;
     failedIcon?: ReactNode;
     duration?: number;
-    centerLabel?: boolean;
     ariaLabel?: string;
     copiedAnnouncement?: string;
     failedAnnouncement?: string;
@@ -44,7 +43,6 @@ export const CopyButton = ({
   copiedIcon,
   failedIcon,
   duration = 1500,
-  centerLabel = false,
   ariaLabel,
   copiedAnnouncement = 'Copied!',
   failedAnnouncement = 'Copy failed.',
@@ -138,17 +136,9 @@ export const CopyButton = ({
   };
 
   const buttonClassName = ['group', className].filter(Boolean).join(' ');
-  const contentWrapperClassName = centerLabel
-    ? 'inline-grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2'
-    : 'inline-flex min-w-0 items-center gap-2';
+  const contentWrapperClassName = 'inline-flex min-w-0 items-center gap-2';
   const leadingClassNameMerged = ['shrink-0', leadingClassName].filter(Boolean).join(' ');
-  const labelWrapperClassNameMerged = [
-    'relative inline-grid min-w-0',
-    centerLabel ? 'w-full justify-self-center text-center' : null,
-    labelWrapperClassName,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  const labelWrapperClassNameMerged = ['relative inline-grid min-w-0', labelWrapperClassName].filter(Boolean).join(' ');
   const labelClassNameMerged = ['min-w-0 truncate', labelClassName].filter(Boolean).join(' ');
   const reserveLabelNode = (
     <span aria-hidden className={`${labelClassNameMerged} col-start-1 row-start-1 opacity-0`}>
