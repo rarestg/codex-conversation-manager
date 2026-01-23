@@ -32,7 +32,7 @@ Fix commands when needed:
   - `SearchPanel.tsx` (FTS search + results)
   - `SessionsPanel.tsx` (session tree + session ID copy)
   - `WorkspacesPanel.tsx` (workspace summaries + filters)
-  - `CopyButton.tsx` (localized copy feedback)
+  - `CopyButton.tsx` (shared copy UX + success/error feedback)
   - `SessionHeader.tsx` (session details + copy controls)
   - `TurnList.tsx` / `TurnCard.tsx` / `MessageCard.tsx` (turn + message rendering)
   - `SettingsModal.tsx` (sessions root + indexing actions)
@@ -43,12 +43,12 @@ Fix commands when needed:
   - `useSearch.ts` (FTS search + resolve session IDs)
   - `useUrlSync.ts` (URL deep-link sync)
   - `useWorkspaces.ts` (workspace summaries)
-  - `useCopyFeedback.ts` (copied-to-clipboard feedback; used locally via `CopyButton`)
+  - `useCopyFeedback.ts` (copy status + live-region feedback; used by `CopyButton`)
   - `useRenderDebug.ts` / `useWhyDidYouRender.ts` (dev-only render instrumentation; gated)
 - `src/features/conversation/parsing.ts` - JSONL parsing rules + turn grouping.
 - `src/features/conversation/api.ts` - client fetch helpers for API endpoints.
 - `src/features/conversation/markdown.tsx` - sanitized markdown rendering + snippet highlighting.
-- `src/features/conversation/copy.ts` - per-message + conversation export formatting.
+- `src/features/conversation/copy.ts` - per-message + conversation export formatting + copy helper.
 - `src/features/conversation/format.ts` - formatting helpers (timestamps, truncation).
 - `src/features/conversation/debug.ts` - render debug flag (`VITE_RENDER_DEBUG`).
 - `src/features/conversation/url.ts` - session/turn query-string helpers.
@@ -140,6 +140,7 @@ Fix commands when needed:
 - Per-message copy:
   - **Copy text** uses a markdown AST → plain text conversion that preserves line breaks.
   - **Copy MD** copies the raw message content.
+- Copy actions use `CopyButton`, which centralizes hover/click feedback and success/error handling.
 - Conversation-wide copy respects visibility toggles and uses XML-like tags:
   - `<USER-MSG-n>`, `<ASSISTANT-RESPONSE-n>`, `<THINKING-n>`
   - `<TOOL-CALL-n name="..." call_id="...">`, `<TOOL-OUTPUT-n call_id="...">`

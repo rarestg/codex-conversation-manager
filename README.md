@@ -11,7 +11,7 @@ A local web app for parsing, visualizing, and searching Codex JSONL sessions. It
 - View conversations grouped by user turn with inline tools/actions.
 - Full-text search across user and assistant messages via SQLite FTS5.
 - Markdown rendering with sanitized output and code highlighting.
-- Per-message and conversation-wide copy actions.
+- Per-message and conversation-wide copy actions with inline feedback.
 - Session settings modal (set root, reindex, clear/rebuild index).
 - Workspace summary panel for filtering sessions by working directory.
 - URL deep links to sessions and turns (`?session=...&turn=...`).
@@ -49,6 +49,7 @@ pre-commit run --all-files
   - `SearchPanel.tsx` (FTS search + results)
   - `SessionsPanel.tsx` (session tree + session ID copy)
   - `WorkspacesPanel.tsx` (workspace summaries + filters)
+  - `CopyButton.tsx` (shared copy UX + feedback)
   - `SessionHeader.tsx` (session metadata + copy controls)
   - `TurnList.tsx` / `TurnCard.tsx` / `MessageCard.tsx` (conversation rendering)
   - `SettingsModal.tsx` (session root + indexing actions)
@@ -58,7 +59,7 @@ pre-commit run --all-files
   - `useSession.ts` (load/parse a session)
   - `useSearch.ts` (FTS search + resolve session IDs)
   - `useUrlSync.ts` (deep-link sync)
-  - `useCopyFeedback.ts` (clipboard feedback state)
+  - `useCopyFeedback.ts` (clipboard feedback state + status)
 - `src/features/conversation/parsing.ts` implements JSONL parsing rules and turn grouping.
 - `src/features/conversation/markdown.tsx` handles sanitized markdown + snippet highlighting.
 - `src/features/conversation/api.ts` wraps API fetches; `copy.ts` formats exports; `url.ts` handles deep links.
