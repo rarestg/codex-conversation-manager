@@ -1,8 +1,9 @@
-import { Brain, Clock, Copy, Eye, GitBranch, Github, Hourglass, Info, Repeat2, Wrench } from 'lucide-react';
+import { Brain, Clock, Copy, Eye, Folder, GitBranch, Github, Hourglass, Info, Repeat2, Wrench } from 'lucide-react';
 import { buildConversationExport } from '../copy';
 import {
   formatDuration,
   formatRelativeTime,
+  formatRepoFallbackPath,
   formatTime,
   formatTimestamp,
   formatWorkspacePath,
@@ -84,13 +85,12 @@ export const SessionHeader = ({
       }
       return cleaned;
     }
-    if (!cwdValue) return null;
-    const trimmed = cwdValue.trim();
-    if (!trimmed) return null;
-    const parts = trimmed.split(/[\\/]/).filter(Boolean);
-    return parts[parts.length - 1] ?? null;
+    return formatRepoFallbackPath(cwdValue);
   };
   const repoLabel = activeSession ? getRepoLabel(activeSession.gitRepo, activeSession.cwd) : null;
+  const isRepoFromGit = Boolean(activeSession?.gitRepo?.trim());
+  const RepoIcon = isRepoFromGit ? Github : Folder;
+  const repoTitle = (activeSession?.gitRepo ?? repoLabel) || '';
   const headerClassNameMerged = ['flex flex-wrap items-start justify-between gap-4', headerClassName]
     .filter(Boolean)
     .join(' ');
@@ -175,8 +175,8 @@ export const SessionHeader = ({
                   idleLabel={repoLabel}
                   reserveLabel={repoLabel}
                   ariaLabel="Copy repo"
-                  title={repoLabel}
-                  leading={<Github className="h-3.5 w-3.5" />}
+                  title={repoTitle}
+                  leading={<RepoIcon className="h-3.5 w-3.5" />}
                   labelWrapperClassName="min-w-0"
                   labelClassName="min-w-0 truncate"
                   className="inline-flex min-w-0 items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] leading-none text-slate-600 shadow-sm"

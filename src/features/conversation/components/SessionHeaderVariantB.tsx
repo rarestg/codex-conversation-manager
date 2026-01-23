@@ -1,6 +1,13 @@
-import { CalendarClock, Clock, Copy, Eye, GitBranch, Github, Hourglass, Repeat2 } from 'lucide-react';
+import { CalendarClock, Clock, Copy, Eye, Folder, GitBranch, Github, Hourglass, Minus, Repeat2 } from 'lucide-react';
 import { buildConversationExport } from '../copy';
-import { formatDuration, formatRelativeTime, formatTimestamp, formatWorkspacePath, isSameDay } from '../format';
+import {
+  formatDuration,
+  formatRelativeTime,
+  formatRepoFallbackPath,
+  formatTimestamp,
+  formatWorkspacePath,
+  isSameDay,
+} from '../format';
 import { useRenderDebug } from '../hooks/useRenderDebug';
 import type { SessionDetails, SessionFileEntry, Turn } from '../types';
 import { CopyButton } from './CopyButton';
@@ -76,13 +83,10 @@ export const SessionHeaderVariantB = ({
       }
       return cleaned;
     }
-    if (!cwdValue) return null;
-    const trimmed = cwdValue.trim();
-    if (!trimmed) return null;
-    const parts = trimmed.split(/[\\/]/).filter(Boolean);
-    return parts[parts.length - 1] ?? null;
+    return formatRepoFallbackPath(cwdValue);
   };
   const repoLabel = activeSession ? getRepoLabel(activeSession.gitRepo, activeSession.cwd) : null;
+  const isRepoFromGit = Boolean(activeSession?.gitRepo?.trim());
   const headerClassNameMerged = ['space-y-3', headerClassName].filter(Boolean).join(' ');
   const titleClassNameMerged = ['text-xl text-slate-900 leading-snug line-clamp-2', titleClassName]
     .filter(Boolean)
@@ -92,8 +96,9 @@ export const SessionHeaderVariantB = ({
     .filter(Boolean)
     .join(' ');
   const actionsClassNameMerged = ['flex items-center gap-2', actionsClassName].filter(Boolean).join(' ');
-  const subtitleItemClassName = 'flex min-w-0 items-center gap-1 text-left text-xs text-slate-500';
-  const subtitleButtonClassName = `${subtitleItemClassName} hover:text-slate-700`;
+  const subtitleItemClassName =
+    'flex min-w-0 items-center gap-1 rounded-full border border-slate-200 px-2.5 py-1 text-left text-xs text-slate-500';
+  const subtitleButtonClassName = `${subtitleItemClassName} transition-colors hover:text-slate-700 disabled:opacity-60`;
   const subtitleLabelWrapperClassName = 'min-w-0 flex-1';
   const subtitleLabelClassName = 'min-w-0 truncate';
 
@@ -101,7 +106,6 @@ export const SessionHeaderVariantB = ({
     <CopyButton
       text={timestampLabel}
       idleLabel={timestampLabel}
-      reserveLabel={timestampLabel}
       hoverLabel={null}
       ariaLabel="Copy session timestamp"
       title={timestampLabel}
@@ -112,27 +116,27 @@ export const SessionHeaderVariantB = ({
       disabled={!timeSource}
     />
   );
+  const RepoIcon = isRepoFromGit ? Github : Folder;
+  const repoTitle = (activeSession?.gitRepo ?? repoLabel) || '';
   const repoNode = repoLabel ? (
     <CopyButton
       text={repoLabel}
       idleLabel={repoLabel}
-      reserveLabel={repoLabel}
       hoverLabel={null}
       ariaLabel="Copy repo"
-      title={repoLabel}
-      leading={<Github className="h-3.5 w-3.5" />}
+      title={repoTitle}
+      leading={<RepoIcon className="h-3.5 w-3.5" />}
       labelWrapperClassName={subtitleLabelWrapperClassName}
       labelClassName={subtitleLabelClassName}
       className={subtitleButtonClassName}
     />
   ) : (
-    <span className="truncate text-slate-400">no repo</span>
+    <span className={`${subtitleItemClassName} text-slate-400`}>no repo</span>
   );
   const branchNode = activeSession?.gitBranch ? (
     <CopyButton
       text={activeSession.gitBranch}
       idleLabel={activeSession.gitBranch}
-      reserveLabel={activeSession.gitBranch}
       hoverLabel={null}
       ariaLabel="Copy branch"
       title={activeSession.gitBranch}
@@ -142,7 +146,10 @@ export const SessionHeaderVariantB = ({
       className={subtitleButtonClassName}
     />
   ) : (
-    <span className="truncate text-slate-400">no branch</span>
+    <span className={`${subtitleItemClassName} text-slate-400`}>
+      <Minus className="h-3.5 w-3.5" />
+      <span className={subtitleLabelClassName}>no branch</span>
+    </span>
   );
 
   const renderMetaRow = (label: string, displayValue: string, copyValue: string, ariaLabel: string) => (

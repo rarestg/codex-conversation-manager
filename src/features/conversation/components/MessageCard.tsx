@@ -96,7 +96,7 @@ export const MessageCard = ({ item, itemIndex, showFullContent }: MessageCardPro
         )}
       </div>
 
-      <div className="mt-3">
+      <div className="mt-3 message-body">
         {isMarkdownItem ? (
           <MarkdownBlock content={truncated} />
         ) : (

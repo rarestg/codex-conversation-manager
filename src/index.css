@@ -72,6 +72,20 @@
   .chip-value {
     @apply min-w-0 flex-1 truncate font-mono text-slate-700 leading-none translate-y-[0.5px];
   }
+
+  .message-body,
+  .message-body * {
+    max-width: 100%;
+  }
+
+  .message-body {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .message-body pre {
+    white-space: pre-wrap;
+  }
 }
 
 @layer utilities {
