@@ -1,5 +1,5 @@
-import { Brain, Check, Clock, Copy, Eye, GitBranch, Github, Hourglass, Info, Repeat2, Wrench } from 'lucide-react';
-import { buildConversationExport, copyText } from '../copy';
+import { Brain, Clock, Copy, Eye, GitBranch, Github, Hourglass, Info, Repeat2, Wrench } from 'lucide-react';
+import { buildConversationExport } from '../copy';
 import {
   formatDuration,
   formatRelativeTime,
@@ -91,14 +91,6 @@ export const SessionHeader = ({
     return parts[parts.length - 1] ?? null;
   };
   const repoLabel = activeSession ? getRepoLabel(activeSession.gitRepo, activeSession.cwd) : null;
-  const handleCopyMeta = async (value: string) => {
-    await copyText(value);
-  };
-  const handleCopyConversation = async () => {
-    if (!visibleItemCount) return;
-    const formatted = buildConversationExport(filteredTurns);
-    await copyText(formatted);
-  };
   const headerClassNameMerged = ['flex flex-wrap items-start justify-between gap-4', headerClassName]
     .filter(Boolean)
     .join(' ');
@@ -110,6 +102,21 @@ export const SessionHeader = ({
     .filter(Boolean)
     .join(' ');
   const actionsClassNameMerged = ['flex items-center gap-3', actionsClassName].filter(Boolean).join(' ');
+
+  const renderMetaChip = (label: string, displayValue: string, copyValue: string, ariaLabel: string) => (
+    <CopyButton
+      text={copyValue}
+      idleLabel={displayValue}
+      reserveLabel={displayValue}
+      ariaLabel={ariaLabel}
+      title={copyValue}
+      leading={label}
+      leadingClassName="chip-label"
+      labelWrapperClassName="min-w-0 flex-1"
+      labelClassName="chip-value"
+      className="chip text-left"
+    />
+  );
 
   return (
     <div className={headerClassNameMerged}>
@@ -124,57 +131,15 @@ export const SessionHeader = ({
         </p>
         {(sessionId || cwd || activeSession?.filename) && (
           <div className={metaGridClassNameMerged}>
-            {sessionId && (
-              <div className="chip">
-                <span className="chip-label">Session</span>
-                <span className="chip-value" title={sessionId}>
-                  {sessionId}
-                </span>
-                <CopyButton
-                  onCopy={() => handleCopyMeta(sessionId)}
-                  className="chip-action"
-                  aria-label="Copy session id"
-                  title="Copy session id"
-                  copiedLabel={<Check className="h-3.5 w-3.5 text-emerald-600" />}
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                </CopyButton>
-              </div>
-            )}
-            {cwd && (
-              <div className="chip">
-                <span className="chip-label">Dir</span>
-                <span className="chip-value" title={cwd}>
-                  {formatWorkspacePath(cwd)}
-                </span>
-                <CopyButton
-                  onCopy={() => handleCopyMeta(cwd)}
-                  className="chip-action"
-                  aria-label="Copy session directory"
-                  title="Copy session directory"
-                  copiedLabel={<Check className="h-3.5 w-3.5 text-emerald-600" />}
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                </CopyButton>
-              </div>
-            )}
-            {activeSession?.filename && (
-              <div className="chip">
-                <span className="chip-label">File</span>
-                <span className="chip-value" title={filePath || activeSession.filename}>
-                  {activeSession.filename}
-                </span>
-                <CopyButton
-                  onCopy={() => handleCopyMeta(filePath || activeSession.filename)}
-                  className="chip-action"
-                  aria-label="Copy session file path"
-                  title="Copy session file path"
-                  copiedLabel={<Check className="h-3.5 w-3.5 text-emerald-600" />}
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                </CopyButton>
-              </div>
-            )}
+            {sessionId && renderMetaChip('Session', sessionId, sessionId, 'Copy session id')}
+            {cwd && renderMetaChip('Dir', formatWorkspacePath(cwd), cwd, 'Copy session directory')}
+            {activeSession?.filename &&
+              renderMetaChip(
+                'File',
+                activeSession.filename,
+                filePath || activeSession.filename,
+                'Copy session file path',
+              )}
           </div>
         )}
         {activeSession && (
@@ -205,16 +170,30 @@ export const SessionHeader = ({
                 </span>
               )}
               {repoLabel && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] leading-none text-slate-600 shadow-sm">
-                  <Github className="h-3.5 w-3.5" />
-                  {repoLabel}
-                </span>
+                <CopyButton
+                  text={repoLabel}
+                  idleLabel={repoLabel}
+                  reserveLabel={repoLabel}
+                  ariaLabel="Copy repo"
+                  title={repoLabel}
+                  leading={<Github className="h-3.5 w-3.5" />}
+                  labelWrapperClassName="min-w-0"
+                  labelClassName="min-w-0 truncate"
+                  className="inline-flex min-w-0 items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] leading-none text-slate-600 shadow-sm"
+                />
               )}
               {activeSession.gitBranch && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] leading-none text-slate-600 shadow-sm">
-                  <GitBranch className="h-3.5 w-3.5" />
-                  {activeSession.gitBranch}
-                </span>
+                <CopyButton
+                  text={activeSession.gitBranch}
+                  idleLabel={activeSession.gitBranch}
+                  reserveLabel={activeSession.gitBranch}
+                  ariaLabel="Copy branch"
+                  title={activeSession.gitBranch}
+                  leading={<GitBranch className="h-3.5 w-3.5" />}
+                  labelWrapperClassName="min-w-0"
+                  labelClassName="min-w-0 truncate"
+                  className="inline-flex min-w-0 items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] leading-none text-slate-600 shadow-sm"
+                />
               )}
             </div>
             <div className={statsRowClassNameMerged}>
@@ -252,13 +231,18 @@ export const SessionHeader = ({
       </div>
       <div className={actionsClassNameMerged}>
         <CopyButton
-          onCopy={handleCopyConversation}
+          getText={() => buildConversationExport(filteredTurns)}
           duration={2000}
           disabled={!visibleItemCount}
-          className="inline-flex min-w-[170px] items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-50"
-        >
-          Copy conversation
-        </CopyButton>
+          idleLabel="Copy conversation"
+          hoverLabel="Copy conversation"
+          reserveLabel="Copy conversation"
+          ariaLabel="Copy conversation"
+          leading={<Copy className="h-3.5 w-3.5" />}
+          centerLabel
+          labelClassName="text-center"
+          className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-50"
+        />
       </div>
     </div>
   );

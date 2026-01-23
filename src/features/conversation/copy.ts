@@ -1,23 +1,31 @@
 import { generateId } from './format';
 import type { Turn } from './types';
 
-export const copyText = async (text: string) => {
+export const copyText = async (text: string): Promise<boolean> => {
   if (navigator.clipboard?.writeText) {
     try {
       await navigator.clipboard.writeText(text);
-      return;
-    } catch (_error) {
-      // Fall back to execCommand-based copy below.
+      return true;
+    } catch (error) {
+      console.warn('Clipboard write failed, falling back to execCommand copy.', error);
     }
   }
+
   const textarea = document.createElement('textarea');
   textarea.value = text;
   textarea.style.position = 'fixed';
   textarea.style.opacity = '0';
   document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand('copy');
-  document.body.removeChild(textarea);
+
+  try {
+    textarea.select();
+    return document.execCommand('copy');
+  } catch (error) {
+    console.error('Copy failed:', error);
+    return false;
+  } finally {
+    document.body.removeChild(textarea);
+  }
 };
 
 export const buildConversationExport = (turns: Turn[]) => {

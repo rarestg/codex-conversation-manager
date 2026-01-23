@@ -1,7 +1,6 @@
 import { Calendar, Clock, Fingerprint, GitBranch, Github, Hourglass, Repeat2 } from 'lucide-react';
 import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { memo, useEffect, useRef } from 'react';
-import { copyText } from '../copy';
 import { isRenderDebugEnabled } from '../debug';
 import {
   formatDayLabel,
@@ -339,17 +338,6 @@ const SessionsPanelComponent = ({
                                   const repoLabel = getRepoLabel(file.gitRepo, file.cwd);
                                   const sessionId = file.sessionId;
                                   const sessionIdLabel = formatSessionId(sessionId);
-                                  const renderSessionIdLabel = (showCopied: boolean) => (
-                                    <>
-                                      <Fingerprint className="h-3 w-3" />
-                                      <span className="truncate">{sessionIdLabel}</span>
-                                      {showCopied && (
-                                        <span className="rounded-full bg-white/80 px-2 py-1 text-[10px] text-slate-500">
-                                          Copied
-                                        </span>
-                                      )}
-                                    </>
-                                  );
 
                                   return (
                                     <div
@@ -411,13 +399,17 @@ const SessionsPanelComponent = ({
                                         </div>
                                       </button>
                                       <CopyButton
-                                        onCopy={() => copyText(sessionId)}
+                                        text={sessionId}
+                                        idleLabel={sessionIdLabel}
+                                        hoverLabel="Copy"
+                                        reserveLabel={sessionIdLabel}
+                                        ariaLabel="Copy session id"
                                         title={sessionId}
-                                        className="mt-2 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[10px] text-slate-600 hover:bg-slate-200"
-                                        copiedLabel={renderSessionIdLabel(true)}
-                                      >
-                                        {renderSessionIdLabel(false)}
-                                      </CopyButton>
+                                        leading={<Fingerprint className="h-3 w-3" />}
+                                        labelWrapperClassName="min-w-0"
+                                        labelClassName="min-w-0 truncate"
+                                        className="mt-2 inline-flex min-w-0 items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[10px] text-slate-600 hover:bg-slate-200"
+                                      />
                                     </div>
                                   );
                                 })}

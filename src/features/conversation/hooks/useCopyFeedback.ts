@@ -1,16 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+export type CopyFeedbackStatus = 'idle' | 'copied' | 'error';
+
 export const useCopyFeedback = () => {
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [status, setStatus] = useState<CopyFeedbackStatus>('idle');
+  const [message, setMessage] = useState<string | null>(null);
   const timeoutRef = useRef<number | null>(null);
 
-  const showCopied = useCallback((id: string, duration = 1500) => {
+  const showFeedback = useCallback((nextStatus: CopyFeedbackStatus, nextMessage: string | null, duration = 1500) => {
     if (timeoutRef.current) {
       window.clearTimeout(timeoutRef.current);
     }
-    setCopiedId(id);
+    setStatus(nextStatus);
+    setMessage(nextMessage);
     timeoutRef.current = window.setTimeout(() => {
-      setCopiedId(null);
+      setStatus('idle');
+      setMessage(null);
       timeoutRef.current = null;
     }, duration);
   }, []);
@@ -23,5 +28,5 @@ export const useCopyFeedback = () => {
     };
   }, []);
 
-  return { copiedId, showCopied };
+  return { status, message, showFeedback };
 };
