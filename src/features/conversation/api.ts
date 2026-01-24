@@ -8,7 +8,9 @@ const parseError = async (res: Response, fallback: string): Promise<never> => {
   } catch (_error) {
     // ignore json parse failures
   }
-  throw new Error(message);
+  const error = new Error(message) as Error & { status?: number };
+  error.status = res.status;
+  throw error;
 };
 
 export const fetchConfig = async () => {

@@ -21,7 +21,6 @@ export interface Turn {
 export interface SessionFileEntry {
   id: string;
   filename: string;
-  size: number;
   preview?: string | null;
   timestamp?: string | null;
   cwd?: string | null;

@@ -3,6 +3,7 @@ import fsp from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import readline from 'node:readline';
 import Database from 'better-sqlite3';
 import type { Plugin } from 'vite';
@@ -11,7 +12,8 @@ const CONFIG_DIR = path.join(os.homedir(), '.codex-formatter');
 const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
 const DEFAULT_SESSIONS_ROOT = path.join(os.homedir(), '.codex', 'sessions');
 const DB_PATH = path.join(CONFIG_DIR, 'codex_index.db');
-const MAX_PREVIEW_LINES = 200;
+const MAX_PREVIEW_CHARS = 1000;
+const MAX_PREVIEW_LINES = 50;
 
 interface ConfigFile {
   sessionsRoot?: string;
@@ -27,7 +29,6 @@ interface FileEntry {
 interface SessionFileInfo {
   id: string;
   filename: string;
-  size: number;
   preview: string | null;
   timestamp: string | null;
   cwd: string | null;
@@ -39,6 +40,22 @@ interface SessionFileInfo {
   startedAt: string | null;
   endedAt: string | null;
   sessionId: string;
+}
+
+interface SessionTreeEntry {
+  id: string;
+  filename: string;
+  preview: string | null;
+  timestamp: string | null;
+  cwd: string | null;
+  gitBranch: string | null;
+  gitRepo: string | null;
+  gitCommitHash: string | null;
+  sessionId: string;
+  turnCount: number | null;
+  messageCount: number | null;
+  startedAt: string | null;
+  endedAt: string | null;
 }
 
 type DaysMap = Map<string, SessionFileInfo[]>;
@@ -306,6 +323,16 @@ const formatToolOutput = (item: unknown) => {
   return parts.join('\n');
 };
 
+const truncatePreview = (value?: string | null) => {
+  if (value === null || value === undefined) return null;
+  let truncated = value.slice(0, MAX_PREVIEW_CHARS);
+  const lines = truncated.split(/\r?\n/);
+  if (lines.length > MAX_PREVIEW_LINES) {
+    truncated = lines.slice(0, MAX_PREVIEW_LINES).join('\n');
+  }
+  return truncated;
+};
+
 const SESSION_ID_REGEX = /\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/;
 const SESSION_ID_PREFIX_REGEX = /\b(?:sess(?:ion)?[_-])[a-zA-Z0-9_-]{6,}\b/;
 
@@ -416,7 +443,7 @@ const parseJsonlFile = async (filePath: string) => {
         if (payload.type === 'user_message' && payload.message) {
           currentTurn += 1;
           const content = String(payload.message);
-          if (!firstUserMessage) firstUserMessage = content;
+          if (!firstUserMessage) firstUserMessage = truncatePreview(content) ?? '';
           messages.push({
             turnId: currentTurn,
             role: 'user',
@@ -466,7 +493,7 @@ const parseJsonlFile = async (filePath: string) => {
     } catch (_error) {}
   }
 
-  return { messages, firstUserMessage, sessionMeta };
+  return { messages, firstUserMessage: truncatePreview(firstUserMessage) ?? '', sessionMeta };
 };
 
 const readSessionIdFromFile = async (filePath: string) => {
@@ -693,74 +720,64 @@ const indexSessions = async (root: string) => {
   return summary;
 };
 
-const getSessionsPreviewMap = (database: Database.Database) => {
-  const rows = database
-    .prepare(
-      `
-        SELECT
-          sessions.id AS id,
-          sessions.first_user_message AS first_user_message,
-          sessions.timestamp AS timestamp,
-          sessions.cwd AS cwd,
-          sessions.git_branch AS git_branch,
-          sessions.git_repo AS git_repo,
-          sessions.git_commit_hash AS git_commit_hash,
-          sessions.session_id AS session_id,
-          COALESCE(SUM(CASE WHEN messages.role = 'user' THEN 1 ELSE 0 END), 0) AS turn_count,
-          COUNT(messages.id) AS message_count,
-          MIN(messages.timestamp) AS started_at,
-          MAX(messages.timestamp) AS ended_at
-        FROM sessions
-        LEFT JOIN messages ON messages.session_id = sessions.id
-        GROUP BY sessions.id
-      `,
-    )
-    .all() as Array<{
+const getSessionsForTree = (database: Database.Database, workspace?: string | null): SessionTreeEntry[] => {
+  const whereClause = workspace ? 'WHERE sessions.cwd = ?' : '';
+  const stmt = database.prepare(
+    `
+      SELECT
+        sessions.id AS id,
+        sessions.path AS path,
+        sessions.first_user_message AS first_user_message,
+        sessions.timestamp AS timestamp,
+        sessions.cwd AS cwd,
+        sessions.git_branch AS git_branch,
+        sessions.git_repo AS git_repo,
+        sessions.git_commit_hash AS git_commit_hash,
+        sessions.session_id AS session_id,
+        COALESCE(SUM(CASE WHEN messages.role = 'user' THEN 1 ELSE 0 END), 0) AS turn_count,
+        COUNT(messages.id) AS message_count,
+        MIN(messages.timestamp) AS started_at,
+        MAX(messages.timestamp) AS ended_at
+      FROM sessions
+      LEFT JOIN messages ON messages.session_id = sessions.id
+      ${whereClause}
+      GROUP BY sessions.id
+    `,
+  );
+  const rows = (workspace ? stmt.all(workspace) : stmt.all()) as Array<{
     id: string;
-    first_user_message?: string;
-    timestamp?: string;
-    cwd?: string;
-    git_branch?: string;
-    git_repo?: string;
-    git_commit_hash?: string;
-    session_id?: string;
-    turn_count?: number;
-    message_count?: number;
+    path: string;
+    first_user_message?: string | null;
+    timestamp?: string | null;
+    cwd?: string | null;
+    git_branch?: string | null;
+    git_repo?: string | null;
+    git_commit_hash?: string | null;
+    session_id?: string | null;
+    turn_count?: number | null;
+    message_count?: number | null;
     started_at?: string | null;
     ended_at?: string | null;
   }>;
-  const map = new Map<
-    string,
-    {
-      preview?: string;
-      timestamp?: string;
-      cwd?: string;
-      gitBranch?: string;
-      gitRepo?: string;
-      gitCommitHash?: string;
-      sessionId?: string;
-      turnCount?: number;
-      messageCount?: number;
-      startedAt?: string | null;
-      endedAt?: string | null;
-    }
-  >();
-  for (const row of rows) {
-    map.set(row.id, {
-      preview: row.first_user_message,
-      timestamp: row.timestamp,
-      cwd: row.cwd,
-      gitBranch: row.git_branch,
-      gitRepo: row.git_repo,
-      gitCommitHash: row.git_commit_hash,
+
+  return rows.map((row) => {
+    const filename = path.basename(row.path || row.id);
+    return {
+      id: row.id,
+      filename,
+      preview: truncatePreview(row.first_user_message ?? undefined),
+      timestamp: row.timestamp ?? null,
+      cwd: row.cwd ?? null,
+      gitBranch: row.git_branch ?? null,
+      gitRepo: row.git_repo ?? null,
+      gitCommitHash: row.git_commit_hash ?? null,
       sessionId: row.session_id ?? '',
-      turnCount: row.turn_count,
-      messageCount: row.message_count,
+      turnCount: row.turn_count ?? null,
+      messageCount: row.message_count ?? null,
       startedAt: row.started_at ?? null,
       endedAt: row.ended_at ?? null,
-    });
-  }
-  return map;
+    };
+  });
 };
 
 const getWorkspaceSummaries = (database: Database.Database) => {
@@ -814,33 +831,13 @@ const getWorkspaceSummaries = (database: Database.Database) => {
   }));
 };
 
-const buildSessionsTree = (
-  root: string,
-  files: FileEntry[],
-  previewMap: Map<
-    string,
-    {
-      preview?: string;
-      timestamp?: string;
-      cwd?: string;
-      gitBranch?: string;
-      gitRepo?: string;
-      gitCommitHash?: string;
-      sessionId?: string | null;
-      turnCount?: number;
-      messageCount?: number;
-      startedAt?: string | null;
-      endedAt?: string | null;
-    }
-  >,
-) => {
+const buildSessionsTree = (root: string, entries: SessionTreeEntry[]) => {
   const yearsMap: YearsMap = new Map();
 
-  for (const file of files) {
-    const parts = file.relPath.split('/');
+  for (const entry of entries) {
+    const parts = entry.id.split('/');
     const [year = 'Unknown', month = 'Unknown', day = 'Unknown'] = parts;
-    const filename = parts[parts.length - 1];
-    const preview = previewMap.get(file.relPath);
+    const filename = entry.filename || parts[parts.length - 1];
 
     let monthsMap = yearsMap.get(year);
     if (!monthsMap) {
@@ -861,20 +858,19 @@ const buildSessionsTree = (
     }
 
     dayFiles.push({
-      id: file.relPath,
+      id: entry.id,
       filename,
-      size: file.size,
-      preview: preview?.preview ?? null,
-      timestamp: preview?.timestamp ?? null,
-      cwd: preview?.cwd ?? null,
-      gitBranch: preview?.gitBranch ?? null,
-      gitRepo: preview?.gitRepo ?? null,
-      gitCommitHash: preview?.gitCommitHash ?? null,
-      sessionId: preview?.sessionId ?? '',
-      turnCount: preview?.turnCount ?? null,
-      messageCount: preview?.messageCount ?? null,
-      startedAt: preview?.startedAt ?? null,
-      endedAt: preview?.endedAt ?? null,
+      preview: entry.preview ?? null,
+      timestamp: entry.timestamp ?? null,
+      cwd: entry.cwd ?? null,
+      gitBranch: entry.gitBranch ?? null,
+      gitRepo: entry.gitRepo ?? null,
+      gitCommitHash: entry.gitCommitHash ?? null,
+      sessionId: entry.sessionId ?? '',
+      turnCount: entry.turnCount ?? null,
+      messageCount: entry.messageCount ?? null,
+      startedAt: entry.startedAt ?? null,
+      endedAt: entry.endedAt ?? null,
     });
   }
 
@@ -905,33 +901,6 @@ const buildSessionsTree = (
     }));
 
   return { root, years };
-};
-
-const readFirstUserMessage = async (filePath: string) => {
-  const stream = fs.createReadStream(filePath, { encoding: 'utf-8' });
-  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
-  let linesRead = 0;
-  for await (const line of rl) {
-    linesRead += 1;
-    if (!line.trim()) continue;
-    try {
-      const entry = JSON.parse(line);
-      if (entry.type === 'event_msg') {
-        const payload = entry.payload ?? {};
-        if (payload.type === 'user_message' && payload.message) {
-          rl.close();
-          stream.close();
-          return String(payload.message);
-        }
-      }
-    } catch (_error) {
-      continue;
-    }
-    if (linesRead > MAX_PREVIEW_LINES) break;
-  }
-  rl.close();
-  stream.close();
-  return '';
 };
 
 const ensureRootExists = async (root: string) => {
@@ -1019,30 +988,99 @@ export const apiPlugin = (): Plugin => {
           }
 
           if (pathname === '/api/sessions' && req.method === 'GET') {
+            const startedAt = performance.now();
             const rootInfo = await resolveSessionsRoot();
             const rootExists = await ensureRootExists(rootInfo.value);
+            const afterRoot = performance.now();
             if (!rootExists) {
               return sendJson(res, 404, {
                 error: `Sessions root not found: ${rootInfo.value}. Set CODEX_SESSIONS_ROOT or update ~/.codex-formatter/config.json`,
               });
             }
-            const workspace = url.searchParams.get('workspace')?.trim() || null;
-            const files = await scanSessionFiles(rootInfo.value);
             const database = ensureDb();
-            const previewMap = getSessionsPreviewMap(database);
-            const filteredFiles = workspace
-              ? files.filter((file) => previewMap.get(file.relPath)?.cwd === workspace)
-              : files;
+            const afterDbInit = performance.now();
+            const workspace = url.searchParams.get('workspace')?.trim() || null;
+            const entries = getSessionsForTree(database, workspace);
+            const afterQuery = performance.now();
+            const tree = buildSessionsTree(rootInfo.value, entries);
+            const afterTree = performance.now();
+            const payload = JSON.stringify(tree);
+            const afterJson = performance.now();
+            const payloadBytes = Buffer.byteLength(payload);
 
-            for (const file of filteredFiles) {
-              if (!previewMap.has(file.relPath)) {
-                const preview = await readFirstUserMessage(file.absPath);
-                previewMap.set(file.relPath, { preview });
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader(
+              'Server-Timing',
+              [
+                `root;dur=${(afterRoot - startedAt).toFixed(2)}`,
+                `dbinit;dur=${(afterDbInit - afterRoot).toFixed(2)}`,
+                `query;dur=${(afterQuery - afterDbInit).toFixed(2)}`,
+                `tree;dur=${(afterTree - afterQuery).toFixed(2)}`,
+                `json;dur=${(afterJson - afterTree).toFixed(2)}`,
+                `total;dur=${(afterJson - startedAt).toFixed(2)}`,
+              ].join(', '),
+            );
+            res.end(payload);
+
+            if (DEBUG_ENABLED) {
+              const queryMs = afterQuery - afterDbInit;
+              const totalMs = afterJson - startedAt;
+              logDebug('/api/sessions timing', {
+                rootMs: afterRoot - startedAt,
+                dbInitMs: afterDbInit - afterRoot,
+                queryMs,
+                treeMs: afterTree - afterQuery,
+                jsonMs: afterJson - afterTree,
+                totalMs,
+                entries: entries.length,
+                payloadKb: Math.round(payloadBytes / 1024),
+              });
+              if (queryMs > 200) {
+                try {
+                  const rowCounts = database
+                    .prepare(
+                      `
+                        SELECT
+                          (SELECT COUNT(*) FROM sessions) AS sessions_count,
+                          (SELECT COUNT(*) FROM messages) AS messages_count
+                      `,
+                    )
+                    .get() as { sessions_count: number; messages_count: number };
+                  logDebug('/api/sessions counts', rowCounts);
+
+                  const whereClause = workspace ? 'WHERE sessions.cwd = ?' : '';
+                  const explainStmt = database.prepare(
+                    `
+                      EXPLAIN QUERY PLAN
+                      SELECT
+                        sessions.id AS id,
+                        sessions.path AS path,
+                        sessions.first_user_message AS first_user_message,
+                        sessions.timestamp AS timestamp,
+                        sessions.cwd AS cwd,
+                        sessions.git_branch AS git_branch,
+                        sessions.git_repo AS git_repo,
+                        sessions.git_commit_hash AS git_commit_hash,
+                        sessions.session_id AS session_id,
+                        COALESCE(SUM(CASE WHEN messages.role = 'user' THEN 1 ELSE 0 END), 0) AS turn_count,
+                        COUNT(messages.id) AS message_count,
+                        MIN(messages.timestamp) AS started_at,
+                        MAX(messages.timestamp) AS ended_at
+                      FROM sessions
+                      LEFT JOIN messages ON messages.session_id = sessions.id
+                      ${whereClause}
+                      GROUP BY sessions.id
+                    `,
+                  );
+                  const plan = workspace ? explainStmt.all(workspace) : explainStmt.all();
+                  logDebug('/api/sessions query plan', plan);
+                } catch (error) {
+                  logDebug('/api/sessions debug query failed', error);
+                }
               }
             }
-
-            const tree = buildSessionsTree(rootInfo.value, filteredFiles, previewMap);
-            return sendJson(res, 200, tree);
+            return;
           }
 
           if (pathname === '/api/workspaces' && req.method === 'GET') {
@@ -1082,7 +1120,18 @@ export const apiPlugin = (): Plugin => {
             if (!resolvedPath) {
               return sendJson(res, 400, { error: 'Invalid session path.' });
             }
-            const raw = await fsp.readFile(resolvedPath, 'utf-8');
+            let raw: string;
+            try {
+              raw = await fsp.readFile(resolvedPath, 'utf-8');
+            } catch (error: any) {
+              if (error?.code === 'ENOENT') {
+                return sendJson(res, 404, { error: 'Session file not found. Please reindex.' });
+              }
+              if (error?.code === 'EACCES') {
+                return sendJson(res, 403, { error: 'Unable to read session file.' });
+              }
+              throw error;
+            }
             res.statusCode = 200;
             res.setHeader('Content-Type', 'text/plain');
             res.end(raw);

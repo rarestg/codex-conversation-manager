@@ -110,7 +110,12 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
         setParsedMeta(derivedMeta);
         setScrollToTurnId(turnId ?? null);
       } catch (error: any) {
-        onError?.(error?.message || 'Failed to load session.');
+        const status = error?.status;
+        if (status === 404 || status === 400) {
+          onError?.(error?.message || 'Session file not found. Please reindex.');
+        } else {
+          onError?.(error?.message || 'Failed to load session.');
+        }
       } finally {
         setLoadingSession(false);
       }
@@ -126,7 +131,6 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
     const fallback: SessionFileEntry = {
       id: activeSessionId,
       filename,
-      size: indexed?.size ?? 0,
       preview: parsedMeta?.preview ?? null,
       timestamp: parsedMeta?.startedAt ?? null,
       startedAt: parsedMeta?.startedAt ?? null,
