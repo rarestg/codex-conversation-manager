@@ -2,6 +2,7 @@ import { Brain, Clock, Copy, Eye, Folder, GitBranch, Github, Hourglass, Info, Re
 import { buildConversationExport } from '../copy';
 import {
   formatDuration,
+  formatDurationMs,
   formatRelativeTime,
   formatRepoFallbackPath,
   formatTime,
@@ -65,8 +66,13 @@ export const SessionHeader = ({
       ? formatRelativeTime(timeSource, now)
       : formatTime(timeSource)
     : '';
-  const durationLabel = activeSession ? formatDuration(activeSession.startedAt, activeSession.endedAt) : '';
+  const durationLabel = activeSession
+    ? formatDurationMs(activeSession.activeDurationMs) || formatDuration(activeSession.startedAt, activeSession.endedAt)
+    : '';
   const durationDisplay = durationLabel || (timeSource ? '-' : '');
+  const thoughtCount = activeSession?.thoughtCount ?? stats.thoughtCount;
+  const toolCallCount = activeSession?.toolCallCount ?? stats.toolCallCount;
+  const metaCount = activeSession?.metaCount ?? stats.metaCount;
   const sessionRoot = sessionsRoot?.trim() || '';
   const fallbackId = activeSession?.id ?? '';
   const pathSeparator = sessionRoot.includes('\\') ? '\\' : sessionRoot ? '/' : fallbackId.includes('\\') ? '\\' : '/';
@@ -200,21 +206,21 @@ export const SessionHeader = ({
               <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1.5 text-[11px]/[14px] text-slate-600 shadow-sm">
                 <Brain className="h-3.5 w-3.5" />
                 <span className="translate-y-[0.5px] inline-block min-w-[4ch] text-center tabular-nums">
-                  {stats.thoughtCount}
+                  {thoughtCount}
                 </span>
                 <span className="translate-y-[0.5px]">thoughts</span>
               </span>
               <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1.5 text-[11px]/[14px] text-slate-600 shadow-sm">
                 <Wrench className="h-3.5 w-3.5" />
                 <span className="translate-y-[0.5px] inline-block min-w-[4ch] text-center tabular-nums">
-                  {stats.toolCallCount}
+                  {toolCallCount}
                 </span>
                 <span className="translate-y-[0.5px]">tools</span>
               </span>
               <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1.5 text-[11px]/[14px] text-slate-600 shadow-sm">
                 <Info className="h-3.5 w-3.5" />
                 <span className="translate-y-[0.5px] inline-block min-w-[4ch] text-center tabular-nums">
-                  {stats.metaCount}
+                  {metaCount}
                 </span>
                 <span className="translate-y-[0.5px]">meta</span>
               </span>

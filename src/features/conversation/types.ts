@@ -29,8 +29,12 @@ export interface SessionFileEntry {
   gitCommitHash?: string | null;
   turnCount?: number | null;
   messageCount?: number | null;
+  thoughtCount?: number | null;
+  toolCallCount?: number | null;
+  metaCount?: number | null;
   startedAt?: string | null;
   endedAt?: string | null;
+  activeDurationMs?: number | null;
   sessionId: string;
 }
 

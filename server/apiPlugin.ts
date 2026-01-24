@@ -37,8 +37,12 @@ interface SessionFileInfo {
   gitCommitHash: string | null;
   turnCount: number | null;
   messageCount: number | null;
+  thoughtCount: number | null;
+  toolCallCount: number | null;
+  metaCount: number | null;
   startedAt: string | null;
   endedAt: string | null;
+  activeDurationMs: number | null;
   sessionId: string;
 }
 
@@ -54,8 +58,12 @@ interface SessionTreeEntry {
   sessionId: string;
   turnCount: number | null;
   messageCount: number | null;
+  thoughtCount: number | null;
+  toolCallCount: number | null;
+  metaCount: number | null;
   startedAt: string | null;
   endedAt: string | null;
+  activeDurationMs: number | null;
 }
 
 type DaysMap = Map<string, SessionFileInfo[]>;
@@ -174,7 +182,15 @@ const initSchema = (database: Database.Database) => {
       git_branch TEXT,
       git_repo TEXT,
       git_commit_hash TEXT,
-      first_user_message TEXT
+      first_user_message TEXT,
+      started_at TEXT,
+      ended_at TEXT,
+      turn_count INTEGER,
+      message_count INTEGER,
+      thought_count INTEGER,
+      tool_call_count INTEGER,
+      meta_count INTEGER,
+      active_duration_ms INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS files (
@@ -229,6 +245,28 @@ const initSchema = (database: Database.Database) => {
   database.exec('CREATE INDEX IF NOT EXISTS idx_sessions_session_id ON sessions(session_id)');
 };
 
+const SESSION_COLUMNS: Record<string, string> = {
+  started_at: 'TEXT',
+  ended_at: 'TEXT',
+  turn_count: 'INTEGER',
+  message_count: 'INTEGER',
+  thought_count: 'INTEGER',
+  tool_call_count: 'INTEGER',
+  meta_count: 'INTEGER',
+  active_duration_ms: 'INTEGER',
+};
+
+const ensureSessionColumns = (database: Database.Database) => {
+  const rows = database.prepare('PRAGMA table_info(sessions)').all() as Array<{ name: string }>;
+  const existing = new Set(rows.map((row) => row.name));
+  const missing = Object.entries(SESSION_COLUMNS).filter(([name]) => !existing.has(name));
+  if (!missing.length) return;
+  for (const [name, type] of missing) {
+    database.exec(`ALTER TABLE sessions ADD COLUMN ${name} ${type}`);
+  }
+  logDebug('db migrate sessions', { added: missing.map(([name]) => name) });
+};
+
 const ensureDb = () => {
   if (db) return db;
   if (!fs.existsSync(CONFIG_DIR)) {
@@ -240,6 +278,7 @@ const ensureDb = () => {
   db.pragma('trusted_schema = ON');
   logDebug('db open', DB_PATH);
   initSchema(db);
+  ensureSessionColumns(db);
   return db;
 };
 
@@ -389,7 +428,54 @@ const parseJsonlFile = async (filePath: string) => {
     session_id?: string;
   } = {};
   let currentTurn = 0;
+  let turnCount = 0;
+  let thoughtCount = 0;
+  let toolCallCount = 0;
+  let metaCount = 0;
+  let startedAt: string | null = null;
+  let endedAt: string | null = null;
+  let startedAtMs: number | null = null;
+  let endedAtMs: number | null = null;
+  let inTurn = false;
+  let currentTurnStartMs: number | null = null;
+  let lastAgentMs: number | null = null;
+  let activeDurationMs = 0;
+  let activeDurationPairs = 0;
   let sessionIdRank = 0;
+
+  const parseTimestamp = (value?: string | null) => {
+    if (!value) return null;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const updateTimestampBounds = (value?: string | null) => {
+    if (!value) return;
+    const parsed = parseTimestamp(value);
+    if (parsed === null) return;
+    if (startedAtMs === null || parsed < startedAtMs) {
+      startedAtMs = parsed;
+      startedAt = value;
+    }
+    if (endedAtMs === null || parsed > endedAtMs) {
+      endedAtMs = parsed;
+      endedAt = value;
+    }
+  };
+
+  const closeActiveTurn = () => {
+    if (!inTurn) return;
+    if (currentTurnStartMs !== null && lastAgentMs !== null) {
+      const diff = lastAgentMs - currentTurnStartMs;
+      if (Number.isFinite(diff) && diff >= 0) {
+        activeDurationMs += diff;
+        activeDurationPairs += 1;
+      }
+    }
+    inTurn = false;
+    currentTurnStartMs = null;
+    lastAgentMs = null;
+  };
 
   const updateSessionId = (value: unknown, rank: number) => {
     const extracted = extractSessionIdFromObject(value);
@@ -406,7 +492,9 @@ const parseJsonlFile = async (filePath: string) => {
     if (!line.trim()) continue;
     try {
       const entry = JSON.parse(line);
+      updateTimestampBounds(entry.timestamp);
       if (entry.type === 'session_meta') {
+        metaCount += 1;
         const payload = entry.payload ?? entry;
         const gitPayload = payload?.git ?? {};
         const nextCwd = payload?.cwd ?? sessionMeta.cwd;
@@ -433,6 +521,7 @@ const parseJsonlFile = async (filePath: string) => {
       }
 
       if (entry.type === 'turn_context') {
+        metaCount += 1;
         const payload = entry.payload ?? entry;
         updateSessionId(payload, 1);
         continue;
@@ -440,30 +529,48 @@ const parseJsonlFile = async (filePath: string) => {
 
       if (entry.type === 'event_msg') {
         const payload = entry.payload ?? {};
-        if (payload.type === 'user_message' && payload.message) {
+        if (payload.type === 'user_message') {
+          closeActiveTurn();
+          inTurn = true;
+          currentTurnStartMs = parseTimestamp(entry.timestamp);
+          lastAgentMs = null;
           currentTurn += 1;
-          const content = String(payload.message);
-          if (!firstUserMessage) firstUserMessage = truncatePreview(content) ?? '';
+          turnCount += 1;
+          const content = String(payload.message ?? '');
+          if (!firstUserMessage) {
+            const trimmed = content.trim();
+            if (trimmed) firstUserMessage = truncatePreview(trimmed) ?? '';
+          }
           messages.push({
             turnId: currentTurn,
             role: 'user',
             timestamp: entry.timestamp,
             content,
           });
-        } else if (payload.type === 'agent_message' && payload.message) {
+        } else if (payload.type === 'agent_message') {
+          if (inTurn) {
+            const agentMs = parseTimestamp(entry.timestamp);
+            if (agentMs !== null) lastAgentMs = agentMs;
+          }
+          const content = String(payload.message ?? '');
           messages.push({
             turnId: currentTurn,
             role: 'assistant',
             timestamp: entry.timestamp,
-            content: String(payload.message),
+            content,
           });
         } else if (payload.type === 'agent_reasoning' && payload.text) {
+          thoughtCount += 1;
           messages.push({
             turnId: currentTurn,
             role: 'thought',
             timestamp: entry.timestamp,
             content: String(payload.text),
           });
+        } else if (payload.type === 'token_count') {
+          metaCount += 1;
+        } else if (payload.type === 'turn_aborted') {
+          continue;
         }
         continue;
       }
@@ -473,6 +580,7 @@ const parseJsonlFile = async (filePath: string) => {
       const itemType = isResponseItem ? item.type : entry.type;
 
       if (['function_call', 'custom_tool_call', 'web_search_call'].includes(itemType)) {
+        toolCallCount += 1;
         messages.push({
           turnId: currentTurn,
           role: 'tool_call',
@@ -493,7 +601,23 @@ const parseJsonlFile = async (filePath: string) => {
     } catch (_error) {}
   }
 
-  return { messages, firstUserMessage: truncatePreview(firstUserMessage) ?? '', sessionMeta };
+  closeActiveTurn();
+
+  return {
+    messages,
+    firstUserMessage: truncatePreview(firstUserMessage) ?? '',
+    sessionMeta,
+    metrics: {
+      startedAt,
+      endedAt,
+      turnCount: turnCount > 0 ? turnCount : null,
+      messageCount: messages.length,
+      thoughtCount,
+      toolCallCount,
+      metaCount,
+      activeDurationMs: activeDurationPairs > 0 ? activeDurationMs : null,
+    },
+  };
 };
 
 const readSessionIdFromFile = async (filePath: string) => {
@@ -573,7 +697,15 @@ const indexSessions = async (root: string) => {
       git_branch,
       git_repo,
       git_commit_hash,
-      first_user_message
+      first_user_message,
+      started_at,
+      ended_at,
+      turn_count,
+      message_count,
+      thought_count,
+      tool_call_count,
+      meta_count,
+      active_duration_ms
     )
     VALUES (
       @id,
@@ -585,7 +717,15 @@ const indexSessions = async (root: string) => {
       @git_branch,
       @git_repo,
       @git_commit_hash,
-      @first_user_message
+      @first_user_message,
+      @started_at,
+      @ended_at,
+      @turn_count,
+      @message_count,
+      @thought_count,
+      @tool_call_count,
+      @meta_count,
+      @active_duration_ms
     )
     ON CONFLICT(id) DO UPDATE SET
       session_id = excluded.session_id,
@@ -595,7 +735,15 @@ const indexSessions = async (root: string) => {
       git_branch = excluded.git_branch,
       git_repo = excluded.git_repo,
       git_commit_hash = excluded.git_commit_hash,
-      first_user_message = excluded.first_user_message
+      first_user_message = excluded.first_user_message,
+      started_at = excluded.started_at,
+      ended_at = excluded.ended_at,
+      turn_count = excluded.turn_count,
+      message_count = excluded.message_count,
+      thought_count = excluded.thought_count,
+      tool_call_count = excluded.tool_call_count,
+      meta_count = excluded.meta_count,
+      active_duration_ms = excluded.active_duration_ms
   `);
   const insertFile = database.prepare(`
     INSERT INTO files (path, size, mtime, hash, indexed_at)
@@ -643,6 +791,14 @@ const indexSessions = async (root: string) => {
           git_repo: parsed.sessionMeta.git_repo ?? null,
           git_commit_hash: parsed.sessionMeta.git_commit_hash ?? null,
           first_user_message: parsed.firstUserMessage || null,
+          started_at: parsed.metrics.startedAt ?? null,
+          ended_at: parsed.metrics.endedAt ?? null,
+          turn_count: parsed.metrics.turnCount ?? null,
+          message_count: parsed.metrics.messageCount ?? null,
+          thought_count: parsed.metrics.thoughtCount ?? null,
+          tool_call_count: parsed.metrics.toolCallCount ?? null,
+          meta_count: parsed.metrics.metaCount ?? null,
+          active_duration_ms: parsed.metrics.activeDurationMs ?? null,
         });
       } catch (error) {
         console.error('[reindex] insertSession failed', file.relPath, error);
@@ -734,14 +890,16 @@ const getSessionsForTree = (database: Database.Database, workspace?: string | nu
         sessions.git_repo AS git_repo,
         sessions.git_commit_hash AS git_commit_hash,
         sessions.session_id AS session_id,
-        COALESCE(SUM(CASE WHEN messages.role = 'user' THEN 1 ELSE 0 END), 0) AS turn_count,
-        COUNT(messages.id) AS message_count,
-        MIN(messages.timestamp) AS started_at,
-        MAX(messages.timestamp) AS ended_at
+        sessions.turn_count AS turn_count,
+        sessions.message_count AS message_count,
+        sessions.thought_count AS thought_count,
+        sessions.tool_call_count AS tool_call_count,
+        sessions.meta_count AS meta_count,
+        sessions.started_at AS started_at,
+        sessions.ended_at AS ended_at,
+        sessions.active_duration_ms AS active_duration_ms
       FROM sessions
-      LEFT JOIN messages ON messages.session_id = sessions.id
       ${whereClause}
-      GROUP BY sessions.id
     `,
   );
   const rows = (workspace ? stmt.all(workspace) : stmt.all()) as Array<{
@@ -756,8 +914,12 @@ const getSessionsForTree = (database: Database.Database, workspace?: string | nu
     session_id?: string | null;
     turn_count?: number | null;
     message_count?: number | null;
+    thought_count?: number | null;
+    tool_call_count?: number | null;
+    meta_count?: number | null;
     started_at?: string | null;
     ended_at?: string | null;
+    active_duration_ms?: number | null;
   }>;
 
   return rows.map((row) => {
@@ -774,8 +936,12 @@ const getSessionsForTree = (database: Database.Database, workspace?: string | nu
       sessionId: row.session_id ?? '',
       turnCount: row.turn_count ?? null,
       messageCount: row.message_count ?? null,
+      thoughtCount: row.thought_count ?? null,
+      toolCallCount: row.tool_call_count ?? null,
+      metaCount: row.meta_count ?? null,
       startedAt: row.started_at ?? null,
       endedAt: row.ended_at ?? null,
+      activeDurationMs: row.active_duration_ms ?? null,
     };
   });
 };
@@ -869,8 +1035,12 @@ const buildSessionsTree = (root: string, entries: SessionTreeEntry[]) => {
       sessionId: entry.sessionId ?? '',
       turnCount: entry.turnCount ?? null,
       messageCount: entry.messageCount ?? null,
+      thoughtCount: entry.thoughtCount ?? null,
+      toolCallCount: entry.toolCallCount ?? null,
+      metaCount: entry.metaCount ?? null,
       startedAt: entry.startedAt ?? null,
       endedAt: entry.endedAt ?? null,
+      activeDurationMs: entry.activeDurationMs ?? null,
     });
   }
 
@@ -1063,14 +1233,16 @@ export const apiPlugin = (): Plugin => {
                         sessions.git_repo AS git_repo,
                         sessions.git_commit_hash AS git_commit_hash,
                         sessions.session_id AS session_id,
-                        COALESCE(SUM(CASE WHEN messages.role = 'user' THEN 1 ELSE 0 END), 0) AS turn_count,
-                        COUNT(messages.id) AS message_count,
-                        MIN(messages.timestamp) AS started_at,
-                        MAX(messages.timestamp) AS ended_at
+                        sessions.turn_count AS turn_count,
+                        sessions.message_count AS message_count,
+                        sessions.thought_count AS thought_count,
+                        sessions.tool_call_count AS tool_call_count,
+                        sessions.meta_count AS meta_count,
+                        sessions.started_at AS started_at,
+                        sessions.ended_at AS ended_at,
+                        sessions.active_duration_ms AS active_duration_ms
                       FROM sessions
-                      LEFT JOIN messages ON messages.session_id = sessions.id
                       ${whereClause}
-                      GROUP BY sessions.id
                     `,
                   );
                   const plan = workspace ? explainStmt.all(workspace) : explainStmt.all();
