@@ -114,6 +114,7 @@ export const SessionHeaderVariantB = ({
   // sessionDetails.cwd exists, so the repo fallback can show "no repo" until indexing fills it.
   const repoLabel = activeSession ? getRepoLabel(activeSession.gitRepo, activeSession.cwd) : null;
   const isRepoFromGit = Boolean(activeSession?.gitRepo?.trim());
+  const turnCountValue = activeSession ? (activeSession.turnCount ?? 0) : null;
   const headerClassNameMerged = ['space-y-3', headerClassName].filter(Boolean).join(' ');
   const titleClassNameMerged = ['text-xl text-slate-900 leading-snug line-clamp-2', titleClassName]
     .filter(Boolean)
@@ -233,10 +234,10 @@ export const SessionHeaderVariantB = ({
               <span className="chip-value">{durationLabel}</span>
             </span>
           )}
-          {activeSession?.turnCount !== null && activeSession?.turnCount !== undefined && (
+          {activeSession && (
             <span className="chip chip-sm chip-filled gap-1">
               <Repeat2 className="h-3.5 w-3.5" />
-              <span className="chip-value">{activeSession.turnCount}</span>
+              <span className="chip-value">{turnCountValue}</span>
               <span>turns</span>
             </span>
           )}

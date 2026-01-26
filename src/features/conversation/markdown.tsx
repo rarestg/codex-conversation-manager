@@ -30,7 +30,7 @@ const escapeHtmlTagLines = (markdown: string) => {
       continue;
     }
     if (inFence) continue;
-    if (/^\s*<\/?[A-Za-z][A-Za-z0-9_-]*>\s*$/.test(line)) {
+    if (/^\s*<\/?[A-Za-z][A-Za-z0-9_-]*(\s+[^>]+)?>\s*$/.test(line)) {
       lines[i] = line.replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
   }

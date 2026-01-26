@@ -66,6 +66,7 @@ export const ConversationMain = ({
     enabled: Boolean(activeSession) && !loadingSession,
     containerRef: mainRef,
     topSentinelRef,
+    sessionKey: activeSession?.id ?? null,
   });
 
   useEffect(() => {

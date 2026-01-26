@@ -10,6 +10,7 @@ interface UseTurnNavigationOptions {
   enabled?: boolean;
   containerRef?: RefObject<HTMLElement | null>;
   topSentinelRef?: RefObject<HTMLElement | null>;
+  sessionKey?: string | null;
 }
 
 const isEditableElement = (target: EventTarget | null) => {
@@ -25,11 +26,23 @@ export const useTurnNavigation = ({
   enabled = true,
   containerRef,
   topSentinelRef,
+  sessionKey,
 }: UseTurnNavigationOptions) => {
   const [activeTurnId, setActiveTurnId] = useState<number | null>(initialTurnId ?? null);
   const isAtTopRef = useRef(false);
   const activeTurnIdRef = useRef<number | null>(initialTurnId ?? null);
   const lastUrlTurnRef = useRef<number | null>(initialTurnId ?? null);
+  const lastSessionKeyRef = useRef<string | null>(sessionKey ?? null);
+
+  useEffect(() => {
+    if (sessionKey === lastSessionKeyRef.current) return;
+    lastSessionKeyRef.current = sessionKey ?? null;
+    lastUrlTurnRef.current = null;
+    activeTurnIdRef.current = initialTurnId ?? null;
+    isAtTopRef.current = false;
+    setActiveTurnId(initialTurnId ?? null);
+    logTurnNav('session:reset', { sessionKey, initialTurnId });
+  }, [initialTurnId, sessionKey]);
 
   useEffect(() => {
     if (!enabled) return;

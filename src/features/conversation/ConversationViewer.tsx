@@ -114,7 +114,8 @@ export default function ConversationViewer() {
     ? 'flex flex-wrap items-center justify-between gap-4'
     : 'flex flex-wrap items-center justify-between gap-3';
 
-  const canJump = Boolean(activeSession) && !loadingSession;
+  const canJump = Boolean(activeSession) && !loadingSession && !isCanvas;
+  const showTurnJump = !showHome && !isCanvas;
 
   return (
     <div className="min-h-screen px-4 py-8 sm:px-8">
@@ -151,7 +152,7 @@ export default function ConversationViewer() {
                   Home
                 </button>
               )}
-              {!showHome && (
+              {showTurnJump && (
                 <button
                   type="button"
                   onClick={() => window.dispatchEvent(new CustomEvent(TURN_JUMP_EVENT))}

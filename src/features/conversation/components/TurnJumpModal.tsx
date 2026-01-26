@@ -11,11 +11,21 @@ interface TurnJumpModalProps {
 export const TurnJumpModal = ({ open, totalTurns, currentTurnIndex, onClose, onJump }: TurnJumpModalProps) => {
   const [value, setValue] = useState('');
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const didOpenRef = useRef(false);
+
+  useEffect(() => {
+    if (!open) {
+      didOpenRef.current = false;
+      return;
+    }
+    if (didOpenRef.current) return;
+    didOpenRef.current = true;
+    const initial = currentTurnIndex >= 0 && totalTurns > 0 ? String(Math.min(currentTurnIndex + 1, totalTurns)) : '';
+    setValue(initial);
+  }, [currentTurnIndex, open, totalTurns]);
 
   useEffect(() => {
     if (!open) return;
-    const initial = currentTurnIndex >= 0 && totalTurns > 0 ? String(Math.min(currentTurnIndex + 1, totalTurns)) : '';
-    setValue(initial);
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         onClose();
@@ -23,11 +33,14 @@ export const TurnJumpModal = ({ open, totalTurns, currentTurnIndex, onClose, onJ
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentTurnIndex, onClose, open, totalTurns]);
+  }, [onClose, open]);
 
   useEffect(() => {
     if (!open) return;
-    window.setTimeout(() => inputRef.current?.focus(), 0);
+    window.setTimeout(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }, 0);
   }, [open]);
 
   if (!open) return null;
