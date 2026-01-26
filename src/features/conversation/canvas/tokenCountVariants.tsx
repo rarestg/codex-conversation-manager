@@ -20,6 +20,7 @@ export const TokenCountVariantA = ({ context }: { context: CanvasContext }) => {
   if (!parsed) return <TokenCountEmptyState />;
 
   const totalTokens = parsed.totalUsage?.totalTokens ?? null;
+  const contextUsedTokens = parsed.contextUsedTokens ?? null;
   const contextWindow = parsed.contextWindowSize ?? null;
   const contextPercent = parsed.contextUsagePercent ?? null;
   const lastUsage = parsed.lastUsage ?? null;
@@ -37,7 +38,7 @@ export const TokenCountVariantA = ({ context }: { context: CanvasContext }) => {
           <h3 className="mt-2 text-lg text-slate-900">Telemetry snapshot</h3>
           {totalTokens !== null && (
             <p className="mt-1 text-xs text-slate-500">
-              Total usage: <span className="font-semibold text-slate-700">{formatMaybe(totalTokens)}</span>
+              Total (cumulative): <span className="font-semibold text-slate-700">{formatMaybe(totalTokens)}</span>
             </p>
           )}
         </div>
@@ -53,9 +54,9 @@ export const TokenCountVariantA = ({ context }: { context: CanvasContext }) => {
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
             <div className="h-full bg-teal-500" style={{ width: `${contextPercent ?? 0}%` }} />
           </div>
-          {totalTokens !== null && contextWindow !== null && (
+          {contextUsedTokens !== null && contextWindow !== null && (
             <div className="mt-1 text-[11px] text-slate-500">
-              {formatMaybe(totalTokens)} / {formatMaybe(contextWindow)} tokens
+              {formatMaybe(contextUsedTokens)} / {formatMaybe(contextWindow)} tokens
             </div>
           )}
         </div>
@@ -136,7 +137,7 @@ export const TokenCountVariantB = ({ context }: { context: CanvasContext }) => {
   const parsed = parseTokenCountEntry(tokenItem?.raw ?? tokenItem?.content);
   if (!parsed) return <TokenCountEmptyState />;
 
-  const totalTokens = parsed.totalUsage?.totalTokens ?? null;
+  const contextUsedTokens = parsed.contextUsedTokens ?? null;
   const contextWindow = parsed.contextWindowSize ?? null;
   const contextPercent = parsed.contextUsagePercent ?? null;
   const lastUsage = parsed.lastUsage ?? null;
@@ -164,9 +165,9 @@ export const TokenCountVariantB = ({ context }: { context: CanvasContext }) => {
           <div className="h-2 overflow-hidden rounded-full bg-slate-800">
             <div className="h-full bg-cyan-400" style={{ width: `${contextPercent ?? 0}%` }} />
           </div>
-          {totalTokens !== null && contextWindow !== null && (
+          {contextUsedTokens !== null && contextWindow !== null && (
             <div className="text-[11px] text-slate-400">
-              {formatMaybe(totalTokens)} / {formatMaybe(contextWindow)} tokens
+              {formatMaybe(contextUsedTokens)} / {formatMaybe(contextWindow)} tokens
             </div>
           )}
         </div>
