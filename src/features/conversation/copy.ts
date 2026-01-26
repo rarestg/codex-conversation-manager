@@ -1,4 +1,5 @@
 import { generateId } from './format';
+import { buildTokenCountExport } from './tokenCounts';
 import type { Turn } from './types';
 
 export const copyText = async (text: string): Promise<boolean> => {
@@ -37,12 +38,13 @@ export const buildConversationExport = (turns: Turn[]) => {
     tool_call: 0,
     tool_output: 0,
     meta: 0,
+    token_count: 0,
   };
 
   const items = turns.flatMap((turn) => turn.items);
   const formatted = items
     .map((item) => {
-      const countKey = item.type === 'token_count' ? 'meta' : item.type;
+      const countKey = item.type;
       if (counters[countKey] === undefined) counters[countKey] = 0;
       counters[countKey] += 1;
       const count = counters[countKey];
@@ -61,6 +63,10 @@ export const buildConversationExport = (turns: Turn[]) => {
       if (item.type === 'tool_output') {
         const callAttr = item.callId ? ` call_id="${item.callId}"` : '';
         return `<TOOL-OUTPUT-${count}${callAttr}>\n${item.content}\n</TOOL-OUTPUT-${count}>`;
+      }
+      if (item.type === 'token_count') {
+        const tokenExport = buildTokenCountExport(item.raw ?? item.content);
+        return `<TOKEN-COUNT-${count}>\n${tokenExport}\n</TOKEN-COUNT-${count}>`;
       }
       return `<META-${count}>\n${item.content}\n</META-${count}>`;
     })

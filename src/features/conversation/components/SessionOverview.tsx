@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react';
+import { formatCompactCount } from '../format';
 import type { SessionDetails, SessionFileEntry, Turn } from '../types';
 import { SessionHeader } from './SessionHeader';
 import { Toggle } from './Toggle';
@@ -7,6 +8,7 @@ interface SessionStats {
   thoughtCount: number;
   toolCallCount: number;
   metaCount: number;
+  tokenCount: number;
 }
 
 type SessionHeaderComponent = ComponentType<{
@@ -26,7 +28,7 @@ type SessionHeaderComponent = ComponentType<{
 interface CompactToggleProps {
   label: string;
   checked: boolean;
-  count?: number;
+  count?: number | string;
   onChange: (checked: boolean) => void;
 }
 
@@ -59,10 +61,12 @@ export interface SessionOverviewProps {
   showThoughts: boolean;
   showTools: boolean;
   showMeta: boolean;
+  showTokenCounts: boolean;
   showFullContent: boolean;
   onShowThoughtsChange: (value: boolean) => void;
   onShowToolsChange: (value: boolean) => void;
   onShowMetaChange: (value: boolean) => void;
+  onShowTokenCountsChange: (value: boolean) => void;
   onShowFullContentChange: (value: boolean) => void;
   variantLabel?: string;
   variantHint?: string;
@@ -88,10 +92,12 @@ export const SessionOverview = ({
   showThoughts,
   showTools,
   showMeta,
+  showTokenCounts,
   showFullContent,
   onShowThoughtsChange,
   onShowToolsChange,
   onShowMetaChange,
+  onShowTokenCountsChange,
   onShowFullContentChange,
   variantLabel,
   variantHint,
@@ -114,7 +120,7 @@ export const SessionOverview = ({
     .join(' ');
   const isCompactToggleLayout = toggleVariant === 'compact';
   const toggleGridClassNameMerged = [
-    isCompactToggleLayout ? 'flex flex-wrap items-center gap-2' : 'grid gap-3 md:grid-cols-2 xl:grid-cols-4',
+    isCompactToggleLayout ? 'flex flex-wrap items-center gap-2' : 'grid gap-3 md:grid-cols-2 xl:grid-cols-5',
     toggleGridClassName,
   ]
     .filter(Boolean)
@@ -122,6 +128,7 @@ export const SessionOverview = ({
   const thoughtCount = showToggleCountsWhenOff ? stats.thoughtCount : undefined;
   const toolCount = showToggleCountsWhenOff ? stats.toolCallCount : undefined;
   const metaCount = showToggleCountsWhenOff ? stats.metaCount : undefined;
+  const tokenCount = showToggleCountsWhenOff ? formatCompactCount(stats.tokenCount) : undefined;
 
   const hasVariantHeader = Boolean(variantLabel || variantHint);
 
@@ -162,6 +169,12 @@ export const SessionOverview = ({
                 onChange={onShowThoughtsChange}
               />
               <CompactToggle label="Tools" checked={showTools} count={toolCount} onChange={onShowToolsChange} />
+              <CompactToggle
+                label="Token counts"
+                checked={showTokenCounts}
+                count={tokenCount}
+                onChange={onShowTokenCountsChange}
+              />
               <CompactToggle label="Metadata" checked={showMeta} count={metaCount} onChange={onShowMetaChange} />
               <CompactToggle label="Full content" checked={showFullContent} onChange={onShowFullContentChange} />
             </>
@@ -180,8 +193,14 @@ export const SessionOverview = ({
                 onChange={onShowToolsChange}
               />
               <Toggle
+                label="Token counts"
+                description="token_count telemetry entries."
+                checked={showTokenCounts}
+                onChange={onShowTokenCountsChange}
+              />
+              <Toggle
                 label="Metadata"
-                description="turn_context, session_meta, token_count."
+                description="turn_context and session_meta."
                 checked={showMeta}
                 onChange={onShowMetaChange}
               />

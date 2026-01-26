@@ -32,6 +32,7 @@ export interface SessionFileEntry {
   thoughtCount?: number | null;
   toolCallCount?: number | null;
   metaCount?: number | null;
+  tokenCount?: number | null;
   startedAt?: string | null;
   endedAt?: string | null;
   activeDurationMs?: number | null;

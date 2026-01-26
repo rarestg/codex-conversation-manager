@@ -1,6 +1,20 @@
-import { Brain, Clock, Copy, Eye, Folder, GitBranch, Github, Hourglass, Info, Repeat2, Wrench } from 'lucide-react';
+import {
+  Brain,
+  Clock,
+  Copy,
+  Eye,
+  Folder,
+  GitBranch,
+  Github,
+  Hash,
+  Hourglass,
+  Info,
+  Repeat2,
+  Wrench,
+} from 'lucide-react';
 import { buildConversationExport } from '../copy';
 import {
+  formatCompactCount,
   formatDuration,
   formatDurationMs,
   formatRelativeTime,
@@ -18,6 +32,7 @@ interface SessionStats {
   thoughtCount: number;
   toolCallCount: number;
   metaCount: number;
+  tokenCount: number;
 }
 
 interface SessionHeaderProps {
@@ -73,6 +88,13 @@ export const SessionHeader = ({
   const thoughtCount = activeSession?.thoughtCount ?? stats.thoughtCount;
   const toolCallCount = activeSession?.toolCallCount ?? stats.toolCallCount;
   const metaCount = activeSession?.metaCount ?? stats.metaCount;
+  const tokenCount = activeSession?.tokenCount ?? stats.tokenCount;
+  const tokenCountLabel =
+    tokenCount === null || tokenCount === undefined
+      ? visibleItemCount > 0
+        ? formatCompactCount(stats.tokenCount)
+        : '—'
+      : formatCompactCount(tokenCount);
   const sessionRoot = sessionsRoot?.trim() || '';
   const fallbackId = activeSession?.id ?? '';
   const pathSeparator = sessionRoot.includes('\\') ? '\\' : sessionRoot ? '/' : fallbackId.includes('\\') ? '\\' : '/';
@@ -223,6 +245,13 @@ export const SessionHeader = ({
                   {metaCount}
                 </span>
                 <span className="translate-y-[0.5px]">meta</span>
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1.5 text-[11px]/[14px] text-slate-600 shadow-sm">
+                <Hash className="h-3.5 w-3.5" />
+                <span className="translate-y-[0.5px] inline-block min-w-[4ch] text-center tabular-nums">
+                  {tokenCountLabel}
+                </span>
+                <span className="translate-y-[0.5px]">token counts</span>
               </span>
               <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1.5 text-[11px]/[14px] text-slate-600 shadow-sm">
                 <Eye className="h-3.5 w-3.5" />

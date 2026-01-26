@@ -40,6 +40,7 @@ interface SessionFileInfo {
   thoughtCount: number | null;
   toolCallCount: number | null;
   metaCount: number | null;
+  tokenCount: number | null;
   startedAt: string | null;
   endedAt: string | null;
   activeDurationMs: number | null;
@@ -61,6 +62,7 @@ interface SessionTreeEntry {
   thoughtCount: number | null;
   toolCallCount: number | null;
   metaCount: number | null;
+  tokenCount: number | null;
   startedAt: string | null;
   endedAt: string | null;
   activeDurationMs: number | null;
@@ -190,6 +192,7 @@ const initSchema = (database: Database.Database) => {
       thought_count INTEGER,
       tool_call_count INTEGER,
       meta_count INTEGER,
+      token_count_count INTEGER,
       active_duration_ms INTEGER
     );
 
@@ -253,6 +256,7 @@ const SESSION_COLUMNS: Record<string, string> = {
   thought_count: 'INTEGER',
   tool_call_count: 'INTEGER',
   meta_count: 'INTEGER',
+  token_count_count: 'INTEGER',
   active_duration_ms: 'INTEGER',
 };
 
@@ -432,6 +436,7 @@ const parseJsonlFile = async (filePath: string) => {
   let thoughtCount = 0;
   let toolCallCount = 0;
   let metaCount = 0;
+  let tokenCountCount = 0;
   let startedAt: string | null = null;
   let endedAt: string | null = null;
   let startedAtMs: number | null = null;
@@ -568,7 +573,7 @@ const parseJsonlFile = async (filePath: string) => {
             content: String(payload.text),
           });
         } else if (payload.type === 'token_count') {
-          metaCount += 1;
+          tokenCountCount += 1;
         } else if (payload.type === 'turn_aborted') {
           continue;
         }
@@ -615,6 +620,7 @@ const parseJsonlFile = async (filePath: string) => {
       thoughtCount,
       toolCallCount,
       metaCount,
+      tokenCountCount,
       activeDurationMs: activeDurationPairs > 0 ? activeDurationMs : null,
     },
   };
@@ -705,6 +711,7 @@ const indexSessions = async (root: string) => {
       thought_count,
       tool_call_count,
       meta_count,
+      token_count_count,
       active_duration_ms
     )
     VALUES (
@@ -725,6 +732,7 @@ const indexSessions = async (root: string) => {
       @thought_count,
       @tool_call_count,
       @meta_count,
+      @token_count_count,
       @active_duration_ms
     )
     ON CONFLICT(id) DO UPDATE SET
@@ -743,6 +751,7 @@ const indexSessions = async (root: string) => {
       thought_count = excluded.thought_count,
       tool_call_count = excluded.tool_call_count,
       meta_count = excluded.meta_count,
+      token_count_count = excluded.token_count_count,
       active_duration_ms = excluded.active_duration_ms
   `);
   const insertFile = database.prepare(`
@@ -798,6 +807,7 @@ const indexSessions = async (root: string) => {
           thought_count: parsed.metrics.thoughtCount ?? null,
           tool_call_count: parsed.metrics.toolCallCount ?? null,
           meta_count: parsed.metrics.metaCount ?? null,
+          token_count_count: parsed.metrics.tokenCountCount ?? null,
           active_duration_ms: parsed.metrics.activeDurationMs ?? null,
         });
       } catch (error) {
@@ -895,6 +905,7 @@ const getSessionsForTree = (database: Database.Database, workspace?: string | nu
         sessions.thought_count AS thought_count,
         sessions.tool_call_count AS tool_call_count,
         sessions.meta_count AS meta_count,
+        sessions.token_count_count AS token_count_count,
         sessions.started_at AS started_at,
         sessions.ended_at AS ended_at,
         sessions.active_duration_ms AS active_duration_ms
@@ -917,6 +928,7 @@ const getSessionsForTree = (database: Database.Database, workspace?: string | nu
     thought_count?: number | null;
     tool_call_count?: number | null;
     meta_count?: number | null;
+    token_count_count?: number | null;
     started_at?: string | null;
     ended_at?: string | null;
     active_duration_ms?: number | null;
@@ -939,6 +951,7 @@ const getSessionsForTree = (database: Database.Database, workspace?: string | nu
       thoughtCount: row.thought_count ?? null,
       toolCallCount: row.tool_call_count ?? null,
       metaCount: row.meta_count ?? null,
+      tokenCount: row.token_count_count ?? null,
       startedAt: row.started_at ?? null,
       endedAt: row.ended_at ?? null,
       activeDurationMs: row.active_duration_ms ?? null,
@@ -1038,6 +1051,7 @@ const buildSessionsTree = (root: string, entries: SessionTreeEntry[]) => {
       thoughtCount: entry.thoughtCount ?? null,
       toolCallCount: entry.toolCallCount ?? null,
       metaCount: entry.metaCount ?? null,
+      tokenCount: entry.tokenCount ?? null,
       startedAt: entry.startedAt ?? null,
       endedAt: entry.endedAt ?? null,
       activeDurationMs: entry.activeDurationMs ?? null,
@@ -1238,6 +1252,7 @@ export const apiPlugin = (): Plugin => {
                         sessions.thought_count AS thought_count,
                         sessions.tool_call_count AS tool_call_count,
                         sessions.meta_count AS meta_count,
+                        sessions.token_count_count AS token_count_count,
                         sessions.started_at AS started_at,
                         sessions.ended_at AS ended_at,
                         sessions.active_duration_ms AS active_duration_ms
