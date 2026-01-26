@@ -119,7 +119,8 @@ export const SessionHeader = ({
   const isRepoFromGit = Boolean(activeSession?.gitRepo?.trim());
   const RepoIcon = isRepoFromGit ? Github : Folder;
   const repoTitle = (activeSession?.gitRepo ?? repoLabel) || '';
-  const turnCountValue = activeSession ? (activeSession.turnCount ?? 0) : null;
+  const turnCountFromTurns = filteredTurns.filter((turn) => !turn.isPreamble).length;
+  const turnCountValue = activeSession ? (activeSession.turnCount ?? turnCountFromTurns) : null;
   const headerClassNameMerged = ['flex flex-wrap items-start justify-between gap-4', headerClassName]
     .filter(Boolean)
     .join(' ');

@@ -109,3 +109,7 @@ Verification
 - Change the sessions root in Settings and confirm the watcher switches to the new directory; new files in the old root should not trigger updates.
 - Click a ghost session (DB entry with missing file) and confirm the UI shows “Session file not found. Please reindex.”
 - Confirm the SSE connection remains stable (no repeated reconnect loops) and the UI still updates after several minutes.
+
+Additional Notes
+- Consider skipping the initial reindex on watcher start if the DB already has sessions for the current root (or only force it when the root changes or the DB is empty). This avoids a redundant full scan on every dev-server boot.
+- Ensure the watcher ignores the SQLite DB file (and any temp files) even if the DB ends up inside the sessions root, to prevent reindex loops.

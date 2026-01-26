@@ -114,7 +114,8 @@ export const SessionHeaderVariantB = ({
   // sessionDetails.cwd exists, so the repo fallback can show "no repo" until indexing fills it.
   const repoLabel = activeSession ? getRepoLabel(activeSession.gitRepo, activeSession.cwd) : null;
   const isRepoFromGit = Boolean(activeSession?.gitRepo?.trim());
-  const turnCountValue = activeSession ? (activeSession.turnCount ?? 0) : null;
+  const turnCountFromTurns = filteredTurns.filter((turn) => !turn.isPreamble).length;
+  const turnCountValue = activeSession ? (activeSession.turnCount ?? turnCountFromTurns) : null;
   const headerClassNameMerged = ['space-y-3', headerClassName].filter(Boolean).join(' ');
   const titleClassNameMerged = ['text-xl text-slate-900 leading-snug line-clamp-2', titleClassName]
     .filter(Boolean)

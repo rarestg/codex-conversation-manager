@@ -16,6 +16,18 @@ How to extend this index
 
 Entries
 
+- Plan: 2026-01-26-11pm_turn-navigation-plan.txt
+  Context: 2026-01-26-11pm_turn-navigation-plan-context.txt
+  Why: Add fast turn-to-turn navigation (arrow keys + scroll-aware URL updates) without re-fetching or re-parsing sessions, and prep a turn jump modal.
+  Outcome:
+  - Added jumpToTurn API plus IntersectionObserver tracking to keep ?turn in sync on scroll.
+  - Implemented top sentinel clearing, URL de-dupe, and session-aware resets to prevent stale or skipped updates.
+  - Added ArrowLeft/ArrowRight navigation, Cmd/Ctrl+K “Go to turn” modal, and a header shortcut button.
+  - Added turn-nav debug flag (VITE_TURN_NAV_DEBUG) for structured logging.
+  Notes:
+  - Navigation skips session preamble; URL updates use replaceState.
+  - Turn activation uses a top 10% focus band for stability.
+
 - Plan: 2026-01-26-9pm_chip-utility-unification-plan.txt
   Context: 2026-01-26-9pm_chip-utility-unification-plan-context.txt
   Why: Consolidate duplicated pill/chip styles (VariantB + compact toggles) into a reusable utility system, then align VariantA and SessionsPanel for consistency.

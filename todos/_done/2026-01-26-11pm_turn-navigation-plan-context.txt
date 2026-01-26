@@ -1,0 +1,50 @@
+Turn Navigation + URL Tracking (Implementation Context)
+
+Purpose
+This document summarizes what was implemented from:
+- todos/_done/2026-01-26-11pm_turn-navigation-plan.txt
+It captures current behavior, key decisions, and follow-up adjustments made during implementation.
+
+Status
+- Turn navigation is implemented with scroll-aware URL updates and ArrowLeft/ArrowRight jumps.
+- Cmd/Ctrl+K modal for “Go to turn” is implemented and wired to a header shortcut button.
+- Session preamble is excluded from navigation and URL tracking.
+- URL updates use replaceState and are cleared when the header/top is visible.
+
+Key Decisions (Current)
+1) Navigation is O(1) via jumpToTurn (no re-fetch/parse).
+2) Current turn tracking uses IntersectionObserver with a tight top band (rootMargin: '0px 0px -90% 0px').
+3) A top sentinel clears ?turn when the header is visible; URL updates are de-duped to avoid churn.
+4) Arrow keys are scoped to the conversation container to avoid global hijacking.
+5) Cmd/Ctrl+K opens a compact modal; Enter jumps, Esc closes.
+
+Behavior Summary
+- Scroll updates URL to the nearest turn when a turn header enters the top 10% band.
+- Scrolling back to the top clears ?turn (refresh stays at the top).
+- ArrowLeft/ArrowRight jumps to previous/next turn (skipping preamble).
+- Cmd/Ctrl+K or the header shortcut button opens “Go to turn”; input is auto-selected.
+
+Files Touched (Core)
+- src/features/conversation/hooks/useSession.ts
+- src/features/conversation/hooks/useTurnObserver.ts
+- src/features/conversation/hooks/useTurnNavigation.ts
+- src/features/conversation/ConversationMain.tsx
+- src/features/conversation/ConversationViewer.tsx
+- src/features/conversation/components/TurnCard.tsx
+- src/features/conversation/components/TurnJumpModal.tsx
+- src/features/conversation/turnNavigation.ts
+- src/features/conversation/debug.ts
+- .env.example
+
+Follow-ups / Adjustments
+- Added top sentinel + URL clear to prevent refresh jumps.
+- Added sessionKey resets to avoid URL de-dupe issues across session switches.
+- Added turn-nav debug flag (VITE_TURN_NAV_DEBUG) for structured logs.
+- Added header shortcut button for jump modal; hidden on canvas view.
+
+Verification Checklist (Current)
+- Scroll tracking updates ?turn and does not refetch or re-parse sessions.
+- URL clears at top; refresh preserves header view.
+- Arrow navigation skips preamble and respects input focus.
+- Cmd/Ctrl+K opens modal; input is selected; Enter jumps; Esc closes.
+- Session switches reset de-dupe state and update URL correctly.
