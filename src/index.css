@@ -62,15 +62,79 @@
   }
 
   .chip {
-    @apply flex min-w-0 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 shadow-sm leading-none;
-  }
-
-  .chip-label {
-    @apply text-[10px]/[1] font-semibold uppercase tracking-[0.25em] text-slate-400 translate-y-[0.5px];
+    @apply inline-flex min-w-0 items-center gap-2 rounded-full border border-slate-200 text-slate-600;
   }
 
   .chip-value {
-    @apply min-w-0 flex-1 truncate font-mono text-slate-700 leading-none translate-y-[0.5px];
+    @apply tabular-nums;
+  }
+
+  .chip-xs {
+    @apply px-2 py-1 text-[10px]/[12px];
+  }
+
+  .chip-sm {
+    @apply px-2 py-1 text-[11px];
+  }
+
+  .chip-md {
+    @apply px-2.5 py-1 text-xs;
+  }
+
+  .chip-lg {
+    @apply px-3 py-1 text-xs;
+  }
+
+  .chip-filled {
+    @apply bg-white/70;
+  }
+
+  .chip-soft {
+    @apply bg-white/80;
+  }
+
+  .chip-muted {
+    @apply bg-slate-100;
+  }
+
+  .chip-white {
+    @apply bg-white;
+  }
+
+  .chip-shadow {
+    @apply shadow-sm;
+  }
+
+  .chip-button {
+    @apply text-left transition-colors hover:border-slate-300 hover:text-slate-700 disabled:opacity-60;
+  }
+
+  .chip-left {
+    @apply text-left;
+  }
+
+  .chip-count {
+    @apply rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500 tabular-nums leading-none;
+  }
+
+  .chip-count-text {
+    @apply inline-block translate-y-[0.5px];
+  }
+
+  .meta-row {
+    @apply flex items-center gap-3 rounded-2xl border border-slate-100 bg-white/70 px-3 py-1.5 text-left;
+  }
+
+  .meta-label {
+    @apply w-16 shrink-0 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400;
+  }
+
+  .meta-value {
+    @apply min-w-0 truncate text-xs text-slate-700;
+  }
+
+  .chip-segmented {
+    @apply inline-flex items-stretch overflow-hidden rounded-full border border-slate-200 bg-white/70;
   }
 
   .message-body,

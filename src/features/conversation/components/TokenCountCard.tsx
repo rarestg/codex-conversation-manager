@@ -118,7 +118,7 @@ export const TokenCountCard = ({ item, itemIndex, showFullContent }: TokenCountC
           idleLabel="Copy"
           hoverLabel="Copy"
           ariaLabel="Copy token count content"
-          className="rounded-full border border-white/70 bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm"
+          className="chip chip-lg chip-filled chip-shadow chip-button !border-white/70 font-medium"
         />
       </div>
 
@@ -131,7 +131,7 @@ export const TokenCountCard = ({ item, itemIndex, showFullContent }: TokenCountC
             colorClassName="bg-teal-500"
           />
           <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
-            <div className="inline-flex items-stretch overflow-hidden rounded-full border border-slate-200 bg-white/70">
+            <div className="chip-segmented">
               <span className="flex items-center bg-slate-500 px-2.5 text-[10px] font-medium text-white">Usage</span>
               <span className="flex flex-wrap items-center px-2.5 py-1">
                 {usageParts.map((part, index) => (
@@ -143,7 +143,7 @@ export const TokenCountCard = ({ item, itemIndex, showFullContent }: TokenCountC
               </span>
             </div>
             {limitParts.length > 0 && (
-              <div className="inline-flex items-stretch overflow-hidden rounded-full border border-slate-200 bg-white/70">
+              <div className="chip-segmented">
                 <span className="flex items-center bg-slate-500 px-2.5 text-[10px] font-medium text-white">Limits</span>
                 <span className="flex flex-wrap items-center px-2.5 py-1">
                   {limitParts.map((part, index) => (

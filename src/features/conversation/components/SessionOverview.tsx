@@ -33,10 +33,12 @@ interface CompactToggleProps {
 }
 
 const CompactToggle = ({ label, checked, count, onChange }: CompactToggleProps) => (
-  <label className="group inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 shadow-sm transition hover:border-slate-300">
+  <label className="group chip chip-md chip-filled chip-shadow gap-2 py-1.5 text-xs text-slate-700 leading-none transition hover:border-slate-300">
     <span className="font-medium text-slate-900">{label}</span>
     {count !== undefined && (
-      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500 tabular-nums">{count}</span>
+      <span className="chip-count">
+        <span className="chip-count-text">{count}</span>
+      </span>
     )}
     <span className="relative inline-flex h-4 w-8 shrink-0 items-center overflow-hidden rounded-full">
       <input

@@ -123,9 +123,8 @@ export const SessionHeaderVariantB = ({
     .filter(Boolean)
     .join(' ');
   const actionsClassNameMerged = ['flex items-center gap-2', actionsClassName].filter(Boolean).join(' ');
-  const subtitleItemClassName =
-    'flex min-w-0 items-center gap-1 rounded-full border border-slate-200 px-2.5 py-1 text-left text-xs text-slate-500';
-  const subtitleButtonClassName = `${subtitleItemClassName} transition-colors hover:text-slate-700 disabled:opacity-60`;
+  const subtitleItemClassName = 'chip chip-md gap-1 text-slate-500';
+  const subtitleButtonClassName = `${subtitleItemClassName} chip-button`;
   const subtitleLabelWrapperClassName = 'min-w-0 flex-1';
   const subtitleLabelClassName = 'min-w-0 truncate';
 
@@ -158,7 +157,7 @@ export const SessionHeaderVariantB = ({
       className={subtitleButtonClassName}
     />
   ) : (
-    <span className={`${subtitleItemClassName} text-slate-400`}>
+    <span className={`${subtitleItemClassName} chip-left text-slate-400`}>
       <Minus className="h-3.5 w-3.5" />
       <span className={subtitleLabelClassName}>no repo</span>
     </span>
@@ -176,7 +175,7 @@ export const SessionHeaderVariantB = ({
       className={subtitleButtonClassName}
     />
   ) : (
-    <span className={`${subtitleItemClassName} text-slate-400`}>
+    <span className={`${subtitleItemClassName} chip-left text-slate-400`}>
       <Minus className="h-3.5 w-3.5" />
       <span className={subtitleLabelClassName}>no branch</span>
     </span>
@@ -190,10 +189,10 @@ export const SessionHeaderVariantB = ({
       ariaLabel={ariaLabel}
       title={copyValue}
       leading={label}
-      leadingClassName="w-16 shrink-0 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400"
+      leadingClassName="meta-label"
       labelWrapperClassName="min-w-0 flex-1"
-      labelClassName="min-w-0 truncate text-xs text-slate-700"
-      className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white/70 px-3 py-1.5 text-left"
+      labelClassName="meta-value"
+      className="meta-row"
     />
   );
 
@@ -223,35 +222,35 @@ export const SessionHeaderVariantB = ({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className={statsRowClassNameMerged}>
           {timeLabel && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/70 px-2 py-1 text-[11px] text-slate-600">
+            <span className="chip chip-sm chip-filled gap-1">
               <Clock className="h-3.5 w-3.5" />
-              <span className="tabular-nums">{timeLabel}</span>
+              <span className="chip-value">{timeLabel}</span>
             </span>
           )}
           {durationLabel && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/70 px-2 py-1 text-[11px] text-slate-600">
+            <span className="chip chip-sm chip-filled gap-1">
               <Hourglass className="h-3.5 w-3.5" />
-              <span className="tabular-nums">{durationLabel}</span>
+              <span className="chip-value">{durationLabel}</span>
             </span>
           )}
           {activeSession?.turnCount !== null && activeSession?.turnCount !== undefined && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/70 px-2 py-1 text-[11px] text-slate-600">
+            <span className="chip chip-sm chip-filled gap-1">
               <Repeat2 className="h-3.5 w-3.5" />
-              <span className="tabular-nums">{activeSession.turnCount}</span>
+              <span className="chip-value">{activeSession.turnCount}</span>
               <span>turns</span>
             </span>
           )}
           {activeSession && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/70 px-2 py-1 text-[11px] text-slate-600">
+            <span className="chip chip-sm chip-filled gap-1">
               <Hash className="h-3.5 w-3.5" />
-              <span className="tabular-nums">{tokenCountLabel}</span>
+              <span className="chip-value">{tokenCountLabel}</span>
               <span>token counts</span>
             </span>
           )}
           {activeSession && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/70 px-2 py-1 text-[11px] text-slate-600">
+            <span className="chip chip-sm chip-filled gap-1">
               <Eye className="h-3.5 w-3.5" />
-              <span className="tabular-nums">{visibleItemCount}</span>
+              <span className="chip-value">{visibleItemCount}</span>
               <span>visible</span>
             </span>
           )}
