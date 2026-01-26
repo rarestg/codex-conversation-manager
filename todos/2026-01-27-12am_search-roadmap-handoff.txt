@@ -1,0 +1,100 @@
+Search Roadmap Handoff (Debounce Status, UUID Resolve, Aggregated Results)
+
+Context
+We have three related plans that improve search correctness, UX, and performance. They can be worked by multiple engineers, but there are dependencies and cross‑cutting decisions that should be understood upfront. This document explains how the plans relate, the recommended order, and how to split work across multiple engineers without conflicts.
+
+Plans In Scope
+1) Debounced Search Status (first‑class lifecycle)
+   File: todos/2026-01-26-10pm_search-debounce-state-plan.txt
+   Goal: Introduce explicit search lifecycle states so the empty state no longer flashes during debounce; add error UI behavior; ensure stale requests cannot flip status.
+
+2) UUID Auto‑Resolve + FTS Normalization
+   File: todos/2026-01-26-11pm_search-uuid-resolve-and-fts-normalization-plan.txt
+   Goal: Normalize FTS queries to prevent parser errors, fix resolve‑session ESCAPE bug, and auto‑resolve pasted UUIDs without firing the debounced search.
+
+3) Aggregated Search Results (One Row per Session)
+   File: todos/2026-01-26-11pm_search-result-session-aggregation-plan.txt
+   Goal: Deduplicate search results by session, return aggregate match counts, improve result rendering, and add match highlighting + Next/Prev navigation (with `/api/session-matches`).
+
+How They Relate
+- Plan 2 (FTS normalization) is foundational for Plan 3. Aggregated search must use normalized queries to avoid FTS errors for UUIDs and special characters.
+- Plan 1 (searchStatus) is mostly UI state hygiene and can be done independently, but will touch SearchPanel props and the search hook. Plan 3 will also touch SearchPanel rendering, so coordinate if multiple engineers are working in parallel.
+- Plan 3 introduces `?q=` and match navigation; this depends on Plan 2’s normalized query tokens if we want consistent highlighting.
+
+Recommended Execution Order
+1) Plan 2: UUID resolve + FTS normalization (server correctness first)
+   - Fix ESCAPE bug in /api/resolve-session.
+   - Add normalization + token cap to /api/search and return normalized tokens.
+   - Add client UUID auto‑resolve on paste (with debounced search suppression).
+   This stabilizes search behavior and fixes current server errors.
+
+2) Plan 1: Debounced search status model (UI correctness)
+   - Introduce searchStatus and derive loading flags from it.
+   - Ensure stale requests cannot update status.
+   - Add error UI state and reset rules.
+   This eliminates the flashing empty state and clarifies lifecycle behavior.
+
+3) Plan 3: Aggregated results + match navigation
+   - Change /api/search to return one row per session with aggregated counts.
+   - Update SearchPanel rendering and types.
+   - Add match navigation (`?q=` + `/api/session-matches`).
+   This is the largest change and benefits from the normalization work already in place.
+
+Parallelization Guidance
+If multiple engineers are available, work can be parallelized with care:
+- Engineer A: Plan 2 (server normalization + resolve) — isolated to server/apiPlugin.ts and useSearch/SearchPanel for paste handler.
+- Engineer B: Plan 1 (searchStatus lifecycle) — mostly useSearch and SearchPanel props; coordinate with Engineer C to avoid prop conflicts.
+- Engineer C: Plan 3 (aggregation + match navigation) — server query overhaul + UI rendering updates + URL handling.
+
+Avoid conflicts by agreeing on:
+- SearchPanel props and final shape (Plan 1 changes props and Plan 3 changes rendering). If working in parallel, choose a short branch‑level integration plan.
+- Types for search results. Plan 3 changes type shapes used in Plan 1 UI. Align on the final `SessionSearchResult` type.
+
+Integration Strategy
+- Land Plan 2 first (server fixes). It is the least UI‑coupled and unblocks UUID and FTS errors.
+- Land Plan 1 next. This is a UI-only change that should be straightforward once Plan 2 stabilizes search behavior.
+- Land Plan 3 last, since it changes the response schema and UI rendering.
+
+Notes on Shared Dependencies
+- SearchPanel and useSearch are touched by Plans 1 and 2 and heavily changed in Plan 3.
+- server/apiPlugin.ts is touched by Plans 2 and 3.
+- url.ts/useUrlSync will need updates for `?q=` (Plan 3).
+
+Progress Tracking (fill in as you go)
+Owner(s): ____________________________
+Start Date: __________________________
+Target Date: _________________________
+
+Plan 2 — UUID Resolve + FTS Normalization
+Status: [ ] Not started  [ ] In progress  [ ] Blocked  [ ] Done
+Owner: _______________________________
+Notes:
+- 
+- 
+
+Plan 1 — Search Debounce Status
+Status: [ ] Not started  [ ] In progress  [ ] Blocked  [ ] Done
+Owner: _______________________________
+Notes:
+- 
+- 
+
+Plan 3 — Aggregated Results + Match Navigation
+Status: [ ] Not started  [ ] In progress  [ ] Blocked  [ ] Done
+Owner: _______________________________
+Notes:
+- 
+- 
+
+Cross‑cutting Notes / Decisions
+- 
+- 
+- 
+
+Testing & Verification Checklist
+- FTS normalization: no “no such column” or `<` syntax errors; non‑Latin queries still work.
+- UUID paste: resolves immediately when session exists; debounced search is suppressed for that paste.
+- Debounce status: empty state does not flash during debounce; error state displays correctly; stale requests do not update status.
+- Aggregated results: one row per session, correct match counts, navigation uses session_path + first_match_turn_id.
+- Match navigation: `?q=` persists through refresh; `/api/session-matches` returns turn IDs; Next/Prev jumps correctly.
+

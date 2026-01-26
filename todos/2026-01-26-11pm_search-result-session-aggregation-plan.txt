@@ -1,0 +1,180 @@
+Search Results: One Row per Session (Aggregated Matches)
+
+Context
+Today the search results list is noisy because it returns one row per matching message. This means the same conversation/JSONL file appears multiple times when a query matches across multiple turns. The desired behavior is to return a single row per conversation with aggregate metrics:
+- total number of matching messages in that conversation
+- number of distinct turns that contain matches
+
+Additionally, the user experience should remain lightweight and consistent: no expandable/collapsible results. Instead, when a user opens a session from search, the session view should support in‑page match highlighting and Next/Prev navigation using a query parameter (e.g., `?q=`) and a known list of matching turns.
+
+We also want to ensure this remains performant. The simplest approach is a single aggregated SQL query (CTE), but we should be explicit about a fast path and consider future indexing if it becomes necessary. For now, we can accept a query‑time aggregation that relies on existing FTS and indexed `messages` and `sessions` tables, and keep a path open for a materialized per‑session search index if needed.
+
+Relevant codebase areas
+- server/apiPlugin.ts
+  Implements `/api/search` and contains all SQL for search. This is where we will change the query to return one row per session with aggregate counts and a representative snippet. It also performs workspace grouping and sorts by last_seen.
+- src/features/conversation/api.ts
+  `searchSessions` returns `WorkspaceSearchGroup[]`. We will update the expected shape to the new aggregated result model.
+- src/features/conversation/types.ts
+  `SearchResult` currently models per‑message rows. We will introduce a new shape for per‑session aggregate results and update `WorkspaceSearchGroup` accordingly.
+- src/features/conversation/components/SearchPanel.tsx
+  Renders search results. We will change the rendering to display one row per session, using session metadata and aggregate counts, and ensure it remains lightweight and keyboard friendly.
+- src/features/conversation/hooks/useSearch.ts
+  The hook that fetches search results. It will not need logic changes beyond typing adjustments and optional logging enhancements.
+- src/features/conversation/ConversationMain.tsx + conversation view components
+  We will add query‑param based match highlighting and next/prev match navigation in the session view. This requires changes in URL handling and message rendering.
+
+How the parts connect
+The search endpoint shapes the result data. SearchPanel displays that data. If we add `?q=` and match navigation, the session view must interpret those URL params and render highlights or provide navigation controls. It is critical that the search endpoint returns enough information to initialize the session view with the list of matching turn IDs (or at least a first match turn).
+
+The Plan
+Step 1 — Define a new aggregated search result shape
+What to do:
+- In src/features/conversation/types.ts, introduce a new type, e.g. `SessionSearchResult`, with fields:
+  - session_id
+  - session_path (the sessions.id/path used by loadSession)
+  - first_user_message (title)
+  - timestamp, cwd, git_branch, git_repo, git_commit_hash
+  - match_message_count (number of matching messages)
+  - match_turn_count (number of distinct turn_id values)
+  - first_match_turn_id (turn id for the best/earliest match)
+  - snippet (best match snippet)
+- Update `WorkspaceSearchGroup` so `results` is `SessionSearchResult[]` instead of per‑message rows.
+
+Why:
+We need a clear, typed model for the new UI. The new shape removes duplicate per‑message rows while preserving match counts and a representative snippet.
+
+Dependencies:
+None.
+
+Step 2 — Update server search query to aggregate per session
+What to do:
+- In server/apiPlugin.ts, replace the current `/api/search` query with an aggregated query that returns one row per session.
+- The aggregated query should:
+  - Use messages_fts for matching (after normalization).
+  - Join messages and sessions for metadata.
+  - Compute:
+    - match_message_count = COUNT(*) per session
+    - match_turn_count = COUNT(DISTINCT turn_id) per session
+    - first_match_turn_id = turn_id from the best-ranked match (or the earliest match)
+    - snippet from the best-ranked match (use bm25 ordering or earliest timestamp)
+  - Return one row per session ordered by a meaningful score (e.g., best bm25, then last_seen).
+ - Return the normalized token list (and/or normalized query) in the `/api/search` response so the UI can highlight using the same terms the server matched. Prefer a `tokens: string[]` field for clarity and safety.
+ - Apply LIMIT after grouping by session to avoid undercounting and dropping sessions. If a performance ceiling is needed, use a two‑phase query (see below) that limits candidate sessions but still counts matches within those sessions from the full match set.
+
+Implementation details (recommended SQL structure):
+- Use a CTE to compute per‑message matches with bm25 ranking.
+- Use window functions to pick the top snippet per session:
+  - ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY bm25(messages_fts)) AS rn
+- Aggregate in a second SELECT:
+  - COUNT(*) AS match_message_count
+  - COUNT(DISTINCT turn_id) AS match_turn_count
+  - MIN/first match turn from the row where rn=1
+- Join sessions for metadata in the final SELECT.
+- LIMIT should be applied on the grouped, per‑session rows (not on the raw FTS rows).
+- If this is too heavy on large datasets, use a two‑phase approach:
+  1) Phase A: get the top K session_ids by best bm25 (or by recent activity) using a limited FTS query.
+  2) Phase B: compute match_message_count and match_turn_count for only those session_ids using the full match set.
+  This preserves count correctness while bounding work to a session subset.
+ - Recommendation: use a `matches AS (...)` CTE over the full FTS result set, then a `ranked AS (...)` CTE with `ROW_NUMBER()` for snippet selection, and apply LIMIT only to the aggregated session rows. This preserves counts and avoids bias.
+
+Performance note:
+- Correctness requires the LIMIT be applied after session aggregation. This can be heavier, but is the only way to avoid undercounting and missing sessions.
+- If performance becomes an issue, use the two‑phase candidate‑session approach above or introduce a materialized per‑session match index keyed by session_id. The materialized table adds indexing complexity but keeps query time predictable.
+
+Dependencies:
+- Requires FTS normalization in server (from the previous plan), so the query always receives a valid FTS string.
+
+Step 3 — Update search endpoint response grouping
+What to do:
+- Keep the workspace grouping behavior, but group sessions instead of messages.
+- Adjust match_count to reflect total matches across sessions in that workspace (sum of match_message_count).
+- Ensure last_seen is still computed correctly from sessions.
+
+Why:
+We still want grouping by workspace/repo, but in a more compact form.
+
+Dependencies:
+Depends on Step 2.
+
+Step 4 — Update client API types and rendering
+What to do:
+- Update src/features/conversation/api.ts to use the new `SessionSearchResult` shape.
+- Update SearchPanel.tsx to render one row per session:
+  - Title = first user message (fallback to session id/filename).
+  - Metadata pills = date/time, git branch (if present), workspace/repo label.
+  - Counts = “X matches · Y turns” using the aggregated counts.
+  - Snippet = the best match snippet.
+- Ensure results remain simple and constant (no expand/collapse).
+ - When navigating, use `session_path` (the sessions table primary id / file path) with `onLoadSession(session_path, first_match_turn_id)`; `session_id` is display/metadata only.
+
+Why:
+We want a cleaner list that still conveys search relevance without duplicating sessions.
+
+Dependencies:
+Steps 1–3.
+
+Step 5 — Add match highlighting and Next/Prev in session view
+What to do:
+- Extend URL handling to accept `?q=` in addition to `?session` and `?turn`.
+- When a session is opened from search, include the query in the URL so it survives refresh and deep links. At minimum: pass `?q=<query>` and `?turn=<first_match_turn_id>`.
+- Define a persistence strategy for match navigation:
+  - Option A (recommended): add a lightweight endpoint (e.g., `/api/session-matches?session=...&q=...`) that returns matching turn IDs on demand. The session view can call this on load when `?q=` is present, so Next/Prev works across refreshes.
+  - Option B: include a compact `turns` list in the search response and persist it in a URL‑safe form (e.g., `?turns=1,4,7`). This keeps everything client‑side but risks long URLs.
+  - Do not rely solely on in‑memory state, because it breaks on refresh and direct links.
+- In the session viewer, highlight matches in message content. This must be compatible with `rehype-sanitize` in `src/features/conversation/markdown.tsx`:
+  - If using `<mark>` elements, explicitly allow `mark` in the sanitize schema and ensure className is permitted.
+  - Alternatively, avoid raw HTML injection by splitting text nodes and rendering React elements directly (safer but more invasive).
+- Add Next/Prev match controls that jump between matching turn IDs.
+  - Keep the controls lightweight (buttons near the session header).
+
+Why:
+We lose the direct “open each matching turn” affordance by deduplicating results. This restores the ability to navigate through matches without cluttering the search list.
+
+Dependencies:
+Requires Step 2 to return first_match_turn_id, and ideally an additional endpoint or payload to provide matching turn IDs for navigation.
+
+Step 6 — (Optional) Provide turn match list for navigation
+What to do:
+- Extend `/api/search` to optionally return a compact list of matching turn IDs per session (e.g., top N or full list) when a `includeTurns=1` flag is set, or
+- Add a new endpoint `/api/session-matches?session=...&q=...` that returns matching turn IDs.
+- The session viewer uses this list to implement Next/Prev navigation, and it should request it on load when `?q=` is present to support refresh/deep links.
+
+Why:
+This keeps the initial search payload small and keeps navigation data on demand.
+
+Dependencies:
+Depends on Step 5 and on server query availability.
+
+Decisions & Tradeoffs
+- Aggregate by message hits instead of exact term occurrences:
+  We count matching messages and distinct turns. This is fast and understandable, and does not require heavy matchinfo/offset analysis.
+
+- No expand/collapse in search results:
+  We keep search items lightweight and keyboard‑friendly. The cost is that we lose per‑turn detail in the list, which is compensated by the in‑session match navigation.
+
+- CTE aggregation vs. new index/table:
+  A CTE on FTS results is straightforward and probably fast enough. A materialized table could be faster but adds complexity (write logic during indexing). This plan intentionally starts with the CTE and only revisits indexing if performance is proven insufficient.
+
+Landmines
+- Beware of confusing “session_id” vs. “path/id” fields. Ensure the search result row has both a session identifier for UI display and the path/id needed for loadSession.
+- Ensure the snippet is selected from the best match (lowest bm25 or earliest), not a random message.
+- If we add `?q=`, make sure it does not conflict with existing URL sync logic in url.ts/useUrlSync.
+- Highlighting must not break sanitized markdown rendering; `<mark>` (or any tag/class) must be allowed in `rehype-sanitize`, or use a render-time text-splitting approach that avoids raw HTML.
+- If we add a new endpoint for match turns, ensure it respects workspace filtering and path safety rules.
+
+Verification
+- Search for a term that appears in multiple turns within the same session:
+  - The results list should show a single row for that session.
+  - The counts should reflect the number of matching messages and distinct turns.
+- Search across multiple sessions:
+  - Each session appears once, grouped by workspace.
+  - The aggregate counts add up correctly per group.
+- Open a result:
+  - It should navigate to the first matching turn.
+  - `?q=` should appear in the URL.
+  - Matches should be highlighted in the session view.
+  - Next/Prev controls should jump between matching turns.
+  - Verify highlight rendering survives sanitization (no stripped tags).
+- Confirm performance:
+  - Ensure search requests remain fast and do not log warnings.
+  - If performance issues appear, consider a dedicated match-index table after profiling.

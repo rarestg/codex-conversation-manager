@@ -1,0 +1,179 @@
+Search UUID Auto-Resolve + FTS Query Normalization
+
+Context
+We want a fast, correct search experience that supports two distinct intents:
+1) “Find text in messages” (FTS search).
+2) “Open a specific session by UUID” (direct resolve).
+
+Today, the system sends raw user input directly into FTS (`messages_fts MATCH ?`). This causes SQLite errors when input contains characters that FTS treats as syntax, such as hyphens in UUIDs (“no such column: f8b8”) or operators like “<”. This also means the search box cannot reliably accept UUIDs or special characters. Additionally, we want a more direct path: when a user pastes a valid UUID (v7 or other) into the search bar, we should check if that session exists and open it immediately.
+
+This change must be done carefully to keep search correct, avoid false positives, and make debugging easy (logging is already in place, so we can see the exact query path and results).
+
+Relevant codebase areas
+- src/features/conversation/hooks/useSearch.ts
+  The search lifecycle and debounce live here. This is where we should detect UUIDs and trigger a resolve call on paste, and where we should fall back to FTS when resolve fails.
+- src/features/conversation/components/SearchPanel.tsx
+  Owns the search input. We will add an `onPaste` handler that triggers the UUID resolve path.
+- src/features/conversation/api.ts
+  Encapsulates `/api/search` and `/api/resolve-session` requests. We already added `requestId` support for logging; we will reuse it for the new resolve path.
+- server/apiPlugin.ts
+  Implements `/api/search` and `/api/resolve-session`. We must (1) normalize/escape FTS input server-side, and (2) fix the `ESCAPE` clause bug in resolve-session.
+- src/features/conversation/debug.ts
+  Contains debug logging helpers; we should log both raw and normalized queries to make it obvious how user input is being transformed.
+
+How the parts connect
+- The search input lives in SearchPanel. It calls the `useSearch` hook to update the query and to handle Enter. We will add a paste handler that calls a new “try resolve UUID” method from the hook.
+- The hook owns all request logic; it will:
+  - attempt resolve for UUIDs on paste,
+  - fall back to FTS if resolve fails or input is not a UUID,
+  - continue to support Enter-to-resolve for manual typing.
+- The server is the authoritative source for whether a session exists. We should not decide on the client side alone.
+- FTS normalization must happen on the server (never trust client input for SQL/FTS safety).
+
+The Plan
+Step 1 — Implement server-side FTS query normalization
+What to do:
+- In server/apiPlugin.ts, create a helper (e.g., `normalizeFtsQuery(raw: string): string | null`) that:
+  1) Trims the input.
+  2) Tokenizes into safe terms without dropping non‑Latin scripts. Avoid restricting to ASCII only.
+     - Recommended: split on whitespace and a limited set of FTS‑special characters, but keep Unicode letters/digits intact.
+     - Do not discard non‑Latin characters; if the query is entirely non‑Latin, keep it as a single token.
+     - Explicitly treat the query as literal text; do not preserve FTS operators or phrase syntax. (Search operators are not supported in this mode.)
+  3) Removes empty tokens.
+  4) Escapes double quotes in each token (`"` → `""` per SQLite FTS quoting rules).
+  5) Wraps each token in double quotes.
+  6) Joins tokens with `AND`.
+  7) Enforce a max-token cap (e.g., 32 tokens) to keep queries bounded; log when tokens are truncated.
+  8) Returns null if no tokens remain.
+
+Example:
+- Input: `019bfc14-f8b8-79a3-b379-7c478f90c597`
+- Output: `"019bfc14" AND "f8b8" AND "79a3" AND "b379" AND "7c478f90c597"`
+
+- Replace the `/api/search` query to use the normalized query string instead of raw input.
+- If normalization returns null (no valid tokens), return `{ groups: [] }` and log that the query was effectively empty.
+
+Why:
+This prevents FTS parse errors while preserving search behavior. It also eliminates “no such column” errors and `<` syntax errors. Doing this server-side guarantees correctness regardless of client behavior. The tokenizer must be Unicode‑aware to avoid breaking searches in non‑Latin scripts.
+
+Dependencies:
+None; this is isolated to apiPlugin.
+
+Step 2 — Fix resolve-session ESCAPE bug
+What to do:
+- In server/apiPlugin.ts, update the SQL for `/api/resolve-session` so the ESCAPE expression is a single character.
+- Current code: `ESCAPE '\\'` (two characters) → invalid.
+- Replace with: `ESCAPE '\\'` in SQL (single backslash at runtime). The exact JS string should produce a single-character escape in SQL. Be explicit and add a comment to prevent regressions.
+
+Why:
+This bug currently prevents resolve-session queries from working reliably.
+
+Dependencies:
+None, but it’s a prerequisite for the UUID resolve path to work.
+
+Step 3 — Add UUID detection utilities (client-side)
+What to do:
+- In useSearch.ts (or a small helper file), implement a function that detects UUIDs.
+  - Prefer a regex that accepts any UUID version (v1–v8), or use a strict v7 regex if we want to enforce that.
+  - Recommendation: accept any UUID to be robust, since resolve-session is authoritative anyway.
+- The detection should require the entire input to match (no partial/embedded UUID). This avoids false positives for normal text.
+
+Why:
+We need a stable client-side trigger to decide when to attempt auto-resolve on paste.
+
+Dependencies:
+None.
+
+Step 4 — Add auto-resolve on paste
+What to do:
+- In SearchPanel.tsx, add an `onPaste` handler for the input.
+  - Read the pasted text from the clipboard event.
+  - If it matches the UUID regex exactly, call a new `onSearchPasteUuid` handler from props (implemented in useSearch), and prevent default so the value doesn’t get modified later in a conflicting way.
+  - If it doesn’t match, let the default paste behavior occur.
+- In useSearch.ts, add a new method `handleSearchPasteUuid` (or similar) that:
+  1) Sets the search query to the pasted UUID (so UI reflects it).
+  2) Immediately calls `resolveSession` with a new requestId.
+  3) If resolved, opens the session and clears search.
+  4) If not resolved, optionally falls back to FTS (either immediately or via the normal debounce cycle).
+  5) Suppresses the normal debounced FTS request for that same paste event. This can be done by tracking a “paste override” flag or a `skipNextSearch` marker keyed to the pasted UUID and clearing it after the resolve attempt completes.
+
+Why:
+This is the cleanest UX for “paste UUID → open session”. It avoids waiting for Enter or debouncing when the intent is clearly “go to this session.”
+
+Dependencies:
+Requires the resolve endpoint to be working (Step 2) and the client-side UUID detection (Step 3).
+
+Step 5 — Maintain the existing Enter-to-resolve flow
+What to do:
+- Keep the Enter key path in useSearch intact: it should still resolve session IDs for manually typed IDs.
+- If Enter resolve misses, leave the query in place and allow normal search to proceed (or instruct the user that no session was found).
+
+Why:
+Manual entry is still a valid path. Auto-resolve on paste should be additive, not replace Enter-to-resolve.
+
+Dependencies:
+Relies on resolve-session fix from Step 2.
+
+Step 6 — Update logging for clarity
+What to do:
+- Add log lines to confirm:
+  - raw vs. normalized FTS query on the server (`search:normalized`).
+  - paste-detection path on the client (`paste:uuid` event with the UUID).
+  - resolve hits/misses for paste vs. Enter.
+- Ensure logging uses existing requestIds so client/server correlation remains intact.
+
+Why:
+These changes are intended to improve correctness, and the logs are our primary verification tool. Logging will also explain any unexpected behavior in the field.
+
+Dependencies:
+None; can be done alongside Steps 1–4.
+
+Decisions & Tradeoffs
+- Server-side normalization vs. client-side normalization:
+  We normalize on the server to guarantee safety and to avoid trusting the client. Client-side normalization can be helpful for UX but must not be relied upon.
+
+- UUID detection on paste only:
+  We only auto-resolve on paste to avoid aggressive navigation while a user types a UUID manually. This is more predictable and matches user intent. Enter-to-resolve remains for manual input.
+
+- Accept any UUID vs. only v7:
+  Accepting any UUID is more robust and low-risk because resolve-session is authoritative. Strict v7 matching could exclude older or externally generated session IDs. Recommendation: accept any UUID and let resolve-session decide.
+
+- FTS token joining with AND:
+  Using AND keeps the search behavior closer to “all terms must match,” which is consistent with how multi-word searches typically feel. Using OR would be more permissive but less precise. AND is the safer default.
+- Operator/phrase support:
+  We deliberately do not support FTS operators or phrase syntax in the normalized query. This keeps behavior predictable and prevents parser errors. If advanced search is needed later, it should be a separate “power search” mode with explicit UI affordance.
+- Token cap:
+  A max-token cap prevents pathological inputs from generating extremely long FTS queries. The tradeoff is that very long queries will be truncated; this should be logged for transparency.
+- Unicode-aware tokenization:
+  A naive “split on non‑alphanumeric ASCII” would drop non‑Latin scripts and change behavior. We explicitly choose Unicode-aware tokenization to preserve searches in languages that do not use Latin characters, even if that means a slightly more complex tokenizer.
+
+Landmines
+- The FTS normalization must not produce an empty query; if it does, we should short-circuit and return no results. Sending an empty or malformed query to FTS can still trigger errors.
+- Be careful with quote escaping: SQLite FTS expects doubled quotes inside quoted terms. Incorrect escaping will reintroduce syntax errors.
+- The resolve-session ESCAPE fix is subtle; it is easy to get the JS string literal wrong. Verify the SQL string at runtime or log it once during development.
+- Auto-resolve on paste should not break normal paste behavior for non-UUID text. Only intercept when the pasted value fully matches the UUID regex.
+- If the pasted UUID does not resolve, we must avoid getting stuck in a state where the UI thinks it resolved. It should either fall back to normal search or leave the query for the user to decide.
+
+Verification
+- UUID paste flow:
+  1) Copy a known-valid session UUID and paste into the search input.
+  2) Verify the client logs show `paste:uuid` and `resolve:start`.
+  3) Confirm `/api/resolve-session` returns a valid session path and the UI navigates to that session.
+
+- UUID paste failure:
+  1) Paste a UUID that does not exist.
+  2) Confirm resolve miss is logged and the UI does not navigate.
+  3) Confirm that normal FTS search still works for the same input (should no longer error).
+
+- FTS normalization:
+  1) Search for `<hello` and confirm no server error; result set should be empty or relevant, not a 500.
+  2) Search for `raspberry` and confirm behavior unchanged.
+  3) Search for a UUID and confirm no `no such column` error.
+  4) Inspect logs to verify raw vs. normalized query strings.
+  5) Search using non‑Latin text (e.g., Japanese or Cyrillic) and confirm it still returns results (no parsing errors, tokens preserved).
+  6) Search with underscores or hyphenated terms to confirm tokenization behavior is understood and acceptable.
+  7) Search with a very long multi-word input to confirm the token cap is enforced and logged.
+
+- Resolve-session ESCAPE:
+  1) Use Enter on an existing session id or path fragment; confirm it resolves.
+  2) Test with a query containing `%` or `_` to ensure LIKE escaping still works.
