@@ -137,7 +137,7 @@ export const CopyButton = ({
     }
   };
 
-  const buttonClassName = ['group', className].filter(Boolean).join(' ');
+  const buttonClassName = ['group/copy', className].filter(Boolean).join(' ');
   const contentWrapperClassName = 'inline-flex min-w-0 items-center gap-2';
   const leadingClassNameMerged = ['shrink-0', leadingClassName].filter(Boolean).join(' ');
   const labelWrapperClassNameMerged = [
@@ -170,7 +170,7 @@ export const CopyButton = ({
         aria-hidden
         data-state={status}
         className={`${labelClassNameMerged} col-start-1 row-start-1 transition-opacity duration-150 data-[state=copied]:opacity-0 data-[state=error]:opacity-0 ${
-          hasHoverLabel ? 'group-hover:opacity-0 group-focus-visible:opacity-0' : ''
+          hasHoverLabel ? 'group-hover/copy:opacity-0 group-focus-visible/copy:opacity-0' : ''
         }`}
       >
         {idleLabel}
@@ -179,7 +179,7 @@ export const CopyButton = ({
         <span
           aria-hidden
           data-state={status}
-          className={`${labelOverlayClassNameMerged} col-start-1 row-start-1 opacity-0 transition-opacity duration-150 data-[state=copied]:opacity-0 data-[state=error]:opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100`}
+          className={`${labelOverlayClassNameMerged} col-start-1 row-start-1 opacity-0 transition-opacity duration-150 data-[state=copied]:opacity-0 data-[state=error]:opacity-0 group-hover/copy:opacity-100 group-focus-visible/copy:opacity-100`}
         >
           {resolvedHoverLabel}
         </span>

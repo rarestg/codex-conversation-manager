@@ -339,6 +339,7 @@ const SessionsPanelComponent = ({
                                   const repoLabel = getRepoLabel(file.gitRepo, file.cwd);
                                   const sessionId = file.sessionId;
                                   const sessionIdLabel = formatSessionId(sessionId);
+                                  const turnCountValue = file.turnCount ?? 0;
 
                                   return (
                                     <div
@@ -377,14 +378,12 @@ const SessionsPanelComponent = ({
                                               </span>
                                             </span>
                                           )}
-                                          {file.turnCount !== null && file.turnCount !== undefined && (
-                                            <span className="chip chip-xs chip-white chip-shadow gap-1">
-                                              <Repeat2 className="h-3 w-3" />
-                                              <span className="chip-value translate-y-[0.5px] inline-block min-w-[4ch] text-center">
-                                                {file.turnCount}
-                                              </span>
+                                          <span className="chip chip-xs chip-white chip-shadow gap-1">
+                                            <Repeat2 className="h-3 w-3" />
+                                            <span className="chip-value translate-y-[0.5px] inline-block min-w-[4ch] text-center">
+                                              {turnCountValue}
                                             </span>
-                                          )}
+                                          </span>
                                           {repoLabel && (
                                             <span className="chip chip-xs chip-white chip-shadow gap-1 leading-none">
                                               <Github className="h-3 w-3" />
