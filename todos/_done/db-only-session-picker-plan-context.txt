@@ -1,0 +1,22 @@
+Context: DB-only session picker implementation
+
+Summary
+We implemented the DB-only sessions picker to remove the expensive filesystem scan on every picker load and rely solely on SQLite index data. Preview text is now clamped to avoid huge DOM nodes, and missing session files return a clear 404 to guide users to reindex.
+
+Key changes
+- /api/sessions now queries SQLite directly (no scanSessionFiles, no readFirstUserMessage fallback).
+- Added preview truncation helper (char + line caps) and applied it during indexing and when returning previews.
+- buildSessionsTree now accepts minimal DB-backed entries instead of file entries with fake size/mtime.
+- /api/session returns a clear 404 message when a session file is missing.
+- Client error handling now surfaces “Session file not found. Please reindex.” for 404/400.
+- Added Server-Timing and CODEX_DEBUG timings to trace /api/sessions performance.
+
+Files touched
+- server/apiPlugin.ts
+- src/features/conversation/api.ts
+- src/features/conversation/hooks/useSession.ts
+- src/features/conversation/types.ts
+
+Notes
+- This change intentionally makes the picker stale until reindex; missing files are handled via a clear UX prompt.
+- Performance profiling showed /api/sessions time dominated by SQLite join against messages, which is addressed in the unified indexing plan.

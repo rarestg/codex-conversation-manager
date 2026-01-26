@@ -1,0 +1,140 @@
+Title: Unified Session Indexing + DB-Only Picker + Active Duration
+
+Context
+We want the sessions picker and header to be fast, deterministic, and sourced from SQLite only (no filesystem scans per load). We also want to store rich session metrics (counts, timestamps) and a new "active session time" metric based on user->assistant response spans. This change should eliminate the expensive join against messages during /api/sessions, avoid huge preview strings, and make deep-link loads show correct metadata immediately.
+
+Goals
+- Make /api/sessions DB-only and fast (no filesystem scan, no messages join).
+- Persist session-level metrics in SQLite during indexing (preview, timestamps, counts, active duration).
+- Clamp preview length to protect UI and DB health.
+- Surface ghost-session errors clearly when a file is missing.
+- Keep UI stable: use indexed values by default; fallback to parsed JSONL only while tree data is loading.
+- Keep hourglass semantics clear: active duration for indexed sessions, total span only as fallback.
+- Make the transition explicit: existing sessions may show empty metrics until a Clear & Rebuild Index is run.
+
+Non-Goals
+- No filesystem watchers or SSE updates.
+- No automatic reindexing; reindex remains explicit.
+
+Data Model Changes (SQLite)
+Add these columns to sessions:
+- started_at TEXT
+- ended_at TEXT
+- turn_count INTEGER
+- message_count INTEGER
+- thought_count INTEGER
+- tool_call_count INTEGER
+- meta_count INTEGER
+- active_duration_ms INTEGER
+
+Preview limits (constants)
+- MAX_PREVIEW_CHARS = 1000
+- MAX_PREVIEW_LINES = 50
+Note: align client preview constants with server (format.ts should use 1000 as well).
+
+Active Duration Definition (server-side, indexed)
+Compute "active session time" as sum of (user_message timestamp -> last agent_message timestamp) per turn.
+Rules:
+- Only consider event_msg entries (user_message, agent_message).
+- A turn starts at user_message; a turn ends before the next user_message or EOF.
+- For each turn, use the LAST agent_message within that turn as the response time.
+- If no agent_message exists in the turn, skip (do not add 0).
+- Ignore invalid or negative durations.
+- Preamble agent messages (before first user_message) are ignored.
+- Store total as INTEGER milliseconds in sessions.active_duration_ms.
+- turn_aborted entries are event_msg but do not start/end turns and must not affect duration.
+
+Parsing Alignment
+- Primary content comes from event_msg (per AGENTS.md), not response_item.
+- Tools/actions still come from response_item, but are not used for duration.
+- Ensure the indexing parsing rules stay aligned with src/features/conversation/parsing.ts.
+
+Execution Plan (ordered)
+1) Schema + Migration
+   - Update initSchema() to include new columns on sessions table.
+   - Add a migration helper using PRAGMA table_info(sessions) to ALTER TABLE for missing columns.
+   - Ensure migration runs on startup (after DB open).
+   - Transition note: existing indexed sessions will not have metrics until Clear & Rebuild Index
+     (or adjust skip logic to reindex rows with NULL metrics).
+
+2) Preview Truncation
+   - Add truncatePreview() helper (char + line caps).
+   - Apply during parsing (first_user_message) and when constructing tree output (legacy rows).
+
+3) Indexing Metrics (parseJsonlFile)
+   - Track:
+     - turn_count: increment on event_msg user_message
+     - message_count: count all parsed messages inserted into messages table
+     - thought_count: event_msg agent_reasoning
+     - tool_call_count: response_item function_call/custom_tool_call/web_search_call
+     - meta_count: session_meta, turn_context, token_count
+     - started_at / ended_at: min/max valid timestamp across parsed items
+     - active_duration_ms: per rules above
+   - Keep session_meta parsing for cwd/git/timestamp/session_id as-is.
+
+4) Persist Metrics in sessions
+   - Extend insertSession to write all metrics and active_duration_ms.
+   - Update ON CONFLICT to update those columns too.
+
+5) DB-Only /api/sessions
+   - Replace any filesystem scanning in GET /api/sessions with a single SELECT from sessions.
+   - getSessionsForTree should query sessions only (no messages join).
+   - Build SessionTreeEntry[] directly from query results.
+   - Explicitly map sessions.first_user_message -> preview (UI expects preview field).
+
+6) Types
+   - Extend SessionFileEntry with:
+     - startedAt, endedAt, turnCount, messageCount
+     - thoughtCount, toolCallCount, metaCount
+     - activeDurationMs
+
+7) UI Usage
+   - Add formatDurationMs(ms?: number | null) in src/features/conversation/format.ts mirroring formatDuration output.
+   - SessionsPanel: use activeDurationMs for hourglass when present; fallback to formatDuration(startedAt, endedAt).
+   - SessionHeader + SessionHeaderVariantB: same duration behavior and use indexed counts.
+   - Retain fallback parsing in useSession for deep-link loading before sessionsTree is ready.
+   - Add a short comment in useSession noting fallback duration is min/max span, not active duration, and note how to replace it later (compute active duration client-side).
+   - Keep startedAt/endedAt semantics unchanged for time labels and sorting; only the hourglass switches to active duration.
+   - Optional: add a small inline comment/label so future readers know hourglass is active duration (not total span).
+   - Ensure activeSession merging prefers indexed startedAt/endedAt over derived fallback values once sessionsTree is loaded.
+   - Decide whether to surface message_count in the SessionHeader metrics row (useful “Total messages” stat).
+
+8) Ghost Sessions
+   - GET /api/session should return 404 with a clear message when a file is missing.
+   - UI should surface "Session file not found. Please reindex." for 404/400.
+
+9) Performance Verification
+   - Instrument /api/sessions with Server-Timing and CODEX_DEBUG logs (already added).
+   - Confirm query time is near-zero after removing join.
+
+Migration / Backfill Options
+- Preferred: require explicit reindex after deploying changes.
+- Optional: one-time backfill that computes metrics from messages table (expensive), but avoids manual reindex.
+
+Landmines
+- Schema migration must be safe for existing DBs.
+- Timestamp parsing must ignore invalid dates.
+- Do not change JSONL parsing rules (event_msg vs response_item).
+- active_duration_ms should be NULL when no valid user->assistant pair exists.
+- sessions.path grouping by year/month/day must remain unchanged.
+- indexSessions currently skips files with unchanged size/mtime and session_id_checked = 1. Without adjusting
+  skip logic, new metrics will remain NULL until Clear & Rebuild Index is run (acceptable, but must be clear).
+
+Verification Checklist
+- /api/sessions fast and stable with Server-Timing (query ~1-5ms).
+- Preview truncation enforced for legacy rows and new indexing.
+- Hourglass uses activeDurationMs for indexed sessions.
+- Deep links show correct title/metrics once sessionsTree loads.
+- Picker auto-expands and scrolls to the active session after sessionsTree loads.
+- Missing file shows clear reindex prompt.
+- Reindex updates metrics and removes deleted sessions.
+
+Files to touch (expected)
+- server/apiPlugin.ts
+- src/features/conversation/types.ts
+- src/features/conversation/components/SessionsPanel.tsx
+- src/features/conversation/components/SessionHeader.tsx
+- src/features/conversation/components/SessionHeaderVariantB.tsx
+- src/features/conversation/hooks/useSession.ts
+- src/features/conversation/format.ts
+- src/features/conversation/parsing.ts (reference alignment only; likely no changes)

@@ -1,0 +1,138 @@
+**Plan**
+1) Add new columns to `sessions`: `turn_count`, `message_count`, `started_at`, `ended_at`.
+2) Add a schema-migration helper that **adds missing columns** on startup (existing DBs won’t have them).
+3) Compute stats while parsing/indexing (no extra passes).
+4) Update `insertSession` to store the stats.
+5) Update `/api/sessions` query to read stats directly from `sessions` (no join).
+6) Optional: one-time backfill for existing DBs (can be explicit via “Reindex” or a separate backfill function if you want immediate stats).
+
+**Code skeleton (server/apiPlugin.ts)**
+
+```ts
+// 1) schema: add columns in CREATE TABLE
+CREATE TABLE IF NOT EXISTS sessions (
+  id TEXT PRIMARY KEY,
+  path TEXT UNIQUE NOT NULL,
+  session_id TEXT,
+  session_id_checked INTEGER,
+  timestamp TEXT,
+  cwd TEXT,
+  git_branch TEXT,
+  git_repo TEXT,
+  git_commit_hash TEXT,
+  first_user_message TEXT,
+  turn_count INTEGER,
+  message_count INTEGER,
+  started_at TEXT,
+  ended_at TEXT
+);
+
+// 2) add a migration helper (for existing dbs)
+const ensureSessionColumns = (database: Database.Database) => {
+  const cols = database.prepare(`PRAGMA table_info(sessions)`).all() as Array<{ name: string }>;
+  const has = new Set(cols.map((c) => c.name));
+  const addColumn = (name: string, type: string) => {
+    if (!has.has(name)) database.exec(`ALTER TABLE sessions ADD COLUMN ${name} ${type}`);
+  };
+  addColumn('turn_count', 'INTEGER');
+  addColumn('message_count', 'INTEGER');
+  addColumn('started_at', 'TEXT');
+  addColumn('ended_at', 'TEXT');
+};
+
+// call after initSchema in ensureDb
+initSchema(db);
+ensureSessionColumns(db);
+```
+
+```ts
+// 3) extend parseJsonlFile to compute stats
+type SessionStats = {
+  turnCount: number;
+  messageCount: number;
+  startedAt: string | null;
+  endedAt: string | null;
+};
+
+const parseJsonlFile = async (filePath: string) => {
+  const stats: SessionStats = { turnCount: 0, messageCount: 0, startedAt: null, endedAt: null };
+
+  const updateTs = (ts?: string) => {
+    if (!ts) return;
+    const parsed = Date.parse(ts);
+    if (!Number.isFinite(parsed)) return;
+    if (!stats.startedAt || parsed < Date.parse(stats.startedAt)) stats.startedAt = ts;
+    if (!stats.endedAt || parsed > Date.parse(stats.endedAt)) stats.endedAt = ts;
+  };
+
+  // when adding any message:
+  // stats.messageCount++;
+  // if role === 'user' stats.turnCount++;
+  // updateTs(entry.timestamp);
+
+  return { messages, firstUserMessage, sessionMeta, stats };
+};
+```
+
+```ts
+// 4) store stats during indexing
+const insertSession = database.prepare(`
+  INSERT INTO sessions (
+    id, path, session_id, session_id_checked, timestamp, cwd, git_branch, git_repo, git_commit_hash,
+    first_user_message, turn_count, message_count, started_at, ended_at
+  )
+  VALUES (
+    @id, @path, @session_id, @session_id_checked, @timestamp, @cwd, @git_branch, @git_repo, @git_commit_hash,
+    @first_user_message, @turn_count, @message_count, @started_at, @ended_at
+  )
+  ON CONFLICT(id) DO UPDATE SET
+    session_id = excluded.session_id,
+    session_id_checked = excluded.session_id_checked,
+    timestamp = excluded.timestamp,
+    cwd = excluded.cwd,
+    git_branch = excluded.git_branch,
+    git_repo = excluded.git_repo,
+    git_commit_hash = excluded.git_commit_hash,
+    first_user_message = excluded.first_user_message,
+    turn_count = excluded.turn_count,
+    message_count = excluded.message_count,
+    started_at = excluded.started_at,
+    ended_at = excluded.ended_at
+`);
+
+insertSession.run({
+  ...,
+  turn_count: parsed.stats.turnCount,
+  message_count: parsed.stats.messageCount,
+  started_at: parsed.stats.startedAt,
+  ended_at: parsed.stats.endedAt,
+});
+```
+
+```ts
+// 5) simplify getSessionsForTree: no JOIN messages
+const getSessionsForTree = (database, workspace) => {
+  const whereClause = workspace ? 'WHERE cwd = ?' : '';
+  const stmt = database.prepare(`
+    SELECT
+      id, path, first_user_message, timestamp, cwd, git_branch, git_repo, git_commit_hash,
+      session_id, turn_count, message_count, started_at, ended_at
+    FROM sessions
+    ${whereClause}
+  `);
+  const rows = workspace ? stmt.all(workspace) : stmt.all();
+  // map rows => SessionTreeEntry (turnCount/messageCount/startedAt/endedAt from sessions)
+};
+```
+
+**Optional backfill (if you want immediate stats without reindexing)**
+- On startup, if columns were just added, run a one-time SQL update:
+```ts
+UPDATE sessions SET
+  turn_count = (SELECT COUNT(*) FROM messages WHERE messages.session_id = sessions.id AND role='user'),
+  message_count = (SELECT COUNT(*) FROM messages WHERE messages.session_id = sessions.id),
+  started_at = (SELECT MIN(timestamp) FROM messages WHERE messages.session_id = sessions.id),
+  ended_at = (SELECT MAX(timestamp) FROM messages WHERE messages.session_id = sessions.id)
+WHERE turn_count IS NULL OR message_count IS NULL OR started_at IS NULL OR ended_at IS NULL;
+```
+This is expensive once, but avoids any join in `/api/sessions` afterward.
