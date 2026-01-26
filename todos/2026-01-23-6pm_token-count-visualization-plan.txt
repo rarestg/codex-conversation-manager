@@ -10,6 +10,12 @@ Key decisions (explicit)
 - Token count items are hidden by default (toggle off initially).
 - In most sessions, token_count appears repeatedly; the final token_count entry reflects total_token_usage for the conversation. We should assume the last token_count item in the session is the most useful aggregate.
 
+Addendum (Post-Indexing Alignment)
+- Server must persist token_count_count in sessions so counts are available before session load.
+- token_count items must NOT be included in meta_count; meta_count should only reflect session_meta/turn_context.
+- This requires a Clear & Rebuild Index to populate new columns (intentional, no backfill).
+- Note: /api/reindex will continue to skip unchanged files unless skip logic is adjusted when token_count_count is NULL.
+
 Relevant code and data flow
 - Client JSONL parsing: src/features/conversation/parsing.ts
   - event_msg with payload.type === 'token_count' currently becomes ParsedItem type 'token_count'.
@@ -36,6 +42,7 @@ Plan (execution order)
 - Confirm parseJsonl already emits ParsedItem.type === 'token_count' for event_msg token_count.
 - Confirm MessageCard (or the item renderer) routes token_count into the same UI path as meta today.
 - Confirm stats/toggles currently only include Meta and not Token Count separately.
+- Confirm ParsedItem.raw preserves the token_count payload (needed for TokenCountCard rendering).
 
 2) Add dedicated toggle state and counts
 Where: src/features/conversation/ConversationMain.tsx (or wherever other toggles are stored).
@@ -133,6 +140,18 @@ Implementation details and guidance
 - turn_context entries can appear mid‑turn; do not treat them as boundaries.
 - The “last token_count” entry likely includes the full total_token_usage; consider using that for a “summary view” in Canvas even if you render each token_count item in the conversation view.
 - Keep the token_count renderer resilient to missing fields; real logs can be incomplete.
+- Decide explicitly whether token_count items should be inserted into messages for search; default is NO.
+
+Indexing alignment (server changes required)
+- Add sessions.token_count_count INTEGER and include in migration helper.
+- In server parsing:
+  - Increment token_count_count on event_msg token_count.
+  - Do NOT increment meta_count for token_count (meta_count only for session_meta + turn_context).
+- Persist token_count_count in insertSession and select it in getSessionsForTree.
+- Map DB field -> API -> types:
+  - sessions.token_count_count -> SessionTreeEntry.tokenCount -> SessionFileEntry.tokenCount.
+- Update SessionFileEntry types and UI stats row to prefer indexed tokenCount, fallback to parsed count only while sessionsTree is loading.
+- Clear & Rebuild Index is required to populate the new column (intentional). /api/reindex will not backfill unless skip logic is relaxed.
 
 Edge cases to test
 - Sessions with no token_count events: counts should be zero, toggle present but no items.
@@ -166,6 +185,9 @@ Verification checklist
   - /canvas demo for Token Count loads.
   - Variant A/B render using real session data when selected.
   - Variants render with fixture data if no session is loaded (if enabled).
+- Indexing semantics:
+  - After reindex, meta_count excludes token_count items.
+  - token_count_count is non-null for sessions that include token_count entries.
 
 Notes for engineers with no prior context
 - This app parses raw JSONL client‑side; SQLite is used only for previews/search.

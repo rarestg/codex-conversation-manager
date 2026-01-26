@@ -605,7 +605,7 @@ const parseJsonlFile = async (filePath: string) => {
 
   return {
     messages,
-    firstUserMessage: truncatePreview(firstUserMessage) ?? '',
+    firstUserMessage: firstUserMessage || '',
     sessionMeta,
     metrics: {
       startedAt,

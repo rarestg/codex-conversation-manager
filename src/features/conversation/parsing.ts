@@ -143,10 +143,10 @@ export const parseJsonl = (raw: string) => {
       const entry = JSON.parse(line);
       if (entry.type === 'event_msg') {
         const payload = entry.payload ?? {};
-        if (payload.type === 'user_message' && payload.message) {
+        if (payload.type === 'user_message') {
           currentTurn += 1;
           const turn = ensureTurn(currentTurn, entry.timestamp);
-          const content = formatJsonValue(payload.message);
+          const content = formatJsonValue(payload.message ?? '');
           turn.items.push({
             id: `item-${seq}`,
             type: 'user',
@@ -155,11 +155,11 @@ export const parseJsonl = (raw: string) => {
             timestamp: entry.timestamp,
             raw: entry,
           });
-        } else if (payload.type === 'agent_message' && payload.message) {
+        } else if (payload.type === 'agent_message') {
           addItem({
             id: `item-${seq}`,
             type: 'assistant',
-            content: formatJsonValue(payload.message),
+            content: formatJsonValue(payload.message ?? ''),
             seq,
             timestamp: entry.timestamp,
             raw: entry,

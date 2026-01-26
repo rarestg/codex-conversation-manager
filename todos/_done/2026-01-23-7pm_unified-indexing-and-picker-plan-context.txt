@@ -1,0 +1,69 @@
+Title: Unified Session Indexing + DB-Only Picker + Active Duration (Implementation Context)
+
+Purpose
+This document captures what was implemented from unified-indexing-and-picker-plan.txt and notes
+small improvements or deviations (and why).
+
+Implemented (Server / Indexing)
+- Sessions table now stores session-level metrics: started_at, ended_at, turn_count,
+  message_count, thought_count, tool_call_count, meta_count, active_duration_ms.
+- Safe schema migration via PRAGMA table_info(sessions) and ALTER TABLE for missing columns.
+- Indexing computes metrics during parseJsonlFile():
+  - turn_count increments on every event_msg user_message (even if message is empty).
+  - thought_count increments on event_msg agent_reasoning.
+  - tool_call_count counts response_item function_call/custom_tool_call/web_search_call only.
+  - meta_count counts session_meta, turn_context, and event_msg token_count.
+  - started_at / ended_at are min/max valid timestamps across parsed entries.
+  - active_duration_ms sums (user_message timestamp -> last agent_message timestamp) per turn.
+    - Preamble agent messages are ignored.
+    - Turns with no assistant reply contribute nothing.
+    - Negative durations are ignored; zero durations are allowed.
+    - turn_aborted does not start or end turns.
+- first_user_message preview is truncated before storing in the DB; no additional truncation
+  on return (avoid redundant work and prevent large previews in sessions table).
+- /api/sessions now queries sessions only (no filesystem scan, no messages join).
+- getSessionsForTree maps sessions.first_user_message -> preview and passes all metrics through.
+
+Implemented (Client / UI)
+- MAX_PREVIEW_CHARS now 1000 and MAX_PREVIEW_LINES added (50) to match server caps.
+- formatDurationMs added and used for hourglass; fallback to formatDuration(startedAt, endedAt).
+- SessionsPanel duration display uses '-' when no duration is known (aligned with header).
+- SessionHeader and SessionHeaderVariantB prefer indexed counts when present.
+- Fallback preview in useSession is truncated to 1000 chars / 50 lines.
+- Client parsing (parseJsonl) now counts event_msg user_message/agent_message even when empty,
+  aligning turn counts with server indexing.
+- Fallback tool count now counts tool_call only (tool_output excluded) to match indexed metric.
+
+Behavior Notes / Deviations (Intentional)
+- No backfill or migration of existing rows: metrics stay NULL until Clear & Rebuild Index.
+  Rationale: explicit rebuild keeps logic simple and avoids expensive backfills.
+- /api/reindex does not force refresh of unchanged files with NULL metrics.
+  Rationale: consistent with the explicit Clear & Rebuild expectation.
+- UI error messaging for /api/session: 400 and 404 both surface
+  "Session file not found. Please reindex." per plan.
+
+Small Improvements Beyond Original Plan
+- Empty user_message / agent_message now still create turns and timing state
+  (prevents undercounting in malformed or edge-case logs).
+- Preview truncation in fallback path added to avoid large headers before sessionsTree loads.
+- Normalized hourglass "unknown duration" display to '-' for consistency.
+
+Out of Scope / Not Implemented
+- Optional "reindex backfill" behavior (skip override when metrics are NULL) was not added.
+  If desired, add a guard in indexSessions to re-parse when any metric column is NULL.
+
+Related Follow-up (Token Count plan)
+- Token Count visualization plan now specifies adding sessions.token_count_count and excluding
+  token_count from meta_count. This builds on the indexed-metrics work and will require a
+  Clear & Rebuild Index once implemented.
+
+Files Touched
+- server/apiPlugin.ts
+- src/features/conversation/format.ts
+- src/features/conversation/hooks/useSession.ts
+- src/features/conversation/types.ts
+- src/features/conversation/components/SessionsPanel.tsx
+- src/features/conversation/components/SessionHeader.tsx
+- src/features/conversation/components/SessionHeaderVariantB.tsx
+- src/features/conversation/parsing.ts
+- src/features/conversation/hooks/useSessionOverview.ts
