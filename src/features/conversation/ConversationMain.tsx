@@ -29,6 +29,8 @@ export const ConversationMain = ({
     setShowTools,
     showMeta,
     setShowMeta,
+    showTokenCounts,
+    setShowTokenCounts,
     showFullContent,
     setShowFullContent,
     filteredTurns,
@@ -42,6 +44,7 @@ export const ConversationMain = ({
     showThoughts,
     showTools,
     showMeta,
+    showTokenCounts,
     showFullContent,
     filteredTurnCount: filteredTurns.length,
     visibleItemCount,
@@ -62,10 +65,12 @@ export const ConversationMain = ({
         showThoughts={showThoughts}
         showTools={showTools}
         showMeta={showMeta}
+        showTokenCounts={showTokenCounts}
         showFullContent={showFullContent}
         onShowThoughtsChange={setShowThoughts}
         onShowToolsChange={setShowTools}
         onShowMetaChange={setShowMeta}
+        onShowTokenCountsChange={setShowTokenCounts}
         onShowFullContentChange={setShowFullContent}
       />
 

@@ -1,6 +1,19 @@
-import { CalendarClock, Clock, Copy, Eye, Folder, GitBranch, Github, Hourglass, Minus, Repeat2 } from 'lucide-react';
+import {
+  CalendarClock,
+  Clock,
+  Copy,
+  Eye,
+  Folder,
+  GitBranch,
+  Github,
+  Hash,
+  Hourglass,
+  Minus,
+  Repeat2,
+} from 'lucide-react';
 import { buildConversationExport } from '../copy';
 import {
+  formatCompactCount,
   formatDuration,
   formatDurationMs,
   formatRelativeTime,
@@ -17,6 +30,7 @@ interface SessionStats {
   thoughtCount: number;
   toolCallCount: number;
   metaCount: number;
+  tokenCount: number;
 }
 
 interface SessionHeaderVariantBProps {
@@ -55,6 +69,7 @@ export const SessionHeaderVariantB = ({
     totalThoughts: stats.thoughtCount,
     totalTools: stats.toolCallCount,
     totalMeta: stats.metaCount,
+    totalTokenCounts: stats.tokenCount,
   });
 
   const sessionId = sessionDetails.sessionId || activeSession?.sessionId;
@@ -68,6 +83,13 @@ export const SessionHeaderVariantB = ({
   const durationLabel = activeSession
     ? formatDurationMs(activeSession.activeDurationMs) || formatDuration(activeSession.startedAt, activeSession.endedAt)
     : '';
+  const tokenCount = activeSession?.tokenCount ?? stats.tokenCount;
+  const tokenCountLabel =
+    tokenCount === null || tokenCount === undefined
+      ? visibleItemCount > 0
+        ? formatCompactCount(stats.tokenCount)
+        : '—'
+      : formatCompactCount(tokenCount);
   const sessionRoot = sessionsRoot?.trim() || '';
   const fallbackId = activeSession?.id ?? '';
   const pathSeparator = sessionRoot.includes('\\') ? '\\' : sessionRoot ? '/' : fallbackId.includes('\\') ? '\\' : '/';
@@ -217,6 +239,13 @@ export const SessionHeaderVariantB = ({
               <Repeat2 className="h-3.5 w-3.5" />
               <span className="tabular-nums">{activeSession.turnCount}</span>
               <span>turns</span>
+            </span>
+          )}
+          {activeSession && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/70 px-2 py-1 text-[11px] text-slate-600">
+              <Hash className="h-3.5 w-3.5" />
+              <span className="tabular-nums">{tokenCountLabel}</span>
+              <span>token counts</span>
             </span>
           )}
           {activeSession && (

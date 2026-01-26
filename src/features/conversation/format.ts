@@ -147,6 +147,14 @@ export const formatRelativeTime = (value?: string | null, now = new Date()) => {
   return diffHours < 0 ? `${Math.abs(diffHours)}h ago` : `in ${diffHours}h`;
 };
 
+export const formatCompactCount = (value?: number | null) => {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '';
+  const abs = Math.abs(value);
+  if (abs < 1000) return `${Math.round(value)}`;
+  if (abs < 1_000_000) return `${Math.round(value / 1000)}k`;
+  return `${(value / 1_000_000).toFixed(1)}m`;
+};
+
 const HOME_PATH_REGEX = /^(?:\/Users\/[^/]+|\/home\/[^/]+|[A-Za-z]:\\Users\\[^\\]+)/;
 
 const formatHomePath = (value?: string | null) => {

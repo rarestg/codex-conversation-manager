@@ -28,6 +28,8 @@ const SessionHeaderVariant = ({
     setShowTools,
     showMeta,
     setShowMeta,
+    showTokenCounts,
+    setShowTokenCounts,
     showFullContent,
     setShowFullContent,
     filteredTurns,
@@ -51,10 +53,12 @@ const SessionHeaderVariant = ({
       showThoughts={showThoughts}
       showTools={showTools}
       showMeta={showMeta}
+      showTokenCounts={showTokenCounts}
       showFullContent={showFullContent}
       onShowThoughtsChange={setShowThoughts}
       onShowToolsChange={setShowTools}
       onShowMetaChange={setShowMeta}
+      onShowTokenCountsChange={setShowTokenCounts}
       onShowFullContentChange={setShowFullContent}
     />
   );

@@ -4,6 +4,7 @@ import { MAX_PREVIEW_CHARS } from '../format';
 import { MarkdownBlock, markdownToPlainText } from '../markdown';
 import type { ParsedItem } from '../types';
 import { CopyButton } from './CopyButton';
+import { TokenCountCard } from './TokenCountCard';
 
 interface MessageCardProps {
   item: ParsedItem;
@@ -14,6 +15,9 @@ interface MessageCardProps {
 export const MessageCard = ({ item, itemIndex, showFullContent }: MessageCardProps) => {
   if (isRenderDebugEnabled && itemIndex === 0) {
     console.debug('[render] MessageCard', { id: item.id, type: item.type });
+  }
+  if (item.type === 'token_count') {
+    return <TokenCountCard item={item} itemIndex={itemIndex} showFullContent={showFullContent} />;
   }
   const isMarkdownItem = ['user', 'assistant', 'thought'].includes(item.type);
   const displayContent = item.content;
@@ -32,9 +36,7 @@ export const MessageCard = ({ item, itemIndex, showFullContent }: MessageCardPro
             ? 'Tool Call'
             : item.type === 'tool_output'
               ? 'Tool Output'
-              : item.type === 'token_count'
-                ? 'Token Count'
-                : 'Meta';
+              : 'Meta';
 
   const tone =
     item.type === 'user'
@@ -85,7 +87,7 @@ export const MessageCard = ({ item, itemIndex, showFullContent }: MessageCardPro
             />
           </div>
         )}
-        {['tool_call', 'tool_output', 'meta', 'token_count'].includes(item.type) && (
+        {['tool_call', 'tool_output', 'meta'].includes(item.type) && (
           <CopyButton
             getText={() => getCopyText('markdown')}
             idleLabel="Copy"
