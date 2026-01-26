@@ -2,7 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchSession } from '../api';
 import { MAX_PREVIEW_CHARS, MAX_PREVIEW_LINES } from '../format';
 import { extractSessionIdFromPath, parseJsonl } from '../parsing';
-import type { LoadSessionOptions, SessionDetails, SessionFileEntry, SessionTree, Turn } from '../types';
+import type {
+  JumpToTurnOptions,
+  LoadSessionOptions,
+  SessionDetails,
+  SessionFileEntry,
+  SessionTree,
+  Turn,
+} from '../types';
 import { updateSessionUrl } from '../url';
 
 interface UseSessionOptions {
@@ -134,6 +141,18 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
     [buildDerivedMeta, findSessionById, onError],
   );
 
+  const jumpToTurn = useCallback(
+    (turnId: number | null, options?: JumpToTurnOptions) => {
+      if (!activeSessionId) return;
+      const historyMode = options?.historyMode ?? 'replace';
+      updateSessionUrl(activeSessionId, turnId ?? null, historyMode);
+      if (typeof turnId === 'number' && Number.isFinite(turnId) && options?.scroll !== false) {
+        setScrollToTurnId(turnId);
+      }
+    },
+    [activeSessionId],
+  );
+
   const activeSession = useMemo<SessionFileEntry | null>(() => {
     if (!activeSessionId) return null;
     const indexed = findSessionById(activeSessionId);
@@ -198,5 +217,6 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
     loadingSession,
     loadSession,
     clearSession,
+    jumpToTurn,
   };
 };

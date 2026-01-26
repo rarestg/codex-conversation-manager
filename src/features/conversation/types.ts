@@ -95,6 +95,11 @@ export interface LoadSessionOptions {
   historyMode?: HistoryMode;
 }
 
+export interface JumpToTurnOptions {
+  historyMode?: HistoryMode;
+  scroll?: boolean;
+}
+
 export interface IndexSummary {
   scanned: number;
   updated: number;
