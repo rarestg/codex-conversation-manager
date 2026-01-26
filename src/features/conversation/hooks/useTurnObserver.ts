@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { logTurnNav } from '../debug';
 
 interface UseTurnObserverOptions {
   turnIds: number[];
@@ -20,6 +21,7 @@ export const useTurnObserver = ({
     if (typeof IntersectionObserver === 'undefined') return;
 
     activeRef.current = null;
+    logTurnNav('observer:init', { turnCount: turnIds.length, rootMargin });
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -32,6 +34,11 @@ export const useTurnObserver = ({
         if (!Number.isFinite(nextId) || activeRef.current === nextId) return;
 
         activeRef.current = nextId;
+        logTurnNav('observer:active', {
+          turnId: nextId,
+          top: Math.round(next.boundingClientRect.top),
+          ratio: Number(next.intersectionRatio.toFixed(2)),
+        });
         onActiveTurnChange(nextId);
       },
       { rootMargin },
@@ -42,6 +49,9 @@ export const useTurnObserver = ({
       if (el) observer.observe(el);
     }
 
-    return () => observer.disconnect();
+    return () => {
+      logTurnNav('observer:disconnect');
+      observer.disconnect();
+    };
   }, [enabled, onActiveTurnChange, rootMargin, turnIds]);
 };

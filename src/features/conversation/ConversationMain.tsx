@@ -15,7 +15,7 @@ interface ConversationMainProps {
   sessionDetails: SessionDetails;
   sessionsRoot: string;
   loadingSession: boolean;
-  jumpToTurn: (turnId: number, options?: JumpToTurnOptions) => void;
+  jumpToTurn: (turnId: number | null, options?: JumpToTurnOptions) => void;
 }
 
 export const ConversationMain = ({
@@ -28,6 +28,7 @@ export const ConversationMain = ({
   jumpToTurn,
 }: ConversationMainProps) => {
   const mainRef = useRef<HTMLElement | null>(null);
+  const topSentinelRef = useRef<HTMLSpanElement | null>(null);
   const {
     showThoughts,
     setShowThoughts,
@@ -55,6 +56,7 @@ export const ConversationMain = ({
     initialTurnId: urlTurnId ?? null,
     enabled: Boolean(activeSession) && !loadingSession,
     containerRef: mainRef,
+    topSentinelRef,
   });
 
   useRenderDebug('ConversationMain', {
@@ -81,10 +83,11 @@ export const ConversationMain = ({
         const target = event.target as HTMLElement | null;
         if (!target) return;
         if (target.closest('button, a, input, textarea, select, [contenteditable="true"]')) return;
-        mainRef.current?.focus();
+        mainRef.current?.focus({ preventScroll: true });
       }}
-      className="flex-1 min-w-0 space-y-6"
+      className="flex-1 min-w-0 space-y-6 focus:outline-none focus-visible:outline-none"
     >
+      <span ref={topSentinelRef} className="block h-px w-full" aria-hidden="true" />
       <SessionOverview
         HeaderComponent={SessionHeaderVariantB}
         toggleVariant="compact"

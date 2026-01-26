@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchSession } from '../api';
+import { logTurnNav } from '../debug';
 import { MAX_PREVIEW_CHARS, MAX_PREVIEW_LINES } from '../format';
 import { extractSessionIdFromPath, parseJsonl } from '../parsing';
 import type {
@@ -145,6 +146,12 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
     (turnId: number | null, options?: JumpToTurnOptions) => {
       if (!activeSessionId) return;
       const historyMode = options?.historyMode ?? 'replace';
+      logTurnNav('jump', {
+        sessionId: activeSessionId,
+        turnId,
+        historyMode,
+        scroll: options?.scroll !== false,
+      });
       updateSessionUrl(activeSessionId, turnId ?? null, historyMode);
       if (typeof turnId === 'number' && Number.isFinite(turnId) && options?.scroll !== false) {
         setScrollToTurnId(turnId);
