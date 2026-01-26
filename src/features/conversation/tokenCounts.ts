@@ -43,6 +43,7 @@ export interface RateLimitSummary {
 export interface TokenCountSummary {
   totalUsage?: TokenUsageSummary | null;
   lastUsage?: TokenUsageSummary | null;
+  contextUsedTokens?: number | null;
   contextWindowSize?: number | null;
   contextUsagePercent?: number | null;
   rateLimits: {
@@ -119,9 +120,13 @@ export const parseTokenCountEntry = (raw: unknown): TokenCountSummary | null => 
   const totalUsage = parseTokenUsage(info.total_token_usage);
   const lastUsage = parseTokenUsage(info.last_token_usage);
   const contextWindowSize = toNumber(info.model_context_window);
+  const contextUsedTokens =
+    lastUsage?.totalTokens !== null && lastUsage?.totalTokens !== undefined
+      ? lastUsage.totalTokens
+      : (lastUsage?.inputTokens ?? null);
   const contextUsagePercent =
-    contextWindowSize !== null && totalUsage?.totalTokens !== null && totalUsage?.totalTokens !== undefined
-      ? clampPercent((totalUsage.totalTokens / contextWindowSize) * 100)
+    contextWindowSize !== null && contextUsedTokens !== null
+      ? clampPercent((contextUsedTokens / contextWindowSize) * 100)
       : null;
   const rateLimits = asRecord(payload.rate_limits);
   const primary = parseRateLimit(rateLimits.primary);
@@ -147,6 +152,7 @@ export const parseTokenCountEntry = (raw: unknown): TokenCountSummary | null => 
   return {
     totalUsage,
     lastUsage,
+    contextUsedTokens,
     contextWindowSize,
     contextUsagePercent,
     rateLimits: {
@@ -251,6 +257,9 @@ export const buildTokenCountExport = (raw: unknown) => {
 
   if (parsed.contextWindowSize !== null && parsed.contextWindowSize !== undefined) {
     payload.model_context_window = parsed.contextWindowSize;
+  }
+  if (parsed.contextUsedTokens !== null && parsed.contextUsedTokens !== undefined) {
+    payload.context_used_tokens = parsed.contextUsedTokens;
   }
   if (parsed.contextUsagePercent !== null && parsed.contextUsagePercent !== undefined) {
     payload.context_used_percent = formatPercent(parsed.contextUsagePercent);

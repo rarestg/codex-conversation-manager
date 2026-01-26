@@ -1,0 +1,351 @@
+Chip Utility Unification for VariantB + Toggles (Handoff-Ready)
+
+Context
+We want a small, reusable set of “chip” utility classes that match the current SessionHeaderVariantB pill styling without changing visuals. Right now, SessionHeaderVariantB uses inline Tailwind class strings for subtitle pills (date/repo/branch), stats pills (time/duration/turns/token counts/visible), and meta rows (Session/Dir/File). The compact toggle layout in SessionOverview also uses inline pill styles for its label + count + switch container. This leads to duplication and makes it harder to keep styles consistent.
+
+We discussed a minimal class system that can be reused across:
+- SessionHeaderVariantB subtitle pills (CopyButton items for date/repo/branch)
+- SessionHeaderVariantB stats pills (time/duration/turns/token counts/visible)
+- SessionHeaderVariantB meta rows (Session/Dir/File)
+- SessionOverview compact toggles (label + count + switch container)
+
+Key constraint: do NOT change the visual appearance. VariantB is the “golden” reference. The chip classes must reproduce the existing look exactly.
+
+Relevant code areas
+- src/index.css: global utility definitions; currently has .pill, .chip, .chip-label, .chip-value used elsewhere.
+- src/features/conversation/components/SessionHeaderVariantB.tsx: contains all inline pill classes we want to consolidate.
+- src/features/conversation/components/SessionOverview.tsx: compact toggle layout uses inline pill classes and a count badge.
+- src/features/conversation/components/Toggle.tsx: full toggle style (not the compact toggle).
+
+Why now
+We’re adding more pill-style UI (TokenCount card usage/limits pills, stats chips, etc.). The inline styles are already duplicated and drifting. Unifying into a minimal set of chip utilities reduces duplication, makes future adjustments safer, and preserves the “VariantB” visual language across the UI.
+
+The Plan (Execution Order)
+
+Step 1 — Define minimal chip utilities in src/index.css
+Goal: create a reusable class set that matches existing VariantB visual styles without changing appearance.
+
+Add the following classes under @layer components (or refactor existing .chip definitions):
+
+1) Base chip container (no background by default)
+- .chip: inline-flex, items-center, rounded-full, border, text color
+- Must NOT include bg-white/70 because subtitle pills currently have no background.
+
+2) Variant for filled chips
+- .chip-filled: bg-white/70
+- Use this for stats pills and compact toggle pills that currently show a background.
+
+3) Size modifiers
+- .chip-sm: px-2 py-1 text-[11px]
+- .chip-md: px-2.5 py-1 text-xs
+
+4) State/utility helpers
+- .chip-muted: text-slate-500
+- .chip-button: text-left transition-colors hover:text-slate-700 hover:border-slate-300 disabled:opacity-60
+- .chip-left: text-left (use for non-button pills that still need left alignment)
+- .chip-value: tabular-nums (for numeric chips)
+- .chip-count: count badge for compact toggles (bg-slate-100, small text, tabular-nums)
+
+Note: .chip-button already includes text-left, so only apply .chip-left to non-interactive chips that require left alignment.
+
+5) Meta rows (Session/Dir/File)
+These are not “chips” visually but should be standardized with named classes:
+- .meta-row: border-slate-100 bg-white/70 px-3 py-1.5 rounded-2xl flex items-center gap-3 text-left
+- .meta-label: w-16 shrink-0 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400
+- .meta-value: min-w-0 truncate text-xs text-slate-700
+
+Why these choices:
+- Separating .chip-filled preserves visual parity (subtitle pills should remain unfilled).
+- .chip-left is explicitly needed because several pills use text-left; leaving it out changes alignment.
+- .chip-value centralizes tabular-nums for numeric stats.
+
+Dependency: Do this first so all refactors can use the new class names.
+
+Step 2 — Refactor SessionHeaderVariantB subtitle pills (date/repo/branch)
+Where: src/features/conversation/components/SessionHeaderVariantB.tsx
+
+Current behavior:
+- Subtitle items are CopyButton pills with border and no background.
+- They use flex, text-left, muted text, and hover change.
+
+What to do:
+- Replace inline className strings with the new chip utilities:
+  - Use: "chip chip-md chip-muted chip-button".
+  - If the subtitle item needs to be full-width in flex layouts, add "flex" or ensure CopyButton wrapper can accept inline-flex. The old layout used “flex min-w-0”. Verify that the new class doesn’t break truncation.
+- Keep label wrappers and truncation classes unchanged (labelWrapperClassName, labelClassName).
+
+Why:
+- This keeps visual parity while eliminating inline class duplication.
+
+Dependency: Step 1 completed so classes exist.
+
+Step 3 — Refactor SessionHeaderVariantB stats pills
+Where: same file, stats row inside header (time/duration/turns/token counts/visible).
+
+Current behavior:
+- Each stat chip uses inline-flex, border, bg-white/70, small text, and icon + value.
+
+What to do:
+- Replace inline className with: "chip chip-sm chip-filled".
+- Apply .chip-value to numeric spans (tabular-nums); keep existing icon classes.
+- Maintain exact content order and icons to avoid visual regressions.
+
+Why:
+- Stats pills are the most repetitive inline style in the file; consolidating them reduces drift.
+
+Dependency: Step 1 completed.
+
+Step 4 — Refactor meta rows (Session/Dir/File)
+Where: renderMetaRow function in SessionHeaderVariantB.tsx
+
+Current behavior:
+- Uses inline classes: border-slate-100 bg-white/70 rounded-2xl px-3 py-1.5 text-left
+
+What to do:
+- Replace className and leading/label classes with:
+  - className: "meta-row"
+  - leadingClassName: "meta-label"
+  - labelClassName: "meta-value"
+
+Why:
+- This consolidates the unique style used by the meta rows while preserving exact visuals.
+
+Dependency: Step 1 completed.
+
+Step 5 — Refactor compact toggle pills in SessionOverview
+Where: src/features/conversation/components/SessionOverview.tsx (CompactToggle)
+
+Current behavior:
+- Compact toggle uses a pill label container with border + bg-white + shadow.
+- Uses a count badge span and a custom switch control.
+
+What to do:
+- Replace container className with: "chip chip-md chip-filled chip-shadow" (note: add .chip-shadow if you want to preserve shadow-sm).
+  - If .chip-shadow is not added, keep `shadow-sm` inline or add as a utility class.
+- Replace count badge with .chip-count.
+- Keep the toggle switch DOM and its classes unchanged.
+
+Why:
+- Keeps compact toggle pills visually identical while consolidating style.
+
+Dependency: Step 1 completed; ensure .chip-shadow exists if removing inline shadow.
+
+Step 6 — Audit other chip usages
+Where: search for “chip” and inline “rounded-full border border-slate-200” patterns.
+
+What to do:
+- Only refactor components that match the VariantB “chip” aesthetic.
+- Avoid changing TokenCountCard’s new Usage/Limits pills (they are custom and intentionally styled).
+
+Why:
+- Avoid unintended visual shifts in other UI sections.
+
+Decisions & Tradeoffs
+- Base .chip has no background to avoid changing subtitle pills; this requires a .chip-filled variant.
+- Keeping .chip inline-flex matches stats chips, but subtitle chips may still need flex/min-w utilities for truncation; do not remove existing min-w-0 wrappers.
+- Meta rows are not true “chips” but benefit from a named utility set; choosing “meta-*” names avoids confusion.
+- We are not standardizing TokenCountCard pills in this pass to avoid large UI regressions; they can be addressed later if desired.
+
+Landmines
+- Subtitle row truncation depends on min-w-0 wrappers and labelClassName; removing these breaks truncation.
+- Background differences are subtle: subtitle pills should remain unfilled (no bg-white/70).
+- The CopyButton component has special label overlay behavior; do not alter its internal structure. Only swap className values.
+- Compact toggle pills contain a switch element; do not move or restyle the switch unless explicitly required.
+
+Verification
+1) Visual parity check (manual):
+   - Subtitle row pills should look unchanged (no background).
+   - Stats row pills should retain the white/70 fill and border.
+   - Meta rows should look identical (rounded 2xl, soft background).
+   - Compact toggles should look unchanged and the switch should still animate correctly.
+
+2) Functional check:
+   - CopyButton hover and disabled states still work (subtitle pills and meta rows).
+   - All text truncation behaves the same.
+
+3) Lint/format:
+   - npm run check
+   - npm run typecheck
+
+Notes for Engineers
+- Keep VariantB as the source of truth for the chip look.
+- Make minimal changes; do not introduce new spacing or typography variants unless required.
+- If you need to add .chip-shadow, define it in index.css as @apply shadow-sm.
+
+---
+
+Addendum: Extend chip system across the app (SessionHeader A allowed to change)
+
+Updated scope decision
+- SessionHeader (Variant A) is now allowed to adopt the same pill look as VariantB.
+- The goal is a single “chip language” across headers, session lists, and compact controls.
+- This means we can remove special “borderless” styling for Variant A and align it with Variant B’s filled pills.
+
+Additional base styles needed (if extending beyond VariantB + compact toggles)
+These are the minimum extra helpers required to cover SessionsPanel and other pill-heavy areas without large inline class strings.
+
+1) Extra background variants
+- .chip-soft: bg-white/80 (used in SessionsPanel year badges)
+- .chip-muted: bg-slate-100 (used in SessionsPanel month badges and small count pills)
+- .chip-white: bg-white (used in SessionsPanel per-session stat pills)
+
+2) Extra size variant
+- .chip-xs: px-2 py-1 text-[10px]/[12px] (used extensively in SessionsPanel list pills)
+
+3) Optional helper
+- .chip-shadow: shadow-sm (used in many small pills for visual lift)
+
+These are additive; they do not change any existing VariantB visuals. If you want to keep the utility set smaller, you can skip .chip-white and use inline bg-white on a case-by-case basis, but this reduces consistency.
+
+Refactor map (extended)
+
+A) SessionHeader.tsx (Variant A)
+Intent: use the same pill styling as VariantB. We are explicitly okay changing Variant A’s pill look to match VariantB.
+
+- Time / duration / turns pills:
+  Use: "chip chip-sm chip-filled" (plus icon + .chip-value for numeric spans)
+  Remove old “bg-white” + borderless styles.
+
+- Repo / branch CopyButtons:
+  Use: "chip chip-sm chip-filled chip-button min-w-0".
+  Keep label truncation wrappers as-is.
+
+- Stats badges row (thoughts / tools / meta / token counts / visible):
+  Use: "chip chip-sm chip-filled" for each pill.
+  Use .chip-value on numeric spans.
+
+- Meta rows (Session/Dir/File):
+  Switch to .meta-row / .meta-label / .meta-value.
+
+- renderMetaChip:
+  Replace existing .chip-label/.chip-value usage with meta-row classes.
+
+Why: This fully unifies Variant A and Variant B pill styling, reducing future drift.
+
+B) SessionsPanel.tsx
+Intent: replace all pill-style inline classes with chips to reduce repetition and keep visual consistency.
+
+- Year group badges (bg-white/80):
+  Use: "chip chip-xs chip-soft" (add icon + .chip-value for numeric span)
+
+- Month group badges (bg-slate-100):
+  Use: "chip chip-xs chip-muted"
+
+- Day summary pill (bg-white):
+  Use: "chip chip-xs chip-white" (if you prefer white), or chip-soft.
+
+- Session row stat pills (time/duration/turns):
+  Use: "chip chip-xs chip-white chip-shadow".
+  Apply .chip-value on numeric spans and keep the tiny icon sizing.
+
+- Session repo/branch pills:
+  Use: "chip chip-xs chip-white chip-shadow" with icon + text.
+
+- Session ID copy pill:
+  Use: "chip chip-xs chip-muted chip-button" (keep mt-2 and CopyButton truncation wrappers).
+
+Notes:
+- Preserve translate-y offsets on text where currently used (10px pills) if you still need optical centering.
+- Keep min-w-0 wrappers where truncation is required.
+
+C) MessageCard.tsx
+Intent: reduce repeated button styles.
+
+- Copy buttons (text/markdown/content):
+  Use: "chip chip-lg chip-filled chip-shadow chip-button".
+  Keep any required border overrides (e.g., border-white/70) inline if needed.
+
+D) TokenCountCard.tsx
+Intent: keep the new compact layout, but reuse chip button styles for the Copy button only.
+
+- Copy button:
+  Use: "chip chip-lg chip-filled chip-shadow chip-button" (chip-lg is the default size for copy/action pills).
+  Keep the custom Usage/Limits pills as-is (they are intentionally unique).
+
+E) ConversationViewer.tsx / CanvasView.tsx / SettingsModal.tsx / WorkspacesPanel.tsx (optional)
+These are secondary. If you want a broader “chip language” throughout, apply the same chip styles to primary actions and compact buttons. Otherwise, leave them unchanged to minimize risk.
+
+Landmines (extended scope)
+- If you remove translate-y offsets on 10px pills, text may appear optically low. Keep or re-evaluate those offsets in SessionsPanel.
+- Do not alter CopyButton label wrappers; truncation depends on min-w-0.
+- Compact toggle switches are not “chips”; only the pill container should use chip classes.
+- Avoid over-standardizing TokenCountCard pills; they are intentionally bespoke.
+
+Verification (extended scope)
+- Visual parity with current UI in SessionsPanel (especially year/month badges and session row pills).
+- Variant A header pills now match Variant B in fill + border style.
+- Copy buttons still have consistent widths with label swapping (CopyButton reserveLabel intact).
+- Run: npm run typecheck, npm run check.
+
+Addendum: Segmented chip helper
+
+Why
+The TokenCountCard “Usage” and “Limits” pills are segmented (colored lead + body). They currently use inline classes like items-stretch and overflow-hidden to make the lead segment fill the pill height. A small reusable helper makes this pattern consistent and reusable elsewhere without duplicating inline classes.
+
+New utility (suggested)
+- .chip-segmented
+  - inline-flex
+  - items-stretch
+  - overflow-hidden
+  - rounded-full
+  - border border-slate-200
+  - bg-white/70
+
+Example usage (TokenCountCard)
+- Outer pill: "chip-segmented"
+- Lead segment: flex items-center bg-slate-500 px-2.5 text-[10px] font-medium text-white
+- Body segment: flex items-center px-2.5 py-1
+
+Notes
+- Keep .chip-segmented generic (no color). Lead segment controls color.
+- Do not remove the current flex items on the lead/body segments; those enforce full-height fill.
+- Do not combine .chip-segmented with .chip-filled (segmented already includes bg-white/70).
+
+Scope note for chip-segmented
+- For this phase, apply .chip-segmented only to TokenCountCard’s Usage/Limits pills.
+- Do not refactor other segmented controls (Canvas variants, layout toggle pills) unless explicitly requested.
+
+Extended Targets (Optional Cleanup)
+
+Purpose
+This section documents low-risk cleanup opportunities outside SessionHeader/SessionOverview/SessionsPanel. These are optional, and should only be implemented if time/budget allow. The goal is to replace obvious pill-like inline styles with the new chip utilities without changing overall UX.
+
+ConversationViewer.tsx
+- Home button: replace with "chip chip-lg chip-filled chip-shadow chip-button".
+- Settings icon button: replace with "chip chip-filled chip-shadow h-10 w-10 justify-center".
+- Leave header container and error banners unchanged.
+
+CanvasView.tsx
+- “Refresh sessions” button: replace with "chip chip-lg chip-filled chip-shadow chip-button".
+- Variants segmented control: leave as-is unless a dedicated segmented-control utility is introduced.
+- Leave selects and dashed info boxes unchanged.
+
+SettingsModal.tsx
+- Close button: replace with "chip chip-md chip-subtle chip-button" (no background).
+- Reindex button: replace with "chip chip-lg chip-filled chip-shadow chip-button".
+- Clear & rebuild: replace with chip + keep rose background/border inline.
+- Save root (primary CTA): leave custom; it is intentionally distinct.
+
+WorkspacesPanel.tsx
+- Loading badge: replace with "chip chip-sm chip-muted".
+- Workspace path badge + Clear button: replace with chip equivalents if desired.
+- Teal “Filtered by workspace” badge: leave custom unless a chip-accent variant is introduced.
+- Workspace cards and GitHub icon badge: leave custom.
+
+Toggle.tsx
+- Leave unchanged. This is a card-style toggle, not a pill, and should not use chip utilities.
+
+tokenCountVariants.tsx
+- Variant A “Last event” badge: replace with "chip chip-sm chip-muted".
+- Variant B dark badge: leave custom unless a dark chip variant is introduced.
+
+Guidance
+- Do not force chip utilities where they introduce new variants (accent/dark) unless explicitly added.
+- Prioritize visual parity: if a replacement changes color or spacing, keep the original inline class.
+
+Decision Recap
+- Preserve SessionHeaderVariantB’s current pill look exactly.
+- Allow SessionHeader (Variant A) to adopt VariantB’s pill styling.
+- Define a minimal, composable chip utility set (base + sizes + background variants + value helpers).
+- Add chip-segmented for the TokenCountCard Usage/Limits pills, scoped to TokenCountCard only for now.
+- Extend chip usage to other components only where it reduces duplication without introducing new visual variants.

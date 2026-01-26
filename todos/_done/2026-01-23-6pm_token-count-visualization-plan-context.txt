@@ -1,0 +1,102 @@
+Token Count Visualization + Context Usage Fix (Implementation Context)
+
+Purpose
+This document summarizes what was implemented from:
+- todos/2026-01-23-6pm_token-count-visualization-plan.txt
+- todos/2026-01-26-8pm_token-count-context-usage-fix-plan.txt
+It captures the current state, key decisions, and UX adjustments made since the plan, plus
+how indexing, rendering, and export now behave.
+
+Status
+- Token Count is first-class (toggle + stats + renderer + canvas variants + export).
+- Indexing stores token_count_count separately from meta_count.
+- Context usage semantics now use last_token_usage (not total_token_usage).
+- UI card is compact “at a glance” with grouped usage + limits pills.
+- Tests: npm run typecheck, npm run check both passing (2026-01-26).
+
+Key Decisions (Current)
+1) Token Count is NOT Meta.
+   - Separate toggle, separate stats chip, separate renderer.
+2) Token Count items are hidden by default (toggle off).
+3) Stats row shows compact count (k/m) of token_count items (count of entries, not total tokens).
+4) Context usage is derived from last_token_usage.total_tokens
+   - Fallback to last_token_usage.input_tokens when total_tokens is missing.
+   - Context bar uses last-usage tokens and model_context_window.
+5) Cumulative totals are still parsed but not shown in the compact card by default.
+6) Export includes token_count only when token toggle is on, tagged as <TOKEN-COUNT-n>.
+
+Indexing Alignment (Server)
+- sessions.token_count_count column added; safe migration via PRAGMA table_info + ALTER TABLE.
+- token_count_count increments on event_msg payload.type === 'token_count'.
+- meta_count excludes token_count; only session_meta + turn_context.
+- /api/sessions is DB-only (no filesystem scan).
+- No automatic backfill for new columns; Clear & Rebuild Index required.
+
+Client + UI (Token Count)
+- parseJsonl already emits ParsedItem.type === 'token_count' from event_msg token_count.
+- Filtering now respects showTokenCounts; meta toggle no longer gates token_count items.
+- Stats row shows token_count chip (compact count), with indexed counts preferred when available.
+- MessageCard routes token_count to TokenCountCard.
+- Conversation export includes token_count items only when toggle is on.
+
+Context Usage Fix (2026-01-26)
+Problem
+- Context bar previously used total_token_usage, producing misleading ratios
+  (e.g., 3.3m / 258k). CLI uses last_token_usage for context occupancy.
+
+Fix
+- parseTokenCountEntry now computes:
+  - contextUsedTokens from last_token_usage.total_tokens (fallback: input_tokens)
+  - contextUsagePercent = contextUsedTokens / model_context_window
+- TokenCountCard and Canvas variants now use contextUsedTokens for the bar and detail.
+- buildTokenCountExport includes context_used_tokens and context_used_percent.
+
+TokenCountCard (Compact “At a Glance” Layout)
+- Reduced vertical height; removed multi-panel layout.
+- Layout:
+  1) Context bar + X / Y tokens (last-usage based)
+  2) Two labeled pills:
+     - Usage pill: Input / Cached (hit %) / Output / Reasoning
+     - Limits pill: Primary % (window) · Secondary % (window)
+- Pills use a muted gray lead segment for label (“Usage”, “Limits”).
+- Separators are spaced with inline dot separators for readability.
+
+Canvas Variants
+- Token Count A/B demo added to canvas registry.
+- Variants use the same parsing helper; context bar aligns with last_token_usage semantics.
+- Variant A shows cumulative total label as “Total (cumulative)” (for design comparison).
+- Variant B retains a dashboard aesthetic; context bar uses last usage.
+
+Copy / Export
+- buildConversationExport uses <TOKEN-COUNT-n> tags when token toggle is on.
+- buildTokenCountExport returns a summarized payload including:
+  - total_usage, last_usage
+  - model_context_window
+  - context_used_tokens
+  - context_used_percent
+  - rate_limits fields when present
+
+Files Touched (Core)
+- server/apiPlugin.ts
+- src/features/conversation/tokenCounts.ts
+- src/features/conversation/components/TokenCountCard.tsx
+- src/features/conversation/components/SessionHeader.tsx
+- src/features/conversation/components/SessionHeaderVariantB.tsx
+- src/features/conversation/components/SessionOverview.tsx
+- src/features/conversation/hooks/useSessionOverview.ts
+- src/features/conversation/canvas/tokenCountVariants.tsx
+- src/features/conversation/canvas/registry.tsx
+- src/features/conversation/copy.ts
+
+Verification Checklist (Current)
+- Toggle behavior: Token Count toggle controls only token_count items; default off.
+- Stats row: token_count chip shows count of entries (compact format).
+- Context bar: uses last_token_usage; does not exceed context window.
+- TokenCountCard: compact layout with Usage + Limits pills.
+- Canvas: Token Count demo renders and reflects updated context semantics.
+- Indexing: token_count_count populated after Clear & Rebuild Index.
+
+Notes / Rationale
+- No automatic backfill on new DB columns; users must Clear & Rebuild Index.
+- Context usage is per-turn by design; cumulative totals can be misleading.
+- Rate limits use window duration formatting (e.g., 300m -> 5h, 10080m -> 7d).

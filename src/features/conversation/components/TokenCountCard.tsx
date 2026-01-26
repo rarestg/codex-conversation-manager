@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import { isRenderDebugEnabled } from '../debug';
 import { formatJsonValue, MAX_PREVIEW_CHARS } from '../format';
-import { buildTokenCountExport, formatCreditsSummary, formatTokenValue, parseTokenCountEntry } from '../tokenCounts';
+import { buildTokenCountExport, formatTokenValue, parseTokenCountEntry } from '../tokenCounts';
 import type { ParsedItem } from '../types';
 import { CopyButton } from './CopyButton';
 
@@ -56,22 +56,53 @@ export const TokenCountCard = ({ item, itemIndex, showFullContent }: TokenCountC
     !showFullContent && rawContent.length > MAX_PREVIEW_CHARS
       ? `${rawContent.slice(0, MAX_PREVIEW_CHARS)}...`
       : rawContent;
-  const totalTokens = parsed?.totalUsage?.totalTokens ?? null;
+  const contextUsedTokens = parsed?.contextUsedTokens ?? null;
   const contextWindow = parsed?.contextWindowSize ?? null;
   const contextPercent = parsed?.contextUsagePercent ?? null;
   const lastUsage = parsed?.lastUsage ?? null;
   const cacheHitRate = lastUsage?.cacheHitRate ?? null;
-  const cacheHitLabel =
-    cacheHitRate !== null && Number.isFinite(cacheHitRate) ? `${Math.round(cacheHitRate * 100)}% hit rate` : '--';
   const contextDetail =
-    totalTokens !== null && contextWindow !== null
-      ? `${formatMaybe(totalTokens)} / ${formatMaybe(contextWindow)} tokens`
+    contextUsedTokens !== null && contextWindow !== null
+      ? `${formatMaybe(contextUsedTokens)} / ${formatMaybe(contextWindow)} tokens`
       : undefined;
 
-  const primaryLimit = parsed?.rateLimits.primary ?? null;
-  const secondaryLimit = parsed?.rateLimits.secondary ?? null;
-  const creditsSummary = parsed ? formatCreditsSummary(parsed.rateLimits.credits, parsed.rateLimits.planType) : null;
-  const showRateLimits = Boolean(primaryLimit || secondaryLimit || creditsSummary);
+  const formatWindowMinutes = (minutes?: number | null) => {
+    if (minutes === null || minutes === undefined || !Number.isFinite(minutes)) return null;
+    if (minutes >= 1440 && minutes % 1440 === 0) return `${minutes / 1440}d`;
+    if (minutes >= 60 && minutes % 60 === 0) return `${minutes / 60}h`;
+    return `${Math.round(minutes)}m`;
+  };
+  const buildRateLimitLabel = (label: string, percent?: number | null, windowMinutes?: number | null) => {
+    if (percent === null || percent === undefined || !Number.isFinite(percent)) return null;
+    const windowLabel = formatWindowMinutes(windowMinutes);
+    return windowLabel
+      ? `${label} ${formatPercentLabel(percent)} (${windowLabel})`
+      : `${label} ${formatPercentLabel(percent)}`;
+  };
+  const usageParts: Array<{ key: string; text: string }> = [
+    { key: 'input', text: `Input ${formatMaybe(lastUsage?.inputTokens)}` },
+    {
+      key: 'cached',
+      text: `Cached ${formatMaybe(lastUsage?.cachedTokens)}${
+        cacheHitRate !== null && Number.isFinite(cacheHitRate) ? ` (${Math.round(cacheHitRate * 100)}% hit)` : ''
+      }`,
+    },
+    { key: 'output', text: `Output ${formatMaybe(lastUsage?.outputTokens)}` },
+    { key: 'reasoning', text: `Reasoning ${formatMaybe(lastUsage?.reasoningTokens)}` },
+  ];
+  const primarySummary = buildRateLimitLabel(
+    'Primary',
+    parsed?.rateLimits.primary?.usedPercent ?? null,
+    parsed?.rateLimits.primary?.windowMinutes ?? null,
+  );
+  const secondarySummary = buildRateLimitLabel(
+    'Secondary',
+    parsed?.rateLimits.secondary?.usedPercent ?? null,
+    parsed?.rateLimits.secondary?.windowMinutes ?? null,
+  );
+  const limitParts: Array<{ key: string; text: string }> = [];
+  if (primarySummary) limitParts.push({ key: 'primary', text: primarySummary });
+  if (secondarySummary) limitParts.push({ key: 'secondary', text: secondarySummary });
 
   return (
     <div
@@ -81,11 +112,6 @@ export const TokenCountCard = ({ item, itemIndex, showFullContent }: TokenCountC
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-600">Token Count</p>
-          {totalTokens !== null && (
-            <p className="mt-1 text-xs text-slate-500">
-              Total: <span className="font-semibold text-slate-700">{formatMaybe(totalTokens)}</span>
-            </p>
-          )}
         </div>
         <CopyButton
           getText={async () => tokenExport || rawContent}
@@ -97,57 +123,39 @@ export const TokenCountCard = ({ item, itemIndex, showFullContent }: TokenCountC
       </div>
 
       {parsed ? (
-        <div className="mt-4 space-y-4">
+        <div className="mt-3 space-y-3">
           <MeterBar
             label="Context window"
             percent={contextPercent}
             detail={contextDetail}
             colorClassName="bg-teal-500"
           />
-
-          <div className="rounded-2xl border border-slate-200 bg-white/70 p-3">
-            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Last turn</div>
-            <div className="mt-2 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
-              <div className="flex items-center justify-between gap-2">
-                <span>Input</span>
-                <span className="font-semibold text-slate-700">{formatMaybe(lastUsage?.inputTokens)}</span>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span>Cached</span>
-                <span className="font-semibold text-slate-700">{formatMaybe(lastUsage?.cachedTokens)}</span>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span>Output</span>
-                <span className="font-semibold text-slate-700">{formatMaybe(lastUsage?.outputTokens)}</span>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span>Reasoning</span>
-                <span className="font-semibold text-slate-700">{formatMaybe(lastUsage?.reasoningTokens)}</span>
-              </div>
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+            <div className="inline-flex items-stretch overflow-hidden rounded-full border border-slate-200 bg-white/70">
+              <span className="flex items-center bg-slate-500 px-2.5 text-[10px] font-medium text-white">Usage</span>
+              <span className="flex flex-wrap items-center px-2.5 py-1">
+                {usageParts.map((part, index) => (
+                  <span key={part.key} className="inline-flex items-center">
+                    {index > 0 && <span className="mx-1.5 text-slate-300">·</span>}
+                    <span>{part.text}</span>
+                  </span>
+                ))}
+              </span>
             </div>
-            <div className="mt-2 text-[11px] text-slate-500">Cache efficiency: {cacheHitLabel}</div>
+            {limitParts.length > 0 && (
+              <div className="inline-flex items-stretch overflow-hidden rounded-full border border-slate-200 bg-white/70">
+                <span className="flex items-center bg-slate-500 px-2.5 text-[10px] font-medium text-white">Limits</span>
+                <span className="flex flex-wrap items-center px-2.5 py-1">
+                  {limitParts.map((part, index) => (
+                    <span key={part.key} className="inline-flex items-center">
+                      {index > 0 && <span className="mx-1.5 text-slate-300">·</span>}
+                      <span>{part.text}</span>
+                    </span>
+                  ))}
+                </span>
+              </div>
+            )}
           </div>
-
-          {showRateLimits && (
-            <div className="space-y-3">
-              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Rate limits</div>
-              {primaryLimit && (
-                <MeterBar
-                  label={`Primary${primaryLimit.windowMinutes ? ` (${primaryLimit.windowMinutes}m)` : ''}`}
-                  percent={primaryLimit.usedPercent ?? null}
-                  colorClassName="bg-indigo-500"
-                />
-              )}
-              {secondaryLimit && (
-                <MeterBar
-                  label={`Secondary${secondaryLimit.windowMinutes ? ` (${secondaryLimit.windowMinutes}m)` : ''}`}
-                  percent={secondaryLimit.usedPercent ?? null}
-                  colorClassName="bg-amber-500"
-                />
-              )}
-              {creditsSummary && <div className="text-[11px] text-slate-500">{creditsSummary}</div>}
-            </div>
-          )}
         </div>
       ) : (
         <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-white/70 p-3 text-xs text-slate-500">

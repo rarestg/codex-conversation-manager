@@ -1,0 +1,59 @@
+NOTE: see 2026-01-23-6pm_token-count-visualization-plan.txt and 2026-01-23-6pm_token-count-visualization-plan-context.txt first
+Token Count Context Usage Fix (Handoff-Ready)
+
+Context
+We currently render token_count telemetry using total_token_usage to compute the “context window” bar and display totals. This produces misleading numbers (e.g., 3.3m / 258k) because total_token_usage appears to be cumulative across a long-running session or workspace and can exceed the model’s context window. The Codex CLI shows a different value (“Context window: 73% left (77.4K used / 258K)”), which aligns with last_token_usage from the JSONL entry. The issue is now visible in the UI and undermines trust in the Token Count card, so we need to correct the semantics and labels.
+
+Relevant code and how it connects
+Token count data flows from JSONL parsing to the UI as ParsedItem.type === 'token_count' (src/features/conversation/parsing.ts). Rendering happens in MessageCard, which routes token_count items to TokenCountCard (src/features/conversation/components/MessageCard.tsx). TokenCountCard parses the raw payload via parseTokenCountEntry (src/features/conversation/tokenCounts.ts), then uses contextUsagePercent and totalUsage/lastUsage to show the context bar and totals. The Canvas variants use the same helper, so any parsing change must be coordinated with those displays (src/features/conversation/canvas/tokenCountVariants.tsx). The export format uses buildTokenCountExport (src/features/conversation/tokenCounts.ts), which currently serializes total_usage and last_usage but does not distinguish “context usage” semantics.
+
+The Plan
+Step 1 — Clarify the target semantics before editing code.
+Decide what “context usage” means for the UI. The recommended interpretation is that context usage should reflect the size of the request’s prompt+responses for the most recent turn. That means using last_token_usage.total_tokens when available. If you want a prompt-only interpretation, use last_token_usage.input_tokens instead, but that will not match the CLI’s “used” number as closely. This decision must be made before editing any parsing helpers because it drives labels, formulas, and copy/export text.
+
+Step 2 — Update the parsing helper to compute context usage from last_token_usage.
+Where: src/features/conversation/tokenCounts.ts (parseTokenCountEntry).
+What to do: replace the contextUsagePercent calculation that currently uses totalUsage.totalTokens with one derived from lastUsage. Introduce a local “contextUsedTokens” value derived from lastUsage.totalTokens (or lastUsage.inputTokens if you choose prompt-only). Compute contextUsagePercent from that and the model_context_window. This keeps all components consistent because they all use parseTokenCountEntry.
+Why: total_token_usage is cumulative and exceeds the context window, so it cannot be used to compute context occupancy.
+Dependency: This must happen before any UI label changes, or the labels will be out of sync with the actual data.
+
+Step 3 — Adjust TokenCountCard labels to match the new meaning.
+Where: src/features/conversation/components/TokenCountCard.tsx.
+What to do: change the “Context window” line to use the new contextUsedTokens value (the last-usage-based number) when showing the “X / Y tokens” detail. Consider renaming the existing “Total” label to clarify that it is cumulative usage (if you continue to show it). For example, “Total (cumulative)” or “Session total.” If you choose to hide cumulative totals entirely to reduce confusion, remove that line and rely on the last-usage line items.
+Why: the previous UI mixes a per-turn context bar with a cumulative total label, which implies they are related and produces misleading ratios.
+Dependency: Must follow Step 2 so the UI uses the corrected helper output.
+
+Step 4 — Update Canvas variants to align with the new semantics.
+Where: src/features/conversation/canvas/tokenCountVariants.tsx.
+What to do: update any “Total usage” and context bar text to align with the new contextUsedTokens definition. If cumulative totals remain visible, label them explicitly as cumulative. If not, remove them for clarity. Ensure the context bar in both variants uses the same “last usage” semantics as TokenCountCard.
+Why: the canvas variants are used for design iteration and must match production semantics to avoid accidental regressions.
+Dependency: Must follow Step 2, and should be done after Step 3 so the wording is consistent across views.
+
+Step 5 — (Optional) Update export serialization to include context usage explicitly.
+Where: src/features/conversation/tokenCounts.ts (buildTokenCountExport).
+What to do: if you want exports to reflect the same semantics, add a field like context_used_tokens derived from last_usage (or rename existing context_used_percent to clarify that it is derived from last_usage). This is optional; the primary goal is UI correctness.
+Why: optional but helpful for downstream consumers who copy/export token_count entries and expect matching semantics.
+Dependency: After Step 2 so the derived values are correct.
+
+Step 6 — Audit any other displays or summaries that use totalUsage.
+Where: search for totalUsage.totalTokens usages in UI (rg "totalUsage" or "TokenCount").
+What to do: ensure any remaining uses of totalUsage are explicitly labeled as cumulative or removed if they cause confusion.
+Why: prevent partial fixes where some views still display misleading totals.
+
+Decisions & Tradeoffs
+- Using last_token_usage for context usage prioritizes accuracy for the current turn. The tradeoff is that “context usage” will now fluctuate each turn and will not represent a session-wide total. This is the correct interpretation of a context window bar.
+- Keeping cumulative totals visible can be useful for overall consumption insights, but it will remain easy to misinterpret. If you keep it, label it clearly as cumulative or “session total.” If you hide it, you reduce confusion at the expense of losing that aggregate display.
+- Using input_tokens (prompt-only) for the context bar is simpler conceptually but may not match the CLI’s “used” number if that includes output tokens. Using total_tokens from last usage usually aligns with how context windows are tracked across requests.
+
+Landmines
+- Do not use total_token_usage to compute context bar percent. It is cumulative and can exceed context window size.
+- Beware falsy checks when tokens are 0. The helper currently treats zero as falsy in places (e.g., contextWindowSize && totalTokens). If you’re modifying the formula, ensure that zero values still show “0%” instead of falling back to “--”.
+- TokenCountCard and the Canvas variants share parseTokenCountEntry. If you change parsing but forget to update labels or detail strings, the UI will look internally inconsistent.
+- JSONL often contains multiple token_count entries per session. The UI assumes “last token_count is most useful.” If you later change that logic, make sure the context bar matches whatever item you choose.
+
+Verification
+1) Use the sample JSONL entry from the report (token_count with total_token_usage ~3.3m and last_token_usage ~72k). After changes, the context bar should show roughly 72k / 258k and not 3.3m / 258k.
+2) Compare the UI context bar to the Codex CLI readout for the same turn. They should be within a small margin (differences can come from slightly different timing or rounding).
+3) Toggle Token Count on/off and ensure the display text remains consistent between TokenCountCard and both Canvas variants.
+4) If cumulative totals are still shown, confirm the label explicitly says cumulative and that users will not mistake it for context usage.
+5) If export changes were made, copy a token_count item and confirm the exported fields reflect the chosen semantics (e.g., context_used_tokens/percent derived from last_usage).
