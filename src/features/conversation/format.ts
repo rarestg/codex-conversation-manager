@@ -1,4 +1,5 @@
-export const MAX_PREVIEW_CHARS = 2000;
+export const MAX_PREVIEW_CHARS = 1000;
+export const MAX_PREVIEW_LINES = 50;
 
 export const formatJsonValue = (value: unknown) => {
   if (value === undefined || value === null) return '';
@@ -100,6 +101,19 @@ export const formatDuration = (start?: string | null, end?: string | null) => {
   const diffMs = endDate.getTime() - startDate.getTime();
   if (!Number.isFinite(diffMs) || diffMs < 0) return '';
   const totalSeconds = Math.round(diffMs / 1000);
+  if (totalSeconds < 60) return '<1m';
+  const totalMinutes = Math.round(totalSeconds / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours <= 0) return `${totalMinutes}m`;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${minutes}m`;
+};
+
+export const formatDurationMs = (durationMs?: number | null) => {
+  if (durationMs === null || durationMs === undefined) return '';
+  if (!Number.isFinite(durationMs) || durationMs < 0) return '';
+  const totalSeconds = Math.round(durationMs / 1000);
   if (totalSeconds < 60) return '<1m';
   const totalMinutes = Math.round(totalSeconds / 60);
   const hours = Math.floor(totalMinutes / 60);

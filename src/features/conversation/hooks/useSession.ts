@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchSession } from '../api';
+import { MAX_PREVIEW_CHARS, MAX_PREVIEW_LINES } from '../format';
 import { extractSessionIdFromPath, parseJsonl } from '../parsing';
 import type { LoadSessionOptions, SessionDetails, SessionFileEntry, SessionTree, Turn } from '../types';
 import { updateSessionUrl } from '../url';
@@ -27,18 +28,28 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
   const [scrollToTurnId, setScrollToTurnId] = useState<number | null>(null);
 
   const buildDerivedMeta = useCallback((sessionId: string, turns: Turn[]) => {
+    // Fallback metadata uses min/max timestamps (total span), not active duration.
     let preview: string | undefined;
     let startedAt: string | undefined;
     let endedAt: string | undefined;
     let turnCount = 0;
     let firstTimestamp: number | null = null;
     let lastTimestamp: number | null = null;
+    const truncatePreview = (value: string) => {
+      let truncated = value.slice(0, MAX_PREVIEW_CHARS);
+      const lines = truncated.split(/\r?\n/);
+      if (lines.length > MAX_PREVIEW_LINES) {
+        truncated = lines.slice(0, MAX_PREVIEW_LINES).join('\n');
+      }
+      return truncated;
+    };
 
     for (const turn of turns) {
       if (!turn.isPreamble) turnCount += 1;
       for (const item of turn.items) {
         if (!preview && item.type === 'user' && item.content) {
-          preview = item.content.trim();
+          const trimmed = item.content.trim();
+          if (trimmed) preview = truncatePreview(trimmed);
         }
         if (!item.timestamp) continue;
         const parsed = Date.parse(item.timestamp);
@@ -137,6 +148,10 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
       endedAt: parsedMeta?.endedAt ?? null,
       turnCount: parsedMeta?.turnCount ?? null,
       messageCount: indexed?.messageCount ?? null,
+      thoughtCount: indexed?.thoughtCount ?? null,
+      toolCallCount: indexed?.toolCallCount ?? null,
+      metaCount: indexed?.metaCount ?? null,
+      activeDurationMs: indexed?.activeDurationMs ?? null,
       cwd: indexed?.cwd ?? null,
       gitBranch: indexed?.gitBranch ?? null,
       gitRepo: indexed?.gitRepo ?? null,
@@ -154,6 +169,11 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
       startedAt: indexed.startedAt ?? fallback.startedAt,
       endedAt: indexed.endedAt ?? fallback.endedAt,
       turnCount: indexed.turnCount ?? fallback.turnCount,
+      messageCount: indexed.messageCount ?? fallback.messageCount,
+      thoughtCount: indexed.thoughtCount ?? fallback.thoughtCount,
+      toolCallCount: indexed.toolCallCount ?? fallback.toolCallCount,
+      metaCount: indexed.metaCount ?? fallback.metaCount,
+      activeDurationMs: indexed.activeDurationMs ?? fallback.activeDurationMs,
       filename: indexed.filename || fallback.filename,
       sessionId: indexed.sessionId || fallback.sessionId,
     };

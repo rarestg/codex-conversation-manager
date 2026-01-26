@@ -5,6 +5,7 @@ import { isRenderDebugEnabled } from '../debug';
 import {
   formatDayLabel,
   formatDuration,
+  formatDurationMs,
   formatMonthLabel,
   formatRelativeTime,
   formatTime,
@@ -328,8 +329,10 @@ const SessionsPanelComponent = ({
                                 {day.files.map((file) => {
                                   const title = file.preview?.trim() || 'Session';
                                   const timeSource = file.startedAt ?? file.timestamp ?? '';
-                                  const durationLabel = formatDuration(file.startedAt, file.endedAt);
-                                  const durationDisplay = durationLabel || (timeSource ? '0m' : '');
+                                  const durationLabel =
+                                    formatDurationMs(file.activeDurationMs) ||
+                                    formatDuration(file.startedAt, file.endedAt);
+                                  const durationDisplay = durationLabel || (timeSource ? '-' : '');
                                   const timeLabel = timeSource
                                     ? isSameDay(timeSource, now)
                                       ? formatRelativeTime(timeSource, now)

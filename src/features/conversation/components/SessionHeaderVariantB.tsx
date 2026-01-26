@@ -2,6 +2,7 @@ import { CalendarClock, Clock, Copy, Eye, Folder, GitBranch, Github, Hourglass, 
 import { buildConversationExport } from '../copy';
 import {
   formatDuration,
+  formatDurationMs,
   formatRelativeTime,
   formatRepoFallbackPath,
   formatTimestamp,
@@ -64,7 +65,9 @@ export const SessionHeaderVariantB = ({
   const timeSource = activeSession?.startedAt ?? activeSession?.timestamp ?? '';
   const timeLabel = timeSource && isSameDay(timeSource, now) ? formatRelativeTime(timeSource, now) : '';
   const timestampLabel = timeSource ? formatTimestamp(timeSource, false) : 'Select a session to start.';
-  const durationLabel = activeSession ? formatDuration(activeSession.startedAt, activeSession.endedAt) : '';
+  const durationLabel = activeSession
+    ? formatDurationMs(activeSession.activeDurationMs) || formatDuration(activeSession.startedAt, activeSession.endedAt)
+    : '';
   const sessionRoot = sessionsRoot?.trim() || '';
   const fallbackId = activeSession?.id ?? '';
   const pathSeparator = sessionRoot.includes('\\') ? '\\' : sessionRoot ? '/' : fallbackId.includes('\\') ? '\\' : '/';
