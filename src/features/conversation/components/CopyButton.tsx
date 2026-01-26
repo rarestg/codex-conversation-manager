@@ -19,6 +19,7 @@ type CopyButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type' | 'o
     leadingClassName?: string;
     labelClassName?: string;
     labelWrapperClassName?: string;
+    centered?: boolean;
     copiedIcon?: ReactNode;
     failedIcon?: ReactNode;
     duration?: number;
@@ -40,6 +41,7 @@ export const CopyButton = ({
   leadingClassName,
   labelClassName,
   labelWrapperClassName,
+  centered = false,
   copiedIcon,
   failedIcon,
   duration = 1500,
@@ -138,10 +140,23 @@ export const CopyButton = ({
   const buttonClassName = ['group', className].filter(Boolean).join(' ');
   const contentWrapperClassName = 'inline-flex min-w-0 items-center gap-2';
   const leadingClassNameMerged = ['shrink-0', leadingClassName].filter(Boolean).join(' ');
-  const labelWrapperClassNameMerged = ['relative inline-grid min-w-0', labelWrapperClassName].filter(Boolean).join(' ');
-  const labelClassNameMerged = ['min-w-0 truncate', labelClassName].filter(Boolean).join(' ');
+  const labelWrapperClassNameMerged = [
+    'relative inline-grid min-w-0',
+    centered ? 'justify-items-center text-center' : null,
+    labelWrapperClassName,
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const labelClassNameMerged = ['min-w-0 truncate', centered ? 'text-center' : null, labelClassName]
+    .filter(Boolean)
+    .join(' ');
   // Copied/failed labels can overflow the reserved width to avoid truncating status text.
-  const labelOverlayClassNameMerged = ['min-w-0', labelClassName, 'overflow-visible text-clip']
+  const labelOverlayClassNameMerged = [
+    'min-w-0',
+    centered ? 'text-center' : null,
+    labelClassName,
+    'overflow-visible text-clip',
+  ]
     .filter(Boolean)
     .join(' ');
   const reserveLabelNode = (

@@ -1,4 +1,4 @@
-import { Home, Settings } from 'lucide-react';
+import { Home, LocateFixed, Settings } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { CanvasView } from './CanvasView';
 import { ConversationMain } from './ConversationMain';
@@ -13,6 +13,7 @@ import { useSession } from './hooks/useSession';
 import { useSessions } from './hooks/useSessions';
 import { useUrlSync } from './hooks/useUrlSync';
 import { useWorkspaces } from './hooks/useWorkspaces';
+import { TURN_JUMP_EVENT } from './turnNavigation';
 
 export default function ConversationViewer() {
   const [apiError, setApiError] = useState<string | null>(null);
@@ -113,6 +114,8 @@ export default function ConversationViewer() {
     ? 'flex flex-wrap items-center justify-between gap-4'
     : 'flex flex-wrap items-center justify-between gap-3';
 
+  const canJump = Boolean(activeSession) && !loadingSession;
+
   return (
     <div className="min-h-screen px-4 py-8 sm:px-8">
       <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
@@ -146,6 +149,21 @@ export default function ConversationViewer() {
                 >
                   <Home className="h-4 w-4" />
                   Home
+                </button>
+              )}
+              {!showHome && (
+                <button
+                  type="button"
+                  onClick={() => window.dispatchEvent(new CustomEvent(TURN_JUMP_EVENT))}
+                  disabled={!canJump}
+                  title="Go to turn (Cmd+K)"
+                  aria-label="Go to turn (Cmd+K)"
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <LocateFixed className="h-4 w-4" />
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+                    Cmd+K
+                  </span>
                 </button>
               )}
               <button

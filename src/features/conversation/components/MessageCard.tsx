@@ -76,6 +76,7 @@ export const MessageCard = ({ item, itemIndex, showFullContent }: MessageCardPro
               idleLabel="Copy text"
               hoverLabel="Copy text"
               ariaLabel={`Copy ${roleLabel} message as text`}
+              centered
               className="chip chip-lg chip-filled chip-shadow chip-button !border-white/70 font-medium justify-center"
             />
             <CopyButton
@@ -83,6 +84,7 @@ export const MessageCard = ({ item, itemIndex, showFullContent }: MessageCardPro
               idleLabel="Copy MD"
               hoverLabel="Copy MD"
               ariaLabel={`Copy ${roleLabel} message as markdown`}
+              centered
               className="chip chip-lg chip-filled chip-shadow chip-button !border-white/70 font-medium justify-center"
             />
           </div>
@@ -93,6 +95,7 @@ export const MessageCard = ({ item, itemIndex, showFullContent }: MessageCardPro
             idleLabel="Copy"
             hoverLabel="Copy"
             ariaLabel={`Copy ${roleLabel} content`}
+            centered
             className="chip chip-lg chip-filled chip-shadow chip-button !border-white/70 font-medium justify-center"
           />
         )}

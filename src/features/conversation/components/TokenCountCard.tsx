@@ -118,6 +118,7 @@ export const TokenCountCard = ({ item, itemIndex, showFullContent }: TokenCountC
           idleLabel="Copy"
           hoverLabel="Copy"
           ariaLabel="Copy token count content"
+          centered
           className="chip chip-lg chip-filled chip-shadow chip-button !border-white/70 font-medium"
         />
       </div>

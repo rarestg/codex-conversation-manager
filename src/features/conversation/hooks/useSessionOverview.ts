@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { hasTokenCountUsage } from '../tokenCounts';
 import type { Turn } from '../types';
 
 export const useSessionOverview = (turns: Turn[]) => {
@@ -17,7 +18,28 @@ export const useSessionOverview = (turns: Turn[]) => {
         if (item.type === 'token_count' && !showTokenCounts) return false;
         return true;
       });
-      return { ...turn, items };
+
+      if (!showTokenCounts) {
+        return { ...turn, items };
+      }
+
+      const compressed: typeof items = [];
+      let awaitingToken = false;
+
+      for (const item of items) {
+        if (item.type === 'token_count') {
+          if (!awaitingToken) continue;
+          if (!hasTokenCountUsage(item.raw ?? item.content)) continue;
+          compressed.push(item);
+          awaitingToken = false;
+          continue;
+        }
+
+        compressed.push(item);
+        awaitingToken = true;
+      }
+
+      return { ...turn, items: compressed };
     });
   }, [turns, showThoughts, showTools, showMeta, showTokenCounts]);
 

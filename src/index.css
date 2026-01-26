@@ -167,6 +167,7 @@
 
   .markdown-body {
     --markdown-block-gap: 1em;
+    line-height: 1.6;
   }
 
   .markdown-body > * + * {
@@ -189,6 +190,16 @@
 
   .markdown-body :where(p) {
     white-space: pre-wrap;
+  }
+
+  .markdown-body .inline-code {
+    color: #c35d00;
+    background: #fff4e6;
+    border: 1px solid #ffd8a8;
+    border-radius: 6px;
+    padding: 0.05em 0.25em;
+    font-weight: 500;
+    font-size: 0.95em;
   }
 
   .markdown-body :where(li > * + *) {

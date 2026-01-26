@@ -18,6 +18,25 @@ const markdownSchema = {
   },
 };
 
+const escapeHtmlTagLines = (markdown: string) => {
+  if (!markdown) return markdown;
+  const lines = markdown.split('\n');
+  let inFence = false;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    if (/^\s*<\/?[A-Za-z][A-Za-z0-9_-]*>\s*$/.test(line)) {
+      lines[i] = line.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+  }
+  return lines.join('\n');
+};
+
 export const mdastToText = (node: any): string => {
   if (!node) return '';
   switch (node.type) {
@@ -52,6 +71,8 @@ export const mdastToText = (node: any): string => {
       return `${node.children.map(mdastToText).join('\t')}\n`;
     case 'tableCell':
       return node.children.map(mdastToText).join('');
+    case 'html':
+      return node.value || '';
     default:
       if (node.children) return node.children.map(mdastToText).join('');
       return '';
@@ -59,8 +80,9 @@ export const mdastToText = (node: any): string => {
 };
 
 export const markdownToPlainText = async (markdown: string) => {
+  const normalized = escapeHtmlTagLines(markdown);
   const processor = unified().use(remarkParse).use(remarkGfm);
-  const tree = processor.parse(markdown);
+  const tree = processor.parse(normalized);
   return mdastToText(tree);
 };
 
@@ -95,6 +117,7 @@ export const renderSnippet = (snippet?: string | null) => {
 };
 
 export const MarkdownBlock = ({ content }: { content: string }) => {
+  const normalized = escapeHtmlTagLines(content);
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
@@ -123,7 +146,7 @@ export const MarkdownBlock = ({ content }: { content: string }) => {
             );
           }
           return (
-            <code className="rounded bg-white/70 px-1 py-0.5 text-xs" {...props}>
+            <code className="inline-code" {...props}>
               {children}
             </code>
           );
@@ -145,7 +168,7 @@ export const MarkdownBlock = ({ content }: { content: string }) => {
         },
       }}
     >
-      {content}
+      {normalized}
     </ReactMarkdown>
   );
 };
