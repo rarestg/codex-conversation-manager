@@ -94,7 +94,7 @@
   }
 
   .chip-muted {
-    @apply bg-slate-100;
+    @apply bg-slate-100 text-slate-500;
   }
 
   .chip-white {
@@ -122,7 +122,7 @@
   }
 
   .meta-row {
-    @apply flex items-center gap-3 rounded-2xl border border-slate-100 bg-white/70 px-3 py-1.5 text-left;
+    @apply flex items-center gap-3 rounded-2xl border border-slate-200 bg-white/70 px-3 py-1.5 text-left;
   }
 
   .meta-label {

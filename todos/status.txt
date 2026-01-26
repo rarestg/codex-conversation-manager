@@ -1,17 +1,1 @@
-Next Plan: 2026-01-23-6pm_token-count-visualization-plan.txt
-
-Context / Intent
-- Token Count should be first-class (not Meta): own toggle, renderer, and stat.
-- Counts must be available before session load, so persist token_count_count in sessions.
-- meta_count must exclude token_count.
-- Expect Clear & Rebuild Index after schema change (intentional, no backfill).
-- Related reference: todos/_done/2026-01-23-7pm_unified-indexing-and-picker-plan-context.txt
-  (notes the token_count_count + meta_count exclusion requirement and reindex expectation).
-
-When Done
-1) Create a retrospective-style companion doc:
-   - Name: 2026-01-23-6pm_token-count-visualization-plan-common.txt
-   - Include: what shipped, key decisions, deviations, verification notes, and follow-ups.
-2) Move both docs into todos/_done:
-   - 2026-01-23-6pm_token-count-visualization-plan.txt
-   - 2026-01-23-6pm_token-count-visualization-plan-common.txt
+Next Plan: 2026-01-26-11pm_turn-navigation-plan.txt

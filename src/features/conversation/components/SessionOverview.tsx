@@ -33,7 +33,7 @@ interface CompactToggleProps {
 }
 
 const CompactToggle = ({ label, checked, count, onChange }: CompactToggleProps) => (
-  <label className="group chip chip-md chip-filled chip-shadow gap-2 py-1.5 text-xs text-slate-700 leading-none transition hover:border-slate-300">
+  <label className="group chip chip-md chip-filled chip-shadow chip-button gap-2 py-1.5 text-xs text-slate-700 leading-none">
     <span className="font-medium text-slate-900">{label}</span>
     {count !== undefined && (
       <span className="chip-count">

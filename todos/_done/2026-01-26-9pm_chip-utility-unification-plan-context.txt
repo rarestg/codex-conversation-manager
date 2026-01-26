@@ -7,7 +7,7 @@ What Was Implemented
 1) New chip utility system in src/index.css
 - Replaced the previous .chip / .chip-label / .chip-value definitions and added a new, composable utility set:
   - Base + sizes: .chip, .chip-xs, .chip-sm, .chip-md, .chip-lg
-  - Background variants: .chip-filled (bg-white/70), .chip-soft (bg-white/80), .chip-muted (bg-slate-100), .chip-white (bg-white)
+  - Background variants: .chip-filled (bg-white/70), .chip-soft (bg-white/80), .chip-muted (bg-slate-100 + text-slate-500), .chip-white (bg-white)
   - Helpers: .chip-shadow (shadow-sm), .chip-button (hover/disabled/left alignment), .chip-left, .chip-count, .chip-value
   - Meta row helpers: .meta-row, .meta-label, .meta-value
   - Segmented helper: .chip-segmented for TokenCountCard Usage/Limits
@@ -15,7 +15,7 @@ What Was Implemented
 Key details:
 - The base .chip no longer includes background or shadow; those are now in .chip-filled / .chip-soft / .chip-white / .chip-shadow. This preserves VariantB’s unfilled subtitle pills.
 - .chip-value now only adds tabular-nums (not truncation); truncation is handled per-component via existing wrappers.
-- .chip-muted is background-only (no text color) to avoid shifting text tones in SessionsPanel.
+- .chip-muted includes muted text (text-slate-500) so the name matches behavior.
 - .chip-count uses text-[11px] and py-0.5 after tuning to match visual balance with toggle pills.
 - Added .chip-count-text to allow translating digits without moving the pill.
 
@@ -28,7 +28,7 @@ File: src/features/conversation/components/SessionHeaderVariantB.tsx
 
 3) SessionOverview compact toggles
 File: src/features/conversation/components/SessionOverview.tsx
-- Compact toggle pill uses chip utilities (chip + chip-md + chip-filled + chip-shadow) with controlled padding.
+- Compact toggle pill uses chip utilities (chip + chip-md + chip-filled + chip-shadow + chip-button) with controlled padding.
 - Count badge uses .chip-count and inner .chip-count-text to offset glyphs without moving pill.
 - Toggle label kept at text-xs while count is text-[11px] for readability; pill padding tuned to match meta-row height.
 
@@ -55,7 +55,14 @@ Files:
 - src/features/conversation/components/TokenCountCard.tsx
 Changes:
 - Copy buttons now use chip utilities: chip + chip-lg + chip-filled + chip-shadow with border override (!border-white/70) to preserve existing look.
-- Removed chip-button for MessageCard copy buttons so labels are centered again (added text-center to keep alignment).
+- MessageCard copy buttons use chip-button + justify-center to keep labels centered while retaining hover/disabled styles.
+
+6a) Copy conversation buttons unified
+Files:
+- src/features/conversation/components/SessionHeaderVariantB.tsx
+- src/features/conversation/components/SessionHeader.tsx
+Changes:
+- Copy conversation buttons now compose from chip utilities (chip + chip-filled + chip-shadow + chip-button) with inline padding/text sizing.
 
 7) TokenCountCard segmented pills
 File: src/features/conversation/components/TokenCountCard.tsx
@@ -64,7 +71,7 @@ File: src/features/conversation/components/TokenCountCard.tsx
 
 Decisions & Tradeoffs
 - Base .chip is now background-free to preserve VariantB subtitle pills; background variants are explicit.
-- .chip-muted is background-only to avoid unintended text tone changes in existing pills.
+- .chip-muted includes muted text to avoid misusing a background-only helper.
 - .chip-count uses a nested .chip-count-text with translate-y to correct numeric vertical alignment without moving the pill.
 - VariantA’s pill visuals were allowed to change to match VariantB; this was executed for consistency.
 - TokenCountCard’s bespoke usage/limits pills were not standardized beyond the wrapper; this avoids regressions.
@@ -92,9 +99,23 @@ Notes on Iterations
 - Adjusted compact toggle count alignment via .chip-count-text (translate-y). This is the only place where a translate was used to fix glyph centering.
 - Compact toggle label size was tuned back to text-xs after testing (count stays 11px).
 - The final compact toggle height was balanced by setting .chip-count to py-0.5 while keeping text-[11px].
+- Compact toggles and copy conversation buttons were later aligned with chip-button for consistent hover behavior.
+- Meta row borders were bumped to match metric pill outlines.
 
 End State
 - VariantB visuals are preserved while pill styles are unified into a minimal, reusable utility system.
 - VariantA and SessionsPanel now share the same chip language.
 - Copy buttons in MessageCard and TokenCountCard share chip styling.
 - TokenCountCard segmented pills are consolidated via .chip-segmented.
+
+Appendix: Current chip recipes (canonical class stacks)
+- Subtitle CopyButtons (VariantB): chip chip-md chip-muted chip-button
+- Stats pills (VariantA/B): chip chip-sm chip-filled
+- Meta rows: meta-row + meta-label + meta-value
+- Compact toggles: chip chip-md chip-filled chip-shadow chip-button
+- SessionsPanel badges: chip chip-xs chip-soft | chip chip-xs chip-muted | chip chip-xs chip-white
+- SessionsPanel row pills: chip chip-xs chip-white chip-shadow
+- Session ID copy pill: chip chip-xs chip-muted chip-button (plus hover:bg-slate-200 inline)
+- Message copy buttons: chip chip-lg chip-filled chip-shadow chip-button !border-white/70 justify-center
+- Copy conversation: chip chip-filled chip-shadow chip-button (padding/text size inline)
+- Segmented pills (TokenCountCard): chip-segmented (lead/body segments inline)
