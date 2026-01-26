@@ -171,6 +171,18 @@ export const parseTokenCountEntry = (raw: unknown): TokenCountSummary | null => 
   };
 };
 
+export const hasTokenCountUsage = (raw: unknown) => {
+  const parsed = parseTokenCountEntry(raw);
+  if (!parsed) return false;
+  return (
+    parsed.contextUsedTokens !== null ||
+    parsed.contextWindowSize !== null ||
+    parsed.contextUsagePercent !== null ||
+    parsed.lastUsage !== null ||
+    parsed.totalUsage !== null
+  );
+};
+
 export const formatTokenValue = (value?: number | null) => {
   if (value === null || value === undefined || !Number.isFinite(value)) return '';
   const abs = Math.abs(value);

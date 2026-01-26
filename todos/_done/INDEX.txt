@@ -83,6 +83,16 @@ Entries
   Notes:
   - StrictMode remains enabled; debug logging is opt-in only.
 
+- Plan: 2026-01-22-4pm_useSession-derived-activeSession-plan.txt
+  Context: 2026-01-22-4pm_useSession-derived-activeSession-plan-context.txt
+  Why: Fix an activeSession sync loop that caused maximum update depth warnings and UI lag by deriving activeSession instead of storing it in state.
+  Outcome:
+  - useSession now stores only activeSessionId + parsedMeta and derives activeSession via useMemo.
+  - Removed the effect that synced activeSession from sessionsTree, eliminating the render loop.
+  - clearSession resets the minimal state and derived session metadata is merged deterministically.
+  Notes:
+  - sessionId fallback uses extractSessionIdFromPath(activeSessionId) when available.
+
 - Plan: 2026-01-21-8pm_workspaces-and-landing-page.txt
   Context: 2026-01-21-8pm_workspaces-and-landing-page-context.txt
   Why: The home state needed to be a discovery dashboard (search + workspaces) rather than a full session viewer.

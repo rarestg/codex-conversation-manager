@@ -1,0 +1,36 @@
+Active Session Derived State (Context + Execution Summary)
+
+Overview
+We implemented the derived activeSession refactor in useSession to remove the update loop caused by syncing activeSession state in an effect. The hook now stores only minimal state (activeSessionId + parsedMeta) and computes the activeSession view model via useMemo, merging indexed data when available with parsed metadata as fallback. This removes the self‑triggering state update and stabilizes rendering.
+
+What Was Implemented
+1) Minimal session state in useSession
+- Added ParsedMeta type with preview/startedAt/endedAt/turnCount/filename.
+- Replaced activeSession state with activeSessionId + parsedMeta.
+- clearSession now resets activeSessionId + parsedMeta.
+
+2) Derived activeSession via useMemo
+- activeSession is computed from:
+  - indexed session entry (from sessionsTree) when available
+  - parsedMeta for fallback preview/timestamps/turn counts
+  - a stable fallback SessionFileEntry for required fields
+- Merge precedence prefers indexed metadata and preserves parsedMeta when indexed fields are missing.
+- sessionId fallback uses extractSessionIdFromPath(activeSessionId), otherwise ''.
+
+3) Removed syncing effect
+- The effect that previously updated activeSession based on sessionsTree is gone.
+- The only remaining effect in useSession handles scroll-to-turn behavior.
+
+Files Touched (Core)
+- src/features/conversation/hooks/useSession.ts
+
+Notes / Alignment
+- The derived activeSession updates automatically when sessionsTree loads or changes (reindex/workspace filter) without setState loops.
+- Parsed meta is computed once in loadSession via buildDerivedMeta, as intended.
+
+Verification (Observed)
+- activeSession is returned from useMemo with stable dependencies (activeSessionId, parsedMeta, findSessionById).
+- No activeSession syncing effect remains in useSession.
+
+End State
+- The update loop is removed and the activeSession model is derived deterministically, reducing re-render churn and improving UI responsiveness.

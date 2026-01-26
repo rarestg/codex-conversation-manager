@@ -1,0 +1,103 @@
+Turn Gap Summary Pills (Hidden Thoughts/Tools)
+
+Context
+We want to reduce visual noise when “Show Thoughts” and/or “Show Tools” are toggled off, but still preserve a quick read of what happened between a user message and the assistant response. Right now, toggling those off simply removes the items. This creates a “contextless gap,” especially on turns with many hidden thoughts or tool calls. We already compress token_count cards to reduce spam; the next step is to add a compact summary in the gap between the user and assistant messages so the viewer still understands that hidden work occurred.
+
+This matters now because the current filtered view can make long tool/thought chains look like a direct user→assistant jump, which is misleading. The summary pill(s) should be shown only when the relevant toggles are off and only for the span between a user message and the next assistant message within the same turn.
+
+Relevant codebase areas
+- src/features/conversation/hooks/useSessionOverview.ts
+  - Central place where turns are filtered based on toggles. This is the right layer to compute per‑gap summary counts because it has the full unfiltered item list and already emits filteredTurns used in rendering.
+  - We already introduced logic here to compress token_count items when toggles are on; this is a similar “presentation shaping” step.
+- src/features/conversation/components/MessageCard.tsx
+  - Renders each item (user/assistant/thought/tool/etc.). We should avoid overloading this component with complex scanning logic because it currently expects a single item.
+- src/features/conversation/components/TurnCard.tsx + TurnList.tsx
+  - TurnList simply maps over filteredTurns and renders MessageCard for each item. This is where a “gap summary” item can be inserted if we treat it as a new item type.
+- src/features/conversation/types.ts
+  - ParsedItem type currently enumerates item types. If we introduce a synthetic “gap summary” item, we need to extend types and ensure downstream code either handles it explicitly or ignores it safely.
+- src/features/conversation/markdown.tsx / copy.ts / MessageCard
+  - These are message renderers and copy helpers. Any new synthetic item should avoid invoking markdown rendering and copy logic unless intentionally supported.
+
+How the parts connect
+- useSessionOverview produces filteredTurns and is the gatekeeper for toggles. TurnList consumes filteredTurns. MessageCard renders each item based on its type. If we want a gap summary row to appear “between” items, the cleanest way is to insert a synthetic item into the filtered list during useSessionOverview, rather than hacking MessageCard or the render loop to detect gaps.
+
+The Plan
+Step 1 — Define the gap summary data shape
+What to do:
+- Extend ParsedItemType in src/features/conversation/types.ts to include a new synthetic type, e.g. 'gap_summary'.
+- Extend ParsedItem to allow a payload for this type (e.g. counts for hidden thoughts/tools). Prefer optional fields to avoid breaking other item types.
+- Define fields for the summary, e.g. hiddenThoughtCount and hiddenToolCount, and optionally a display label if you want in the future.
+
+Why:
+- A distinct item type lets us render a dedicated small row in MessageCard (or a dedicated GapSummaryCard) without interfering with existing item types.
+- Keeping this in types.ts avoids ad hoc “any” shapes and helps TypeScript catch missing handling.
+
+Dependencies:
+- None. This is the foundation for rendering and filtering.
+
+Step 2 — Compute gap summaries in useSessionOverview
+What to do:
+- In useSessionOverview, while iterating each turn’s items, compute counts of hidden thoughts and tool items between a user item and the next assistant item.
+- The algorithm should work off the full item stream, not the already filtered one.
+  - Walk the original turn.items in order.
+  - When you see a user item, start a new “gap window.”
+  - Count hidden thought/tool items until you encounter the next assistant item.
+  - When the assistant arrives, if either count is > 0 and the corresponding toggle is OFF, insert a synthetic gap_summary item immediately before the assistant in the filtered list.
+- Only insert the gap_summary item if:
+  - At least one of the toggles (showThoughts/showTools) is OFF, and
+  - The count for that type is > 0.
+
+Why:
+- This ensures the summary is tied to the “interaction gap” that leads to the assistant’s response.
+- By inserting into the filtered list, rendering stays simple and consistent with the rest of the system.
+
+Dependencies:
+- Requires the new 'gap_summary' item type from Step 1.
+
+Step 3 — Render the gap summary item
+What to do:
+- Update MessageCard to handle item.type === 'gap_summary' (or create a new small GapSummaryCard and branch to it, similar to TokenCountCard).
+- Design: one compact row with two pills: “Thoughts X” and “Tools Y” (or singular labels). Only show a pill if its count > 0.
+- Visuals: use existing chip utilities (chip-xs or chip-sm, chip-muted or chip-soft) for consistency; keep it compact so it reads as an in‑between indicator, not a full card.
+
+Why:
+- Keeping rendering logic centralized avoids inventing a new renderer pipeline. The existing card system already supports variant cards (e.g. TokenCountCard).
+
+Dependencies:
+- Requires Step 1’s new item type and Step 2’s injection logic.
+
+Step 4 — Ensure copy/export and markdown rendering are unaffected
+What to do:
+- Ensure that gap_summary items do not participate in copy/export flows (unless explicitly desired).
+  - If MessageCard’s copy actions are conditional by item.type, make sure gap_summary doesn’t get any copy buttons.
+  - If any export logic iterates all items (e.g., conversation copy), decide whether to exclude gap_summary items to avoid adding noise. Most likely: exclude.
+
+Why:
+- These are UI aids, not source content. Including them in exports would be confusing.
+
+Dependencies:
+- May require small updates in copy.ts if it assumes new item types are exportable.
+
+Decisions & Tradeoffs
+- Synthetic item vs. metadata on user/assistant:
+  - We choose a synthetic gap_summary item because it aligns with the “gap row” UI and keeps rendering composable. Attaching counts to user items would complicate layout and require bespoke UI placement logic.
+- Computation location:
+  - We compute in useSessionOverview because it already owns the filtered view and has access to toggles and the full item stream. Doing this in the renderer would be more fragile and harder to test.
+- Toggle behavior:
+  - Summaries only appear when the related items are hidden; if you turn thoughts/tools on, you get the full detail and the summary disappears. This avoids redundancy.
+
+Landmines
+- Item order: The system preserves JSONL order and only filters/hides. Inserting synthetic items must not violate the “chronological order” rule; ensure the gap_summary is inserted immediately before the assistant item it summarizes.
+- Preamble: Turns can include a preamble. Ensure gap summaries are only computed within normal turns and do not attach to preamble content.
+- Multiple assistant messages in a turn: If a turn has multiple assistant messages, only summarize the gap from a user to the next assistant, then reset the counters. Do not let tool/thought counts “leak” across assistant boundaries.
+- Copy/export: If copy/export assumes all items are renderable Markdown, the new type can break it. Audit copy.ts (conversation export) to ensure it skips gap_summary.
+- Token_count compression: We already compress token_count items in useSessionOverview. Make sure the new gap summary logic happens in the same pass and does not rely on token_count logic ordering incorrectly.
+
+Verification
+- Toggle behavior: With Show Thoughts and Show Tools ON, no gap summary pills should appear. Turn them OFF and verify pills appear between the user and assistant messages, with accurate counts.
+- Ordering: Confirm the summary appears in the correct position (between the user’s message and the assistant’s response) and only once per interaction gap.
+- Multiple tool/thought bursts: For a turn with many thoughts/tools, ensure only one summary appears and counts are accurate.
+- Multiple assistant messages: If a turn has more than one assistant message, ensure each gap summary applies only to the preceding user→assistant span, not cumulatively across the entire turn.
+- Copy/export: Copy a conversation and confirm the summary pills are not included in the exported text unless explicitly decided otherwise.
+- No regressions: Token_count compression should still behave as intended when toggles are off.
+
