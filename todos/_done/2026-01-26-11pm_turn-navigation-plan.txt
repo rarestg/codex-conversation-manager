@@ -1,0 +1,153 @@
+Turn Navigation + URL Tracking (Arrow Keys + Scroll-Aware)
+
+Context
+We want faster navigation between turns when viewing long conversations. The goal is to use left/right arrow keys to jump turn-to-turn, skip the Session Preamble, and keep the URL’s ?turn= param updated as the user scrolls. This should be performant and not re-fetch or re-parse session data. We also want to enable a future “Cmd+K → Go to turn X / N” modal, so the current-turn tracking and a cheap “jump” API should be part of the design now.
+
+Relevant Codebase Areas
+- src/features/conversation/hooks/useSession.ts
+  - Owns session loading, parsing, and scrollToTurnId.
+  - Currently scrolls to a turn when loadSession is called with a turnId.
+  - Important: loadSession always fetches/parses; we should not use it for in-session navigation.
+- src/features/conversation/url.ts
+  - buildSessionUrl / updateSessionUrl manage ?session and ?turn query params.
+  - We will use updateSessionUrl(..., 'replace') for scroll-driven updates to avoid spamming history.
+- src/features/conversation/hooks/useUrlSync.ts
+  - Reads URL on load/popstate and calls loadSession(sessionId, turnId).
+  - This is still the correct entry point when navigating into a session from search or deep links.
+- src/features/conversation/components/TurnCard.tsx
+  - Renders each turn and provides the DOM node with id=turn-{turn.id}.
+  - We can add data attributes or a small sentinel element for IntersectionObserver.
+- src/features/conversation/components/TurnList.tsx
+  - Renders TurnCard for every turn (including preamble).
+  - Good place to attach observer logic or to pass refs/data attributes.
+- src/features/conversation/ConversationMain.tsx
+  - Owns filteredTurns (items are filtered, turns are not removed).
+  - Good place to wire an “active turn” state and hook for keyboard navigation.
+- src/features/conversation/components/SearchPanel.tsx
+  - Search results already call onLoadSession(sessionId, turnId); this uses existing scrollToTurnId logic.
+
+Important Behavior Assumptions
+- A “turn” is never filtered out: useSessionOverview only filters items within a turn. The user message remains, so every turn still exists in the UI.
+- Session Preamble should be excluded from arrow navigation.
+- Arrow navigation should move between whole turns (turn id sequence), not between items.
+- The “current turn” should be the turn header closest to the top 30–40% of the viewport (use IntersectionObserver rootMargin to define this band).
+- When navigating, scroll to the turn header (which anchors the user message for that turn); use the TurnCard top as the single anchor point.
+
+The Plan (Execution Order)
+
+Step 1 — Add a lightweight “jump to turn” API in useSession
+What to do:
+- In src/features/conversation/hooks/useSession.ts, add a new function (e.g. jumpToTurn or setActiveTurn) that:
+  - Uses updateSessionUrl(activeSessionId, turnId, 'replace').
+  - Sets scrollToTurnId(turnId) so the existing effect scrolls the DOM to #turn-{id}.
+  - Does NOT fetch or parse; it must be O(1).
+
+Why:
+- loadSession currently triggers a network read + parse. Arrow navigation must not re-fetch.
+- We need a single source of truth for updating the URL and scroll behavior without side effects.
+
+Dependencies:
+- This should be done before adding arrow key handlers or observers so the rest of the system uses the new jump API.
+
+Step 2 — Add a turn “visibility tracker” using IntersectionObserver
+What to do:
+- Implement a small hook (e.g. src/features/conversation/hooks/useTurnObserver.ts) that:
+  - Accepts an array of turn ids and a callback like onActiveTurnChange(turnId).
+  - Creates one IntersectionObserver instance.
+  - Observes each turn’s DOM node (by id or ref).
+  - Uses a rootMargin that defines a “focus band” near the top 30–40% of the viewport; example: rootMargin: '-35% 0px -55% 0px'.
+  - When the observer reports a turn entering that band, set the active turn id.
+  - Debounce or guard to only fire when the active id actually changes (to avoid excess URL updates).
+
+Implementation detail options:
+- Option A: Observe the TurnCard container by id (turn-{id}).
+- Option B: Add a small sentinel div at the top of each TurnCard and observe those to avoid intersection jitter with tall cards.
+
+Why:
+- IntersectionObserver is the most performant and reliable way to track which turn is “current” without scroll event spam.
+- It enables URL updates on scroll and powers the “Go to turn X / N” modal later.
+
+Dependencies:
+- Should run only when a session is loaded and turns are present.
+- Use the turn list excluding preamble to avoid setting active turn to “preamble”.
+
+Step 3 — Wire URL updates on scroll (replaceState)
+What to do:
+- In ConversationMain or TurnList, call the new useTurnObserver hook and:
+  - On active turn change, call jumpToTurn(turnId) with historyMode='replace'.
+  - Do not call loadSession.
+- Ensure URL updates are “replace” to keep browser history clean.
+
+Why:
+- Keeps the URL in sync with what the user is looking at.
+- Enables deep links and shareable URLs for the currently visible turn.
+- Avoids history spam during scrolling.
+
+Dependencies:
+- Requires jumpToTurn API from Step 1.
+- Requires turn ids and preamble filtering logic from Step 2.
+
+Step 4 — Add ArrowLeft / ArrowRight navigation
+What to do:
+- Add a keydown listener (preferably in ConversationMain or a dedicated hook like useTurnNavigation) that:
+  - Ignores key presses when focus is in input/textarea/select or contenteditable.
+  - Uses activeTurnId (from observer) or fallback to URL ?turn, or the first non-preamble turn if neither exists.
+  - Moves to previous/next turn id in the list (excluding preamble).
+  - Calls jumpToTurn(nextId) with historyMode='replace', which scrolls to the TurnCard header (the user message anchor for the turn).
+
+Why:
+- This gives fast keyboard navigation while keeping URL synced.
+- Using the active turn avoids jumps from stale data.
+
+Dependencies:
+- Needs the active turn tracking from Step 2.
+- Uses the jumpToTurn API from Step 1.
+
+Step 5 — Prep for Cmd+K “Go to turn X / N” modal
+What to do:
+- Expose the total number of non-preamble turns and active turn index from the navigation hook or state (e.g. return { activeTurnId, activeTurnIndex, totalTurns }).
+- Add a small utility to clamp a requested turn number to valid bounds and call jumpToTurn.
+- Do not implement the modal yet unless requested; just create the state surface needed for it.
+
+Why:
+- This avoids rework when adding the modal later.
+- It keeps the state and URL handling in one place.
+
+Dependencies:
+- Uses the active turn tracking and jumpToTurn from prior steps.
+
+Decisions & Tradeoffs
+- We choose IntersectionObserver over scroll handlers for performance. IO is native and efficient; scroll listeners with rAF can be heavier on long pages.
+- We update the URL via replaceState on scroll to avoid history spam. This means back/forward won’t step through every turn, which is intentional.
+- We treat turns as immutable for navigation; items can be filtered, but the turn list remains stable. This simplifies navigation logic and avoids edge cases.
+- We skip the Session Preamble in navigation because it’s not a user turn and it would be confusing as a “Turn 0”.
+- We add a jumpToTurn function rather than reusing loadSession to avoid re-fetching the same session on each key press.
+
+Landmines
+- Avoid calling loadSession for navigation; it re-reads the session file and re-parses JSONL, which is expensive and unnecessary.
+- Don’t observe or navigate to the preamble; it uses the same Turn type and will otherwise appear as “Turn 0”.
+- If you observe the TurnCard itself, tall cards can cause the active turn to flicker. Using a sentinel element can reduce jitter.
+- URL updates in the observer should be guarded (only update if the active id changed) to avoid excessive replaceState calls.
+- Make sure keyboard handlers don’t hijack arrow keys while user is typing in the search field or other inputs.
+- `scrollIntoView` will run every time scrollToTurnId is set; be sure to clear it after scrolling (useSession already does this).
+
+Verification
+1) Scroll tracking:
+- Open a session and scroll slowly; the URL’s `turn=` should update to the turn currently near the top of the viewport.
+- Confirm the session is NOT re-fetched (no loading state, no flashes).
+
+2) Arrow navigation:
+- Press ArrowRight repeatedly; the view should jump to the next turn (skipping preamble) and the URL should update.
+- Press ArrowLeft to go back.
+- Ensure key presses are ignored while typing in search or other inputs.
+
+3) Search integration:
+- Click a search result; it should still load the session and jump to the matching turn (existing behavior).
+- Confirm subsequent scroll updates the URL without reloading the session.
+
+4) Performance:
+- Test on a long session (hundreds of turns). Scroll performance should remain smooth; no noticeable jitter.
+
+5) Edge cases:
+- Sessions with only a preamble and no user turns should not crash; navigation should be disabled.
+- When toggles hide all non-user items, navigation still works because turns remain.

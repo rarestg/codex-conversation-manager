@@ -139,10 +139,10 @@ export const SessionHeader = ({
       ariaLabel={ariaLabel}
       title={copyValue}
       leading={label}
-      leadingClassName="chip-label"
+      leadingClassName="meta-label"
       labelWrapperClassName="min-w-0 flex-1"
-      labelClassName="chip-value"
-      className="chip text-left"
+      labelClassName="meta-value"
+      className="meta-row"
     />
   );
 
@@ -174,25 +174,25 @@ export const SessionHeader = ({
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
               {timeLabel && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px]/[14px] text-slate-600 shadow-sm">
+                <span className="chip chip-sm chip-filled gap-1">
                   <Clock className="h-3.5 w-3.5" />
-                  <span className="translate-y-[0.5px] inline-block min-w-[7ch] text-center tabular-nums">
+                  <span className="chip-value translate-y-[0.5px] inline-block min-w-[7ch] text-center">
                     {timeLabel}
                   </span>
                 </span>
               )}
               {timeSource && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px]/[14px] text-slate-600 shadow-sm">
+                <span className="chip chip-sm chip-filled gap-1">
                   <Hourglass className="h-3.5 w-3.5" />
-                  <span className="translate-y-[0.5px] inline-block min-w-[6ch] text-center tabular-nums">
+                  <span className="chip-value translate-y-[0.5px] inline-block min-w-[6ch] text-center">
                     {durationDisplay}
                   </span>
                 </span>
               )}
               {activeSession.turnCount !== null && activeSession.turnCount !== undefined && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px]/[14px] text-slate-600 shadow-sm">
+                <span className="chip chip-sm chip-filled gap-1">
                   <Repeat2 className="h-3.5 w-3.5" />
-                  <span className="translate-y-[0.5px] inline-block min-w-[4ch] text-center tabular-nums">
+                  <span className="chip-value translate-y-[0.5px] inline-block min-w-[4ch] text-center">
                     {activeSession.turnCount}
                   </span>
                 </span>
@@ -207,7 +207,7 @@ export const SessionHeader = ({
                   leading={<RepoIcon className="h-3.5 w-3.5" />}
                   labelWrapperClassName="min-w-0"
                   labelClassName="min-w-0 truncate"
-                  className="inline-flex min-w-0 items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] leading-none text-slate-600 shadow-sm"
+                  className="chip chip-sm chip-filled chip-button min-w-0 gap-1 leading-none"
                 />
               )}
               {activeSession.gitBranch && (
@@ -220,42 +220,40 @@ export const SessionHeader = ({
                   leading={<GitBranch className="h-3.5 w-3.5" />}
                   labelWrapperClassName="min-w-0"
                   labelClassName="min-w-0 truncate"
-                  className="inline-flex min-w-0 items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] leading-none text-slate-600 shadow-sm"
+                  className="chip chip-sm chip-filled chip-button min-w-0 gap-1 leading-none"
                 />
               )}
             </div>
             <div className={statsRowClassNameMerged}>
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1.5 text-[11px]/[14px] text-slate-600 shadow-sm">
+              <span className="chip chip-sm chip-filled gap-1">
                 <Brain className="h-3.5 w-3.5" />
-                <span className="translate-y-[0.5px] inline-block min-w-[4ch] text-center tabular-nums">
+                <span className="chip-value translate-y-[0.5px] inline-block min-w-[4ch] text-center">
                   {thoughtCount}
                 </span>
                 <span className="translate-y-[0.5px]">thoughts</span>
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1.5 text-[11px]/[14px] text-slate-600 shadow-sm">
+              <span className="chip chip-sm chip-filled gap-1">
                 <Wrench className="h-3.5 w-3.5" />
-                <span className="translate-y-[0.5px] inline-block min-w-[4ch] text-center tabular-nums">
+                <span className="chip-value translate-y-[0.5px] inline-block min-w-[4ch] text-center">
                   {toolCallCount}
                 </span>
                 <span className="translate-y-[0.5px]">tools</span>
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1.5 text-[11px]/[14px] text-slate-600 shadow-sm">
+              <span className="chip chip-sm chip-filled gap-1">
                 <Info className="h-3.5 w-3.5" />
-                <span className="translate-y-[0.5px] inline-block min-w-[4ch] text-center tabular-nums">
-                  {metaCount}
-                </span>
+                <span className="chip-value translate-y-[0.5px] inline-block min-w-[4ch] text-center">{metaCount}</span>
                 <span className="translate-y-[0.5px]">meta</span>
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1.5 text-[11px]/[14px] text-slate-600 shadow-sm">
+              <span className="chip chip-sm chip-filled gap-1">
                 <Hash className="h-3.5 w-3.5" />
-                <span className="translate-y-[0.5px] inline-block min-w-[4ch] text-center tabular-nums">
+                <span className="chip-value translate-y-[0.5px] inline-block min-w-[4ch] text-center">
                   {tokenCountLabel}
                 </span>
                 <span className="translate-y-[0.5px]">token counts</span>
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1.5 text-[11px]/[14px] text-slate-600 shadow-sm">
+              <span className="chip chip-sm chip-filled gap-1">
                 <Eye className="h-3.5 w-3.5" />
-                <span className="translate-y-[0.5px] inline-block min-w-[4ch] text-center tabular-nums">
+                <span className="chip-value translate-y-[0.5px] inline-block min-w-[4ch] text-center">
                   {visibleItemCount}
                 </span>
                 <span className="translate-y-[0.5px]">visible</span>

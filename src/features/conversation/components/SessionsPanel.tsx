@@ -246,16 +246,16 @@ const SessionsPanelComponent = ({
                           return (
                             <>
                               {yearTotalDays && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-white/80 px-2 py-1 text-[10px]/[12px] font-medium text-slate-500">
+                                <span className="chip chip-xs chip-soft gap-1 font-medium text-slate-500">
                                   <Calendar className="h-3 w-3" />
-                                  <span className="translate-y-[0.5px] inline-block min-w-[6ch] text-center tabular-nums">
+                                  <span className="chip-value translate-y-[0.5px] inline-block min-w-[6ch] text-center">
                                     {`${yearActiveDays}/${yearTotalDays}`}
                                   </span>
                                 </span>
                               )}
-                              <span className="inline-flex items-center rounded-full bg-white/80 px-2 py-1 text-[10px]/[12px] font-medium text-slate-500">
+                              <span className="chip chip-xs chip-soft font-medium text-slate-500">
                                 <span className="translate-y-[0.5px] inline-flex items-center gap-1">
-                                  <span className="min-w-[4ch] text-center tabular-nums">{yearSessionCount}</span>
+                                  <span className="chip-value min-w-[4ch] text-center">{yearSessionCount}</span>
                                   <span>{yearSessionCount === 1 ? 'session' : 'sessions'}</span>
                                 </span>
                               </span>
@@ -286,18 +286,16 @@ const SessionsPanelComponent = ({
                                 return (
                                   <>
                                     {monthTotalDays && (
-                                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[10px]/[12px] font-medium text-slate-500">
+                                      <span className="chip chip-xs chip-muted gap-1 font-medium text-slate-500">
                                         <Calendar className="h-3 w-3" />
-                                        <span className="translate-y-[0.5px] inline-block min-w-[6ch] text-center tabular-nums">
+                                        <span className="chip-value translate-y-[0.5px] inline-block min-w-[6ch] text-center">
                                           {`${monthActiveDays}/${monthTotalDays}`}
                                         </span>
                                       </span>
                                     )}
-                                    <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-[10px]/[12px] font-medium text-slate-500">
+                                    <span className="chip chip-xs chip-muted font-medium text-slate-500">
                                       <span className="translate-y-[0.5px] inline-flex items-center gap-1">
-                                        <span className="min-w-[4ch] text-center tabular-nums">
-                                          {monthSessionCount}
-                                        </span>
+                                        <span className="chip-value min-w-[4ch] text-center">{monthSessionCount}</span>
                                         <span>{monthSessionCount === 1 ? 'session' : 'sessions'}</span>
                                       </span>
                                     </span>
@@ -320,7 +318,7 @@ const SessionsPanelComponent = ({
                               <summary className="cursor-pointer list-none rounded-xl bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500">
                                 <div className="flex w-full items-center justify-between gap-3">
                                   <span>{formatDayLabel(year.year, month.month, day.day)}</span>
-                                  <span className="rounded-full bg-white px-2 py-1 text-[10px] font-medium text-slate-500">
+                                  <span className="chip chip-xs chip-white font-medium text-slate-500">
                                     {formatCountLabel(day.files.length, 'session')}
                                   </span>
                                 </div>
@@ -364,37 +362,37 @@ const SessionsPanelComponent = ({
                                         </div>
                                         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
                                           {timeLabel && (
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[10px]/[12px] text-slate-600 shadow-sm">
+                                            <span className="chip chip-xs chip-white chip-shadow gap-1">
                                               <Clock className="h-3 w-3" />
-                                              <span className="translate-y-[0.5px] inline-block min-w-[7ch] text-center tabular-nums">
+                                              <span className="chip-value translate-y-[0.5px] inline-block min-w-[7ch] text-center">
                                                 {timeLabel}
                                               </span>
                                             </span>
                                           )}
                                           {timeSource && (
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[10px]/[12px] text-slate-600 shadow-sm">
+                                            <span className="chip chip-xs chip-white chip-shadow gap-1">
                                               <Hourglass className="h-3 w-3" />
-                                              <span className="translate-y-[0.5px] inline-block min-w-[6ch] text-center tabular-nums">
+                                              <span className="chip-value translate-y-[0.5px] inline-block min-w-[6ch] text-center">
                                                 {durationDisplay}
                                               </span>
                                             </span>
                                           )}
                                           {file.turnCount !== null && file.turnCount !== undefined && (
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[10px]/[12px] text-slate-600 shadow-sm">
+                                            <span className="chip chip-xs chip-white chip-shadow gap-1">
                                               <Repeat2 className="h-3 w-3" />
-                                              <span className="translate-y-[0.5px] inline-block min-w-[4ch] text-center tabular-nums">
+                                              <span className="chip-value translate-y-[0.5px] inline-block min-w-[4ch] text-center">
                                                 {file.turnCount}
                                               </span>
                                             </span>
                                           )}
                                           {repoLabel && (
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[10px] leading-none text-slate-600 shadow-sm">
+                                            <span className="chip chip-xs chip-white chip-shadow gap-1 leading-none">
                                               <Github className="h-3 w-3" />
                                               {repoLabel}
                                             </span>
                                           )}
                                           {file.gitBranch && (
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[10px] leading-none text-slate-600 shadow-sm">
+                                            <span className="chip chip-xs chip-white chip-shadow gap-1 leading-none">
                                               <GitBranch className="h-3 w-3" />
                                               {file.gitBranch}
                                             </span>
@@ -411,7 +409,7 @@ const SessionsPanelComponent = ({
                                         leading={<Fingerprint className="h-3 w-3" />}
                                         labelWrapperClassName="min-w-0"
                                         labelClassName="min-w-0 truncate"
-                                        className="mt-2 inline-flex min-w-0 items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[10px] text-slate-600 hover:bg-slate-200"
+                                        className="chip chip-xs chip-muted chip-button mt-2 min-w-0 gap-1 hover:bg-slate-200"
                                       />
                                     </div>
                                   );
