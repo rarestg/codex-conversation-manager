@@ -34,10 +34,11 @@ export default function ConversationViewer() {
     indexSummary,
   } = useSessions({ onError: setApiError, workspace: activeWorkspace });
 
-  const { turns, parseErrors, activeSession, sessionDetails, loadingSession, loadSession, clearSession } = useSession({
-    sessionsTree,
-    onError: setApiError,
-  });
+  const { turns, parseErrors, activeSession, sessionDetails, loadingSession, loadSession, clearSession, jumpToTurn } =
+    useSession({
+      sessionsTree,
+      onError: setApiError,
+    });
 
   const { searchQuery, setSearchQuery, searchGroups, searchLoading, handleSearchKeyDown } = useSearch({
     onError: setApiError,
@@ -233,6 +234,7 @@ export default function ConversationViewer() {
               sessionDetails={sessionDetails}
               sessionsRoot={sessionsTree?.root || sessionsRoot}
               loadingSession={loadingSession}
+              jumpToTurn={jumpToTurn}
             />
           </div>
         )}

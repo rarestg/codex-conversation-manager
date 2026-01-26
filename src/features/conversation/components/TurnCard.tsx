@@ -11,8 +11,9 @@ export const TurnCard = ({ turn, showFullContent }: TurnCardProps) => {
   return (
     <section
       id={`turn-${turn.id}`}
-      className="animate-rise rounded-3xl border border-white/80 bg-white/80 p-6 shadow-card"
+      className="relative animate-rise rounded-3xl border border-white/80 bg-white/80 p-6 shadow-card"
     >
+      <span data-turn-anchor={turn.id} className="absolute inset-x-0 top-0 h-px" aria-hidden="true" />
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-teal-600">
