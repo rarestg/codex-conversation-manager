@@ -39,8 +39,21 @@ CopyButton UX Standard
 
 Label alignment (CopyButton)
 - CopyButton labels are left-aligned within their slot by default.
-- Do not add text-center or absolute overlays to center labels.
-- If a button needs visual balance, adjust padding or overall layout instead of centering the label stack.
+- Do not add text-center or absolute overlays to center the label stack.
+- If a button needs visual balance, prefer container alignment (e.g., justify-center on the button) or padding tweaks instead of centering the label stack.
+
+Chip Utilities (Reusable Pills)
+1) Composition-first
+   - Base .chip is background-free. Add backgrounds via .chip-filled / .chip-soft / .chip-muted / .chip-white as needed.
+   - Use size utilities (.chip-xs/.chip-sm/.chip-md/.chip-lg) and helpers (.chip-value, .chip-shadow) for composability.
+2) Interaction
+   - Use .chip-button for hover/disabled behavior on interactive chips (CopyButtons, compact toggles).
+3) Muted chips
+   - .chip-muted includes both muted background and muted text (bg-slate-100 + text-slate-500).
+   - If you only need a muted background, set bg-slate-100 inline instead of reusing .chip-muted.
+4) Meta rows
+   - Meta rows use .meta-row/.meta-label/.meta-value.
+   - Outline matches other pill borders (border-slate-200).
 
 SessionHeaderVariantB Rhythm Rules
 1) Header stack

@@ -1,0 +1,94 @@
+_DONE Plan Index (Living Doc)
+
+Purpose
+- Quick reference for completed plans in this folder.
+- Each entry should tell you why it existed, what happened, and where to read more.
+
+How to extend this index
+1) Add a new entry with the same fields as existing ones:
+   - Plan: filename (the original plan)
+   - Context: filename (the execution summary / outcome)
+   - Why: 1-2 sentences on the problem or motivation
+   - Outcome: 2-4 bullets on what changed or was implemented
+   - Notes: optional cautions, follow-ups, or deviations from the plan
+2) Keep summaries short; link to the plan + context for full detail.
+3) If a plan was only partially implemented, state that explicitly.
+
+Entries
+
+- Plan: 2026-01-26-9pm_chip-utility-unification-plan.txt
+  Context: 2026-01-26-9pm_chip-utility-unification-plan-context.txt
+  Why: Consolidate duplicated pill/chip styles (VariantB + compact toggles) into a reusable utility system, then align VariantA and SessionsPanel for consistency.
+  Outcome:
+  - Added composable chip utilities (sizes, backgrounds, helpers) plus meta-row and segmented chip helpers.
+  - Refactored SessionHeaderVariantB, SessionHeader (VariantA), SessionsPanel, and compact toggles to use the shared chip language.
+  - Unified copy buttons (MessageCard, TokenCountCard, copy conversation) with chip utilities while preserving visual parity.
+  - Adjusted muted chips, toggle behavior, and meta-row borders based on follow-up review.
+  Notes:
+  - VariantB visuals were the golden reference; the plan explicitly allowed VariantA to change to match.
+  - TokenCountCard segmented pills were only standardized at the wrapper level.
+
+- Plan: 2026-01-23-6pm_token-count-visualization-plan.txt
+  Context: 2026-01-23-6pm_token-count-visualization-plan-context.txt
+  Why: Make token_count items first-class (own toggle, stats, renderer) and align context usage semantics with the CLI.
+  Outcome:
+  - Added token_count toggle + stats chip; token_count no longer rides the Meta toggle.
+  - Introduced TokenCountCard + parsing helpers and Canvas variants for visualization.
+  - Indexed token_count_count separately from meta_count; export includes token_count only when toggle is on.
+  - Context usage now uses last_token_usage (with fallbacks) for the bar and detail text.
+  Notes:
+  - Context usage fix plan is documented in 2026-01-23-6pm_token-count-context-usage-fix-plan.txt and summarized in this context doc.
+  - Clear & Rebuild Index required to populate the new token_count_count column.
+
+- Plan: 2026-01-23-7pm_canvas-registry-plan.txt
+  Context: 2026-01-23-7pm_canvas-registry-plan-context.txt
+  Why: Replace hard-coded A/B canvas with a manual registry to scale to multiple demos/variants using real session data.
+  Outcome:
+  - Added a canvas registry + shared types and moved SessionHeader variants into their own module.
+  - Refactored CanvasView to select demos/variants dynamically with per-variant state.
+  - Added styling slots to SessionHeader/SessionOverview without changing production defaults.
+  Notes:
+  - Registry is manual by design (no auto-discovery), and variants own their hooks.
+
+- Plan: 2026-01-23-7pm_db-only-session-picker-plan.txt
+  Context: 2026-01-23-7pm_db-only-session-picker-plan-context.txt
+  Why: Remove expensive filesystem scans on every picker load and clamp preview sizes for UI stability.
+  Outcome:
+  - /api/sessions now reads from SQLite only (no scanSessionFiles/readFirstUserMessage).
+  - Preview truncation (chars + lines) applied during indexing and response shaping.
+  - buildSessionsTree now accepts minimal DB-backed entries (no fake size/mtime).
+  - Missing session files return clear 404s; UI surfaces “Please reindex.”
+  Notes:
+  - Picker can be stale until reindex; this is intentional.
+
+- Plan: 2026-01-23-7pm_unified-indexing-and-picker-plan.txt
+  Context: 2026-01-23-7pm_unified-indexing-and-picker-plan-context.txt
+  Why: Persist rich session metrics and active duration in SQLite, eliminate joins, and make DB-only picker fast and deterministic.
+  Outcome:
+  - Sessions table stores metrics (counts, timestamps, active_duration_ms) with safe migrations.
+  - /api/sessions now queries sessions only and maps preview directly.
+  - UI uses indexed metrics and active duration where available; fallback parsing is aligned.
+  - Preview truncation unified across server/client.
+  Notes:
+  - No backfill; Clear & Rebuild Index required to populate new columns.
+
+- Plan: 2026-01-22-7pm_best-fix-copy-lag-plan.txt
+  Context: 2026-01-22-7pm_best-fix-copy-lag-plan-context.txt
+  Why: Copy feedback state was global and caused full-tree re-renders with noticeable lag.
+  Outcome:
+  - Split ConversationMain from Sidebar to isolate copy state.
+  - Introduced CopyButton with localized feedback; header and message copy actions no longer repaint the tree.
+  - Added targeted memoization for heavy panels with stable callbacks.
+  - Render debug hooks retained but gated behind VITE_RENDER_DEBUG.
+  Notes:
+  - StrictMode remains enabled; debug logging is opt-in only.
+
+- Plan: 2026-01-21-8pm_workspaces-and-landing-page.txt
+  Context: 2026-01-21-8pm_workspaces-and-landing-page-context.txt
+  Why: The home state needed to be a discovery dashboard (search + workspaces) rather than a full session viewer.
+  Outcome:
+  - Added /api/workspaces, workspace filtering, grouped search, and scoped resolve behavior.
+  - Implemented home layout with full-width search and Sessions/Workspaces split.
+  - Built Workspaces panel with repo metadata and sorting; added Git metadata extraction fixes.
+  Notes:
+  - Workspace identity is cwd-only; reindex required to populate new git_commit_hash fields.
