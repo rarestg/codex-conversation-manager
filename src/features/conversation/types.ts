@@ -87,6 +87,10 @@ export interface SessionSearchResult {
   match_turn_count: number;
   first_match_turn_id: number | null;
   snippet?: string | null;
+  turn_count?: number | null;
+  started_at?: string | null;
+  ended_at?: string | null;
+  active_duration_ms?: number | null;
 }
 
 export interface WorkspaceSummary {

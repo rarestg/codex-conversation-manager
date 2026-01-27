@@ -1,6 +1,7 @@
+import { CalendarClock, GitBranch, Hourglass, Repeat2 } from 'lucide-react';
 import { type ClipboardEvent, type KeyboardEvent, type MouseEvent, useEffect, useRef } from 'react';
 import { logSearch } from '../debug';
-import { formatDate, formatTime, formatWorkspacePath } from '../format';
+import { formatDate, formatDuration, formatDurationMs, formatTime, formatWorkspacePath } from '../format';
 import { renderSnippet } from '../markdown';
 import type { LoadSessionOptions, SearchStatus, WorkspaceSearchGroup } from '../types';
 import { GitHubIcon } from './GitHubIcon';
@@ -185,33 +186,76 @@ export const SearchPanel = ({
                   )
                 )}
                 <div className="mt-3 space-y-2">
-                  {group.results.map((result) => (
-                    <button
-                      type="button"
-                      key={result.session_path}
-                      onClick={() =>
-                        onLoadSession(result.session_path, result.first_match_turn_id ?? undefined, {
-                          searchQuery: searchQuery.trim() || null,
-                        })
-                      }
-                      className="w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left text-sm text-slate-700 transition hover:border-teal-200 hover:bg-white"
-                    >
-                      <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
-                        <span className="min-w-0 flex-1 truncate" title={result.session_id || result.session_path}>
-                          {result.session_id || result.session_path}
-                        </span>
-                        <span className="shrink-0">
-                          {result.match_message_count} matches · {result.match_turn_count} turns
-                        </span>
-                      </div>
-                      <div className="search-result-title mt-2 min-w-0 max-w-full text-sm font-medium text-slate-800">
-                        {result.first_user_message || result.session_path}
-                      </div>
-                      <div className="mt-1 min-w-0 max-w-full text-sm text-slate-700 line-clamp-3 break-words overflow-hidden">
-                        {renderSnippet(result.snippet)}
-                      </div>
-                    </button>
-                  ))}
+                  {group.results.map((result) => {
+                    const timeSource = result.started_at ?? result.session_timestamp ?? result.ended_at ?? '';
+                    const durationLabel =
+                      formatDurationMs(result.active_duration_ms) || formatDuration(result.started_at, result.ended_at);
+                    const durationDisplay = durationLabel || (timeSource ? '-' : '');
+                    const turnCountValue = result.turn_count ?? null;
+
+                    return (
+                      <button
+                        type="button"
+                        key={result.session_path}
+                        onClick={() =>
+                          onLoadSession(result.session_path, result.first_match_turn_id ?? undefined, {
+                            searchQuery: searchQuery.trim() || null,
+                          })
+                        }
+                        className="w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left text-sm text-slate-700 transition hover:border-teal-200 hover:bg-white"
+                      >
+                        <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
+                          <span className="min-w-0 flex-1 truncate" title={result.session_id || result.session_path}>
+                            {result.session_id || result.session_path}
+                          </span>
+                          <span className="shrink-0">
+                            {result.match_message_count} matches · {result.match_turn_count} turns
+                          </span>
+                        </div>
+                        <div className="search-result-stack mt-2">
+                          <div className="search-result-title min-w-0 max-w-full text-sm font-medium text-slate-800">
+                            {result.first_user_message || result.session_path}
+                          </div>
+                          {(result.session_timestamp ||
+                            result.git_branch ||
+                            timeSource ||
+                            durationDisplay ||
+                            turnCountValue !== null) && (
+                            <div className="search-result-metrics">
+                              {result.session_timestamp && (
+                                <span className="search-result-chip">
+                                  <CalendarClock className="h-3 w-3" />
+                                  <span className="chip-value">
+                                    {formatDate(result.session_timestamp)} {formatTime(result.session_timestamp)}
+                                  </span>
+                                </span>
+                              )}
+                              {durationDisplay && (
+                                <span className="search-result-chip">
+                                  <Hourglass className="h-3 w-3" />
+                                  <span className="chip-value translate-y-[0.5px]">{durationDisplay}</span>
+                                </span>
+                              )}
+                              <span className="search-result-chip">
+                                <Repeat2 className="h-3 w-3" />
+                                <span className="chip-value translate-y-[0.5px]">{turnCountValue ?? '—'}</span>
+                                <span className="translate-y-[0.5px]">turns</span>
+                              </span>
+                              {result.git_branch && (
+                                <span className="search-result-chip" title={result.git_branch}>
+                                  <GitBranch className="h-3 w-3" />
+                                  <span className="truncate">{result.git_branch}</span>
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          <div className="min-w-0 max-w-full text-sm text-slate-700 line-clamp-3 break-words overflow-hidden">
+                            {renderSnippet(result.snippet)}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             ))}

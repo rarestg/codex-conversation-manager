@@ -1,6 +1,7 @@
 _DONE Plan Index (Living Doc)
 
 Purpose
+=======
 - Quick reference for completed plans in this folder.
 - Each entry should tell you why it existed, what happened, and where to read more.
 
@@ -11,10 +12,52 @@ How to extend this index
    - Why: 1-2 sentences on the problem or motivation
    - Outcome: 2-4 bullets on what changed or was implemented
    - Notes: optional cautions, follow-ups, or deviations from the plan
-2) Keep summaries short; link to the plan + context for full detail.
-3) If a plan was only partially implemented, state that explicitly.
+2) Ensure plan filenames include the time (e.g., 2026-01-27-12pm_...) based on the current date/time (`date` in shell) when the plan is written.
+3) Keep summaries short; link to the plan + context for full detail.
+4) If a plan was only partially implemented, state that explicitly.
+5) Add new entries in reverse-chronological order by plan timestamp (newest first) so `head` shows the latest work.
+6) Run `python3 todos/_done/reorder_index.py` to verify ordering after edits.
 
 Entries
+=======
+
+- Plan: 2026-01-27-2am_search-result-dedupe-and-metadata-plan.txt
+  Context: 2026-01-27-12am_search-roadmap-context.txt
+  Why: Proposed de-duplicating search rows by session UUID and adding per-session pills.
+  Outcome:
+  - Deprecated. Session UUID de-dup was rejected after discovering branched sessions reuse ancestor IDs.
+  - Per-session pills were implemented via the consolidated search roadmap work.
+  Notes:
+  - Plan archived in todos/_archive with a deprecation notice.
+
+- Plan: 2026-01-27-12am_search-roadmap-context.txt
+  Context: 2026-01-27-12am_search-roadmap-context.txt
+  Why: Consolidate the search roadmap into a single completion record.
+  Outcome:
+  - Documents completion state for debounce status, UUID resolve/FTS normalization, aggregation, and match navigation.
+  - Records the correction: filename session_id wins; UUID de-duplication is intentionally not used.
+  Notes:
+  - Use this context file as the canonical search roadmap summary.
+
+- Plan: 2026-01-26-11pm_search-result-session-aggregation-plan.txt
+  Context: 2026-01-27-12am_search-roadmap-context.txt
+  Why: Per-message search rows were noisy; we needed one row per session with match navigation.
+  Outcome:
+  - Aggregated /api/search results per session with match counts + snippets.
+  - Added /api/session-matches, ?q= deep links, highlight + next/prev match navigation.
+  - Search result rows show per-session pills (date/time, duration, turns, branch) with icons.
+  Notes:
+  - Per-file grouping is intentional after fixing session_id indexing for branched sessions.
+
+- Plan: 2026-01-26-11pm_search-uuid-resolve-and-fts-normalization-plan.txt
+  Context: 2026-01-27-12am_search-roadmap-context.txt
+  Why: Raw FTS queries broke on UUIDs/special chars and UUID paste should open sessions directly.
+  Outcome:
+  - Server-side FTS normalization (Unicode-aware tokens, quoted ANDs, token cap).
+  - Fixed /api/resolve-session ESCAPE handling; Enter-to-resolve retained.
+  - Added UUID paste auto-resolve with debounce suppression and logging.
+  Notes:
+  - Client accepts any UUID; resolve endpoint is authoritative.
 
 - Plan: 2026-01-26-11pm_turn-navigation-plan.txt
   Context: 2026-01-26-11pm_turn-navigation-plan-context.txt
@@ -28,6 +71,16 @@ Entries
   - Navigation skips session preamble; URL updates use replaceState.
   - Turn activation uses a top 10% focus band for stability.
 
+- Plan: 2026-01-26-10pm_search-debounce-state-plan.txt
+  Context: 2026-01-27-12am_search-roadmap-context.txt
+  Why: The search empty state flashed during debounce because “no results” and “no search yet” were indistinguishable.
+  Outcome:
+  - Added explicit searchStatus lifecycle (idle/debouncing/loading/success/error) and derived loading flags.
+  - Updated SearchPanel and Sidebar to render empty/error/searching based on status.
+  - Added detailed status transition logging for lifecycle debugging.
+  Notes:
+  - Results are cleared on query change; empty state only appears after success.
+
 - Plan: 2026-01-26-9pm_chip-utility-unification-plan.txt
   Context: 2026-01-26-9pm_chip-utility-unification-plan-context.txt
   Why: Consolidate duplicated pill/chip styles (VariantB + compact toggles) into a reusable utility system, then align VariantA and SessionsPanel for consistency.
@@ -39,18 +92,6 @@ Entries
   Notes:
   - VariantB visuals were the golden reference; the plan explicitly allowed VariantA to change to match.
   - TokenCountCard segmented pills were only standardized at the wrapper level.
-
-- Plan: 2026-01-23-6pm_token-count-visualization-plan.txt
-  Context: 2026-01-23-6pm_token-count-visualization-plan-context.txt
-  Why: Make token_count items first-class (own toggle, stats, renderer) and align context usage semantics with the CLI.
-  Outcome:
-  - Added token_count toggle + stats chip; token_count no longer rides the Meta toggle.
-  - Introduced TokenCountCard + parsing helpers and Canvas variants for visualization.
-  - Indexed token_count_count separately from meta_count; export includes token_count only when toggle is on.
-  - Context usage now uses last_token_usage (with fallbacks) for the bar and detail text.
-  Notes:
-  - Context usage fix plan is documented in 2026-01-23-6pm_token-count-context-usage-fix-plan.txt and summarized in this context doc.
-  - Clear & Rebuild Index required to populate the new token_count_count column.
 
 - Plan: 2026-01-23-7pm_canvas-registry-plan.txt
   Context: 2026-01-23-7pm_canvas-registry-plan-context.txt
@@ -83,6 +124,18 @@ Entries
   - Preview truncation unified across server/client.
   Notes:
   - No backfill; Clear & Rebuild Index required to populate new columns.
+
+- Plan: 2026-01-23-6pm_token-count-visualization-plan.txt
+  Context: 2026-01-23-6pm_token-count-visualization-plan-context.txt
+  Why: Make token_count items first-class (own toggle, stats, renderer) and align context usage semantics with the CLI.
+  Outcome:
+  - Added token_count toggle + stats chip; token_count no longer rides the Meta toggle.
+  - Introduced TokenCountCard + parsing helpers and Canvas variants for visualization.
+  - Indexed token_count_count separately from meta_count; export includes token_count only when toggle is on.
+  - Context usage now uses last_token_usage (with fallbacks) for the bar and detail text.
+  Notes:
+  - Context usage fix plan is documented in 2026-01-23-6pm_token-count-context-usage-fix-plan.txt and summarized in this context doc.
+  - Clear & Rebuild Index required to populate the new token_count_count column.
 
 - Plan: 2026-01-22-7pm_best-fix-copy-lag-plan.txt
   Context: 2026-01-22-7pm_best-fix-copy-lag-plan-context.txt

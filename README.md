@@ -10,6 +10,8 @@ A local web app for parsing, visualizing, and searching Codex JSONL sessions. It
 - Browse Codex sessions stored on disk and keep sessions separate.
 - View conversations grouped by user turn with inline tools/actions.
 - Full-text search across user and assistant messages via SQLite FTS5.
+- Session-level search results with match counts, snippets, and per-session metadata pills.
+- Match highlighting in-session with Next/Prev match navigation and `?q=` deep links.
 - Markdown rendering with sanitized output and code highlighting.
 - Per-message and conversation-wide copy actions with inline feedback.
 - Session settings modal (set root, reindex, clear/rebuild index).
@@ -38,6 +40,7 @@ pre-commit run --all-files
 - Optional config file: `~/.codex-formatter/config.json`.
 - SQLite index: `~/.codex-formatter/codex_index.db`.
 - Debug logging: set `CODEX_DEBUG=1`.
+- Search debug logging: set `CODEX_SEARCH_DEBUG=1`.
 - Render debug logging (dev only): `VITE_RENDER_DEBUG=1`.
 
 ## Code Tour
@@ -59,6 +62,7 @@ pre-commit run --all-files
   - `useSession.ts` (load/parse a session)
   - `useSearch.ts` (FTS search + resolve session IDs)
   - `useUrlSync.ts` (deep-link sync)
+  - `useWorkspaces.ts` (workspace summaries)
   - `useCopyFeedback.ts` (clipboard feedback state + status)
 - `src/features/conversation/parsing.ts` implements JSONL parsing rules and turn grouping.
 - `src/features/conversation/markdown.tsx` handles sanitized markdown + snippet highlighting.
@@ -70,6 +74,8 @@ pre-commit run --all-files
 - `GET /api/sessions`
 - `GET /api/session?path=...`
 - `GET /api/search?q=...&limit=...`
+- `GET /api/session-matches?session=...&q=...`
+- `GET /api/workspaces?sort=...`
 - `POST /api/reindex`
 - `POST /api/clear-index`
 - `GET /api/resolve-session?id=...`

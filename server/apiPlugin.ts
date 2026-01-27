@@ -470,6 +470,7 @@ const parseJsonlFile = async (filePath: string) => {
   let activeDurationMs = 0;
   let activeDurationPairs = 0;
   let sessionIdRank = 0;
+  let sessionMetaSeen = false;
 
   const parseTimestamp = (value?: string | null) => {
     if (!value) return null;
@@ -507,7 +508,7 @@ const parseJsonlFile = async (filePath: string) => {
 
   const updateSessionId = (value: unknown, rank: number) => {
     const extracted = extractSessionIdFromObject(value);
-    if (extracted && rank >= sessionIdRank) {
+    if (extracted && rank > sessionIdRank) {
       sessionMeta.session_id = extracted;
       sessionIdRank = rank;
     }
@@ -525,26 +526,42 @@ const parseJsonlFile = async (filePath: string) => {
         metaCount += 1;
         const payload = entry.payload ?? entry;
         const gitPayload = payload?.git ?? {};
-        const nextCwd = payload?.cwd ?? sessionMeta.cwd;
+        // Branch ancestry can append older session_meta entries; keep the first (newest) metadata canonical.
+        const nextCwd = sessionMetaSeen ? (sessionMeta.cwd ?? payload?.cwd) : (payload?.cwd ?? sessionMeta.cwd);
         sessionMeta = {
           cwd: nextCwd ? normalizeCwd(nextCwd) : sessionMeta.cwd,
-          git_branch: payload?.git_branch ?? payload?.gitBranch ?? gitPayload?.branch ?? sessionMeta.git_branch,
-          git_repo:
-            payload?.git_repo ??
-            payload?.gitRepo ??
-            gitPayload?.repository_url ??
-            gitPayload?.repositoryUrl ??
-            sessionMeta.git_repo,
-          git_commit_hash:
-            payload?.git_commit_hash ??
-            payload?.gitCommitHash ??
-            gitPayload?.commit_hash ??
-            gitPayload?.commitHash ??
-            sessionMeta.git_commit_hash,
-          timestamp: payload?.timestamp ?? entry.timestamp ?? sessionMeta.timestamp,
+          git_branch: sessionMetaSeen
+            ? (sessionMeta.git_branch ?? payload?.git_branch ?? payload?.gitBranch ?? gitPayload?.branch)
+            : (payload?.git_branch ?? payload?.gitBranch ?? gitPayload?.branch ?? sessionMeta.git_branch),
+          git_repo: sessionMetaSeen
+            ? (sessionMeta.git_repo ??
+              payload?.git_repo ??
+              payload?.gitRepo ??
+              gitPayload?.repository_url ??
+              gitPayload?.repositoryUrl)
+            : (payload?.git_repo ??
+              payload?.gitRepo ??
+              gitPayload?.repository_url ??
+              gitPayload?.repositoryUrl ??
+              sessionMeta.git_repo),
+          git_commit_hash: sessionMetaSeen
+            ? (sessionMeta.git_commit_hash ??
+              payload?.git_commit_hash ??
+              payload?.gitCommitHash ??
+              gitPayload?.commit_hash ??
+              gitPayload?.commitHash)
+            : (payload?.git_commit_hash ??
+              payload?.gitCommitHash ??
+              gitPayload?.commit_hash ??
+              gitPayload?.commitHash ??
+              sessionMeta.git_commit_hash),
+          timestamp: sessionMetaSeen
+            ? (sessionMeta.timestamp ?? payload?.timestamp ?? entry.timestamp)
+            : (payload?.timestamp ?? entry.timestamp ?? sessionMeta.timestamp),
           session_id: sessionMeta.session_id,
         };
         updateSessionId(payload, 2);
+        sessionMetaSeen = true;
         continue;
       }
 
@@ -655,7 +672,7 @@ const readSessionIdFromFile = async (filePath: string) => {
 
   const updateSessionId = (value: unknown, rank: number) => {
     const extracted = extractSessionIdFromObject(value);
-    if (extracted && rank >= sessionIdRank) {
+    if (extracted && rank > sessionIdRank) {
       sessionId = extracted;
       sessionIdRank = rank;
     }
@@ -812,10 +829,19 @@ const indexSessions = async (root: string) => {
       }
 
       try {
+        const fileSessionId = extractSessionIdFromPath(file.relPath);
+        // Filename session ID is authoritative; session_meta is only a fallback when filename lacks an ID.
+        if (fileSessionId && parsed.sessionMeta.session_id && fileSessionId !== parsed.sessionMeta.session_id) {
+          logDebug('session:id:mismatch', {
+            path: file.relPath,
+            filenameId: fileSessionId,
+            parsedId: parsed.sessionMeta.session_id,
+          });
+        }
         insertSession.run({
           id: file.relPath,
           path: file.relPath,
-          session_id: parsed.sessionMeta.session_id ?? extractSessionIdFromPath(file.relPath) ?? null,
+          session_id: fileSessionId ?? parsed.sessionMeta.session_id ?? null,
           session_id_checked: 1,
           timestamp: parsed.sessionMeta.timestamp ?? null,
           cwd: parsed.sessionMeta.cwd ?? null,
@@ -874,7 +900,8 @@ const indexSessions = async (root: string) => {
     }
     if (sameFile && existing?.has_session && !existing.session_id_checked) {
       metadataChecked += 1;
-      const resolvedSessionId = await readSessionIdFromFile(file.absPath);
+      const filenameSessionId = extractSessionIdFromPath(file.relPath);
+      const resolvedSessionId = filenameSessionId ?? (await readSessionIdFromFile(file.absPath));
       if (resolvedSessionId) {
         updateSessionId.run(resolvedSessionId, file.relPath);
       } else {
@@ -1482,6 +1509,10 @@ export const apiPlugin = (): Plugin => {
               match_turn_count: number;
               first_match_turn_id: number | null;
               snippet?: string | null;
+              turn_count?: number | null;
+              started_at?: string | null;
+              ended_at?: string | null;
+              active_duration_ms?: number | null;
             };
             try {
               const stmt = database.prepare(`
@@ -1528,6 +1559,10 @@ export const apiPlugin = (): Plugin => {
                   sessions.git_branch AS git_branch,
                   sessions.git_repo AS git_repo,
                   sessions.git_commit_hash AS git_commit_hash,
+                  sessions.turn_count AS turn_count,
+                  sessions.started_at AS started_at,
+                  sessions.ended_at AS ended_at,
+                  sessions.active_duration_ms AS active_duration_ms,
                   aggregated.match_message_count AS match_message_count,
                   aggregated.match_turn_count AS match_turn_count,
                   aggregated.first_match_turn_id AS first_match_turn_id,

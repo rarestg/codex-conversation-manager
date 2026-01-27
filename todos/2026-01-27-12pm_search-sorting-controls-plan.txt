@@ -1,0 +1,138 @@
+Search Sorting Controls (Workspace + Results)
+
+Context
+We currently sort search results by “best relevance” (bm25) and then by recency, and we order workspace groups by “last active”. This is correct for relevance-first behavior, but it creates a UX surprise: within a workspace, a session with 1 match can appear before a session with 3 matches if the bm25 score is better. Users expect to be able to sort by “most matches” when they’re hunting for the largest clusters of hits, and they also want control over workspace ordering (e.g., “most relevant workspace” vs “most recent workspace”). This plan introduces explicit UI controls to choose both (a) how workspaces are ordered and (b) how results within each workspace are ordered.
+
+Concrete example from current UI
+Searching “effort” yields workspace groups ordered by last activity. That feels correct: the most recently active repo appears first. However, within that top workspace, a result with “1 match / 1 turn” can appear above another result with “3 matches / 3 turns.” That’s because the SQL currently sorts by best bm25 score (relevance) and only uses time as a tiebreaker; match counts are not part of ordering. Users interpreting the list as “most matches first” will be confused. This plan makes the ordering explicit and user-controlled so both mental models are supported.
+
+Why now
+We already improved search correctness (FTS normalization, lifecycle state, match navigation, and per-session pills). The next UX issue is sorting: today it’s implicit and not easily discoverable or controllable. Adding sort controls avoids misunderstandings (e.g., “why isn’t the session with more matches first?”) and aligns the UI with user intent (relevance-first vs match-count-first vs recency). This change is relatively self-contained and leverages existing data already returned by /api/search.
+
+Relevant parts of the codebase
+- server/apiPlugin.ts
+  Implements /api/search and currently decides ordering in SQL (best_score, then timestamp). It also computes workspace groups and sorts them by last_seen. We will add query params to drive both sorts.
+- src/features/conversation/api.ts
+  searchSessions constructs the /api/search URL. It must pass new sort params.
+- src/features/conversation/hooks/useSearch.ts
+  The search hook owns the search query lifecycle and calls searchSessions. It should store sort preferences and re-run searches when they change.
+- src/features/conversation/components/SearchPanel.tsx
+  Renders the search UI. We will add a sort control (dropdown(s) or segmented buttons) that updates useSearch state. It’s used in both the home view and sidebar.
+- src/features/conversation/types.ts
+  Add typing for the sort options if we want stronger type safety on the client side.
+
+How the pieces connect
+SearchPanel renders the input and results using data from useSearch. useSearch calls searchSessions which fetches /api/search on every query change. /api/search is responsible for computing match_count and grouping by workspace; the server performs the per-result ordering in SQL. Group order is applied in JS after grouping. We will expose two “sort knobs” from SearchPanel to useSearch, pass them to /api/search, and apply them server-side (resultSort in SQL, groupSort in JS). All other logic remains unchanged.
+
+The Plan
+
+Step 1 — Define sort options and data flow (client)
+What to do:
+- Decide on the exact options exposed. Recommended minimal set:
+  - Result sort: “Relevance” (current), “Most matches”, “Most recent”.
+  - Workspace sort: “Last active” (current), “Most matches”.
+- Add type unions in src/features/conversation/types.ts so the choices are explicit and safe, e.g.:
+  - export type SearchResultSort = 'relevance' | 'matches' | 'recent'
+  - export type SearchGroupSort = 'last_seen' | 'matches'
+- Update src/features/conversation/api.ts searchSessions signature to accept these params (optional with defaults), and add them to the query string.
+Why:
+- We need strongly typed sort values to avoid accidental invalid params. Optional params keep backward compatibility and make the API safe for future extension.
+Dependencies:
+- None. Client types should be defined before wiring UI.
+
+Step 2 — Add sort state to useSearch
+What to do:
+- In src/features/conversation/hooks/useSearch.ts, add two pieces of state:
+  - resultSort (default 'relevance')
+  - groupSort (default 'last_seen')
+- Include these values in the searchSessions call.
+- Ensure that changing either sort triggers a new search even if the query hasn’t changed (e.g., include them in the useEffect dependency list or call the search method explicitly).
+Why:
+- Sorting is part of the search request. It must live alongside the query state so UI changes are reflected immediately.
+Dependencies:
+- Requires Step 1 types and api.ts signature updates.
+
+Step 3 — Add sort controls to SearchPanel
+What to do:
+- Add a UI control in SearchPanel’s header area (same place as “Searching…”) with two dropdowns or a compact segmented control:
+  - “Sort results by”: relevance / most matches / most recent.
+  - “Sort workspaces by”: last active / most matches.
+- Wire the controls to call setters from useSearch.
+- Keep the UI compact and consistent with existing pill/label styling (small text, chip-like controls if possible), especially in the sidebar (narrow layout). The search panel uses container queries; the control should degrade gracefully under 500px.
+Why:
+- This exposes sorting to users without changing the default behavior. It also explains why a “1 match” result can be above “3 matches” in relevance mode.
+Dependencies:
+- Requires Step 2 state and setters.
+
+Step 4 — Implement server-side result sorting (SQL)
+What to do:
+- In /api/search, read query params:
+  - resultSort = 'relevance' | 'matches' | 'recent'
+  - groupSort = 'last_seen' | 'matches'
+- Map resultSort to SQL ORDER BY:
+  - relevance (current): ORDER BY aggregated.best_score ASC, sessions.timestamp DESC
+  - matches: ORDER BY aggregated.match_message_count DESC, aggregated.match_turn_count DESC, sessions.timestamp DESC
+  - recent: ORDER BY sessions.timestamp DESC, aggregated.best_score ASC
+- Keep LIMIT applied after the ORDER BY (current behavior).
+Why:
+- SQL ordering is the source of per-result order; it must be controlled here to avoid client-side re-sorting and extra data transfers.
+Dependencies:
+- None, but be careful to keep default behavior unchanged when params are absent.
+
+Step 5 — Implement server-side workspace group sorting (JS)
+What to do:
+- In /api/search after building groups, apply groupSort:
+  - last_seen: current sort (most recent workspace first).
+  - matches: sort by group.match_count desc; tie-break by workspace.last_seen desc; then cwd.
+- If a group has no last_seen, fall back to the newest session timestamp inside that group (current fallback logic already exists; keep it).
+Why:
+- Group sorting happens after grouping. We already compute group.match_count, so this is straightforward.
+Dependencies:
+- Requires groupSort param parsing in Step 4.
+
+Step 6 — Update API response typing and logging
+What to do:
+- Ensure search debug logs include resultSort and groupSort so we can confirm behavior in logs.
+- Update client types or response shape if needed (no schema change is required; this is a request param change only).
+Why:
+- Logging is the primary debugging tool for search. Sorting issues should be visible in logs.
+Dependencies:
+- Steps 4 and 5.
+
+Decisions & Tradeoffs
+- Default behavior remains relevance-first.
+  This avoids a silent behavioral change that could surprise users. The new dropdown gives control instead of redefining default relevance.
+- Server-side ordering (SQL) vs client-side sorting.
+  Server-side ordering is more efficient and avoids fetching all matches. Client-side sorting would require larger payloads or additional endpoints.
+- Two controls instead of one.
+  Result sort and workspace sort are independent. Combining them into a single control would be ambiguous and hard to reason about.
+- Match-based ordering is approximate.
+  We use match_message_count and match_turn_count, not exact token hit counts. This is fast and consistent with existing aggregate metrics.
+
+Landmines
+- Make sure group ordering is stable when sorting by matches. If two groups have the same match_count, use last_seen and cwd as tiebreakers to prevent flicker.
+- Don’t reorder results on the client after the server already ordered them; it will fight the SQL ORDER BY and is easy to get wrong.
+- If you add a new param to /api/search, ensure it is ignored safely by older clients (defaults should be applied server-side when param is missing).
+- The search panel appears in two contexts (home and sidebar). The control must work in both without layout overflow; use the existing container query rules.
+- If you later add pagination, the ordering must remain deterministic across pages. Keep the ORDER BY stable.
+
+Verification
+- Default behavior unchanged:
+  1) Search with no sort changes; results should match current ordering (relevance-first).
+  2) Workspace order remains by last_seen.
+- Result sort: matches
+  1) Choose “Most matches”.
+  2) In a workspace with multiple sessions, verify that the row with the largest match_message_count is first.
+  3) If two rows have equal message counts, the one with more matching turns should be first.
+- Result sort: recent
+  1) Choose “Most recent”.
+  2) Verify results within a workspace are ordered by session_timestamp desc.
+- Workspace sort: matches
+  1) Choose “Most matches”.
+  2) Verify workspaces with the highest total match_count appear first.
+- Logs
+  1) With CODEX_SEARCH_DEBUG=1, confirm request logs include resultSort/groupSort and that the query ORDER BY changes accordingly.
+
+Notes for future extensions
+- If we want “workspace relevance,” we can compute a group-level best_score (min) and sort by it.
+- If we want per-workspace result limits, we should add a post-group limit and make it explicit in UI.
