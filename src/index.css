@@ -192,6 +192,52 @@
     white-space: pre-wrap;
   }
 
+  .search-panel {
+    container-type: inline-size;
+    container-name: search-panel;
+  }
+
+  .search-result-title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    -webkit-line-clamp: 2;
+  }
+
+  .search-github-link {
+    display: inline-flex;
+  }
+
+  .search-group-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  @container search-panel (max-width: 500px) {
+    .search-result-title {
+      -webkit-line-clamp: 3;
+    }
+    .search-group-header {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .search-group-header > :last-child {
+      text-align: left;
+    }
+    .search-github-link {
+      display: none;
+    }
+  }
+
+  @container search-panel (min-width: 501px) {
+    .search-group-header {
+      flex-direction: row;
+      align-items: flex-start;
+      justify-content: space-between;
+    }
+  }
+
   .markdown-body .inline-code {
     color: #c35d00;
     background: #fff4e6;

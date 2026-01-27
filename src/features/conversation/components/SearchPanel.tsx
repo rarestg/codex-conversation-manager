@@ -104,7 +104,7 @@ export const SearchPanel = ({
   });
   return (
     <div className={className}>
-      <div className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur">
+      <div className="search-panel rounded-3xl border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg text-slate-900">Search sessions</h2>
@@ -128,12 +128,24 @@ export const SearchPanel = ({
           <div className="mt-4 space-y-4">
             {searchGroups.map((group) => (
               <div key={group.workspace.cwd} className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="search-group-header">
                   <div className="flex min-w-0 items-start gap-3 sm:flex-1">
                     {group.workspace.github_slug && (
-                      <div className="mt-0.5 rounded-full bg-slate-200 p-1 text-slate-600">
+                      <a
+                        href={`https://github.com/${group.workspace.github_slug}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="Open on GitHub"
+                        aria-label={`Open ${group.workspace.github_slug} on GitHub`}
+                        onClick={(event) => {
+                          if (!window.confirm('Open this repository on GitHub in a new tab?')) {
+                            event.preventDefault();
+                          }
+                        }}
+                        className="search-github-icon-link mt-0.5 rounded-full bg-slate-200 p-1 text-slate-600 transition hover:bg-slate-300"
+                      >
                         <GitHubIcon className="h-3.5 w-3.5" />
-                      </div>
+                      </a>
                     )}
                     <div className="min-w-0">
                       <div className="truncate text-sm font-semibold text-slate-800">
@@ -150,10 +162,9 @@ export const SearchPanel = ({
                       {group.workspace.session_count ? ` · ${group.workspace.session_count} sessions` : ''}
                     </div>
                     {group.workspace.last_seen && (
-                      <>
-                        <div>{formatDate(group.workspace.last_seen)}</div>
-                        <div>{formatTime(group.workspace.last_seen)}</div>
-                      </>
+                      <div>
+                        Last active: {formatDate(group.workspace.last_seen)} {formatTime(group.workspace.last_seen)}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -162,7 +173,7 @@ export const SearchPanel = ({
                     href={`https://github.com/${group.workspace.github_slug}`}
                     target="_blank"
                     rel="noreferrer"
-                    className="mt-2 inline-flex items-center gap-2 text-xs font-medium text-teal-700 hover:text-teal-800"
+                    className="search-github-link mt-2 items-center gap-2 text-xs font-medium text-teal-700 hover:text-teal-800"
                   >
                     Open on GitHub
                   </a>
@@ -183,16 +194,20 @@ export const SearchPanel = ({
                       }
                       className="w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left text-sm text-slate-700 transition hover:border-teal-200 hover:bg-white"
                     >
-                      <div className="flex items-center justify-between text-xs text-slate-500">
-                        <span>{result.session_id || result.session_path}</span>
-                        <span>
+                      <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
+                        <span className="min-w-0 flex-1 truncate" title={result.session_id || result.session_path}>
+                          {result.session_id || result.session_path}
+                        </span>
+                        <span className="shrink-0">
                           {result.match_message_count} matches · {result.match_turn_count} turns
                         </span>
                       </div>
-                      <div className="mt-2 text-sm font-medium text-slate-800">
+                      <div className="search-result-title mt-2 min-w-0 max-w-full text-sm font-medium text-slate-800">
                         {result.first_user_message || result.session_path}
                       </div>
-                      <div className="mt-1 text-sm text-slate-700">{renderSnippet(result.snippet)}</div>
+                      <div className="mt-1 min-w-0 max-w-full text-sm text-slate-700 line-clamp-3 break-words overflow-hidden">
+                        {renderSnippet(result.snippet)}
+                      </div>
                     </button>
                   ))}
                 </div>

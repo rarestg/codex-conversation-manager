@@ -92,6 +92,7 @@ export const ConversationMain = ({
     setMatchTurnIds([]);
     setMatchTokens([]);
     setMatchesError(null);
+    // Server intentionally excludes preamble (turn_id <= 0) from match results.
     fetchSessionMatches(activeSession.id, activeSearchQuery, requestKey)
       .then((data) => {
         if (requestId !== matchRequestId.current) return;

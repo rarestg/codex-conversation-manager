@@ -1,0 +1,147 @@
+Search Results: Conversation De-duplication + Per-Session Metadata Pills
+
+Context
+We already upgraded search to aggregate per session, but users still see duplicate rows for what is conceptually the same conversation. This happens because multiple JSONL files can share the same session UUID (sessions.session_id) while the search UI groups by sessions.id/path. As a result, “one row per conversation” is not actually enforced when a single conversation has multiple files/paths. Separately, the search result rows are missing the per-session metadata pills called out in the original request: date/time and git branch (workspace/repo is already surfaced at the group header). We should implement both fixes together because they touch the same server response shape and the same UI rendering path.
+
+Why now
+The current experience is still noisy and misleading: duplicate rows remain, and the session row doesn’t look like the session picker (no per-session metadata). Both issues reduce confidence in search and hide the true intent of the aggregation work. We already have logs that show repeated session_id values with different session_path values; fixing the grouping key will solve that at the source.
+
+Relevant codebase areas
+- server/apiPlugin.ts
+  /api/search builds aggregated results. This is where the grouping key and representative session selection must change. The response shape is defined here and must remain compatible with the UI.
+- src/features/conversation/types.ts
+  SessionSearchResult describes the data the UI expects. We may need to add fields (or repurpose existing ones) to support per-session metadata pills.
+- src/features/conversation/api.ts
+  searchSessions returns SearchResponse and passes it through. If the response shape changes, update it here.
+- src/features/conversation/components/SearchPanel.tsx
+  Renders each session row. This is where we add metadata pills (date/time + git branch) and where the new dedupe behavior should be visible (one row per conversation).
+
+How the parts connect
+The server’s /api/search returns session-level rows and workspace groups. The client renders those rows. If we change the grouping key in SQL (to session_id), the server must still return a concrete session_path so the UI can call onLoadSession(session_path, first_match_turn_id, { searchQuery }). The UI must render date/time and git branch from the per-session row, not the workspace header, and should continue to show workspace/repo at the group header.
+
+The Plan
+
+Step 1 — Define the conversation grouping key
+Goal: ensure “one row per conversation” by grouping on session UUID when available.
+
+What to do:
+- In server/apiPlugin.ts, define a conversation key for aggregation:
+  - Use COALESCE(sessions.session_id, sessions.id) as the grouping key. This ensures that if a session UUID exists, all files sharing that UUID are grouped together. If no UUID exists, we fall back to the file path as a stable key.
+- Carry this key through the aggregated CTE so all counts/snippets are computed per conversation, not per file.
+
+Why:
+This aligns the definition of “conversation” with the original user request. The JSONL file path should not create duplicate rows when the session UUID is the same.
+
+Dependencies:
+None, but it changes the query shape, which will affect how we select representative fields.
+
+Step 2 — Choose a representative session_path per conversation
+Goal: ensure each aggregated row has a concrete session_path that can be opened in the viewer.
+
+What to do:
+- In the aggregated SQL, pick a representative session_path for each conversation key. There are two safe strategies:
+  - Best-match path: choose the row with the best bm25 score (lowest score) within that conversation key.
+  - Most recent path: choose the row with the latest session_timestamp within that conversation key.
+- Recommendation: select the best-match path for relevance, and use the latest timestamp for display.
+- Implementation approach:
+  - In the matches/ranked CTE, include session_id, session_path, session_timestamp.
+  - Use ROW_NUMBER() OVER (PARTITION BY conversation_key ORDER BY score ASC) AS rn_best.
+  - Use ROW_NUMBER() OVER (PARTITION BY conversation_key ORDER BY session_timestamp DESC) AS rn_latest.
+  - In the aggregated select, choose:
+    - session_path = MIN(CASE WHEN rn_best = 1 THEN session_path END)
+    - session_timestamp = MIN(CASE WHEN rn_latest = 1 THEN session_timestamp END)
+- Keep first_match_turn_id based on the best-ranked match (as already done), but ensure it’s still a real turn (turn_id > 0, with fallback to first non-null turn).
+
+Why:
+We need one concrete file path for navigation, but we also want a sane timestamp to show in the UI. Using best-match for the path keeps the first jump relevant; using latest timestamp keeps “Last active” semantics reasonable for the row.
+
+Dependencies:
+Step 1, since we are aggregating by conversation_key.
+
+Step 3 — Update the /api/search response shape (if needed)
+Goal: ensure the client gets all fields required for the per-session metadata pills.
+
+What to do:
+- Confirm that SessionSearchResult already includes:
+  - session_timestamp
+  - git_branch
+  - git_repo
+- If any are missing from the aggregated row (e.g., because of the new grouping key), ensure they are included and derived consistently:
+  - session_timestamp should come from the representative “latest” row.
+  - git_branch should come from the representative “latest” row (or the best-match row; choose and document which).
+  - git_repo is already available but is shown at group level; no change needed for pills.
+
+Why:
+The UI pills need session-level metadata, and grouping by conversation key can change which row is “representative.”
+
+Dependencies:
+Step 2.
+
+Step 4 — Update SearchPanel row rendering with metadata pills
+Goal: match the original UX intent: session row shows date/time and git branch in small pills.
+
+What to do:
+- In SearchPanel.tsx, add a small metadata row within each session button that shows:
+  - Date/time: derived from result.session_timestamp, using formatDate + formatTime.
+  - Git branch: result.git_branch (only when present).
+- Keep workspace/repo label at the group header.
+- Use existing “chip” utility styles to avoid new CSS, e.g. chip-sm + chip-soft for pills.
+- Ensure the pills wrap nicely on narrow layouts (using flex wrap and min-w-0).
+
+Why:
+This matches the session picker design language and the original request; it also helps users disambiguate similar conversations.
+
+Dependencies:
+Step 3 to ensure data is in the response.
+
+Step 5 — Validate UI in wide and narrow layouts
+Goal: make sure the new pills don’t reintroduce overflow or truncation issues.
+
+What to do:
+- Confirm that per-session metadata pills display on a single row when space allows, and wrap to a second line when the search panel is narrow.
+- Ensure existing container-query rules still apply (title clamping, link hiding, group header stacking).
+
+Why:
+The search panel is used both in the home view (wide) and sidebar (narrow). The pills must be usable in both.
+
+Dependencies:
+Step 4.
+
+Decisions & Tradeoffs
+- Grouping key: COALESCE(session_id, session_path)
+  This ensures true “one conversation” behavior when a UUID exists and is stable. The tradeoff is that conversations without UUIDs remain grouped by file path, which is acceptable because they are truly distinct or cannot be linked.
+
+- Representative session selection
+  We must choose a single session_path; we pick the best-match row for navigation because it keeps the user’s first jump relevant. We pick the latest timestamp for display because it aligns with “recent activity” expectations. This introduces a minor mismatch (path ≠ latest row), but it’s better than showing stale timestamps or navigating to irrelevant paths.
+
+- Metadata source
+  Using the latest row’s metadata is the least surprising to users when viewing date/time and branch. Using best-match metadata could show older timestamps if the best match is in an older file.
+
+Landmines
+- Confusing session_id vs session_path
+  The UI must navigate with session_path (sessions.id), not session_id (UUID). Grouping by session_id should not change what the UI uses to load sessions.
+
+- Aggregation with NULL session_id
+  COALESCE must be applied consistently; otherwise, you can inadvertently merge unrelated sessions if a missing session_id is treated as an empty string.
+
+- Mismatch between displayed metadata and navigated session
+  If the selected session_path is not the same row as the timestamp/branch displayed, it could be confusing. Make this consistent and document it in code comments.
+
+- Performance
+  Aggregating by conversation key could increase work if many paths share a UUID. The current CTE should still be fine; avoid subqueries that multiply work for every result.
+
+Verification
+- Search for a term known to appear in multiple files with the same session_id.
+  Expected: only one row appears for that conversation; match counts reflect all files combined.
+
+- Verify navigation
+  Clicking a result should open a valid session path and jump to the first matching turn. Ensure there are no 404s for the selected path.
+
+- Check per-session pills
+  Each result row should show date/time + git branch (if present). On narrow sidebar width, pills should wrap cleanly.
+
+- Sanity check against logs
+  In CODEX_SEARCH_DEBUG logs, confirm that results array no longer contains duplicate session_id values for the same conversation key.
+
+- Regression checks
+  Ensure workspace group headers still show match counts and “Last active”. Ensure snippet/line clamps still hold.

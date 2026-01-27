@@ -1493,7 +1493,8 @@ export const apiPlugin = (): Plugin => {
                     snippet(messages_fts, 0, '[[', ']]', '…', 18) AS snippet
                   FROM messages_fts
                   JOIN messages ON messages_fts.rowid = messages.id
-                  WHERE messages_fts MATCH ?
+                  -- Intentionally exclude preamble (turn_id <= 0) to keep search + match navigation consistent.
+                  WHERE messages_fts MATCH ? AND messages_fts.turn_id > 0
                 ),
                 ranked AS (
                   SELECT
@@ -1658,6 +1659,7 @@ export const apiPlugin = (): Plugin => {
                   `
                     SELECT DISTINCT turn_id AS turn_id
                     FROM messages_fts
+                    -- Keep match navigation aligned with search results by excluding preamble entries.
                     WHERE messages_fts MATCH ? AND session_id = ? AND turn_id > 0
                     ORDER BY turn_id ASC
                   `,
