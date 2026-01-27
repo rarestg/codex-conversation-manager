@@ -56,6 +56,11 @@ export default function ConversationViewer() {
     searchGroups,
     searchStatus,
     searchError,
+    searchTooShort,
+    resultSort,
+    setResultSort,
+    groupSort,
+    setGroupSort,
     handleSearchKeyDown,
     handleSearchPasteUuid,
   } = useSearch({
@@ -83,6 +88,8 @@ export default function ConversationViewer() {
     workspacesLoading,
     workspacesSort,
     searchQuery,
+    resultSort,
+    groupSort,
     sessionsTreeRoot: sessionsTree?.root ?? null,
   });
 
@@ -223,6 +230,11 @@ export default function ConversationViewer() {
               searchGroups={searchGroups}
               searchStatus={searchStatus}
               searchError={searchError}
+              searchTooShort={searchTooShort}
+              resultSort={resultSort}
+              groupSort={groupSort}
+              onResultSortChange={setResultSort}
+              onGroupSortChange={setGroupSort}
               onLoadSession={loadSession}
             />
             <div className="grid gap-6 lg:grid-cols-2">
@@ -260,6 +272,11 @@ export default function ConversationViewer() {
               searchGroups={searchGroups}
               searchStatus={searchStatus}
               searchError={searchError}
+              searchTooShort={searchTooShort}
+              resultSort={resultSort}
+              groupSort={groupSort}
+              onResultSortChange={setResultSort}
+              onGroupSortChange={setGroupSort}
               onLoadSession={loadSession}
               activeSession={activeSession}
               onRefreshSessions={loadSessions}

@@ -2,7 +2,15 @@ import { type ClipboardEvent, type KeyboardEvent, memo } from 'react';
 import { isRenderDebugEnabled } from '../debug';
 import { useRenderDebug } from '../hooks/useRenderDebug';
 import { useWhyDidYouRender } from '../hooks/useWhyDidYouRender';
-import type { LoadSessionOptions, SearchStatus, SessionFileEntry, SessionTree, WorkspaceSearchGroup } from '../types';
+import type {
+  LoadSessionOptions,
+  SearchGroupSort,
+  SearchResultSort,
+  SearchStatus,
+  SessionFileEntry,
+  SessionTree,
+  WorkspaceSearchGroup,
+} from '../types';
 import { SearchPanel } from './SearchPanel';
 import { SessionsPanel } from './SessionsPanel';
 
@@ -17,6 +25,11 @@ interface SidebarProps {
   searchGroups: WorkspaceSearchGroup[];
   searchStatus: SearchStatus;
   searchError?: string | null;
+  searchTooShort?: boolean;
+  resultSort: SearchResultSort;
+  groupSort: SearchGroupSort;
+  onResultSortChange: (value: SearchResultSort) => void;
+  onGroupSortChange: (value: SearchGroupSort) => void;
   onLoadSession: (sessionId: string, turnId?: number, options?: LoadSessionOptions) => void;
   activeSession: SessionFileEntry | null;
   onRefreshSessions: () => void;
@@ -35,6 +48,11 @@ const SidebarComponent = ({
   searchGroups,
   searchStatus,
   searchError,
+  searchTooShort,
+  resultSort,
+  groupSort,
+  onResultSortChange,
+  onGroupSortChange,
   onLoadSession,
   activeSession,
   onRefreshSessions,
@@ -47,6 +65,8 @@ const SidebarComponent = ({
     searchQuery,
     searchStatus,
     searchGroupsCount: searchGroups.length,
+    resultSort,
+    groupSort,
     activeSessionId: activeSession?.id ?? null,
     activeWorkspace: activeWorkspace ?? null,
   });
@@ -60,10 +80,15 @@ const SidebarComponent = ({
       searchGroups,
       searchStatus,
       searchError,
+      searchTooShort,
+      resultSort,
+      groupSort,
       activeSession,
       activeWorkspace,
       onSearchQueryChange,
       onSearchKeyDown,
+      onResultSortChange,
+      onGroupSortChange,
       onLoadSession,
       onRefreshSessions,
       onClearWorkspace,
@@ -89,6 +114,11 @@ const SidebarComponent = ({
         searchGroups={searchGroups}
         searchStatus={searchStatus}
         searchError={searchError}
+        searchTooShort={searchTooShort}
+        resultSort={resultSort}
+        groupSort={groupSort}
+        onResultSortChange={onResultSortChange}
+        onGroupSortChange={onGroupSortChange}
         onLoadSession={onLoadSession}
       />
       <SessionsPanel

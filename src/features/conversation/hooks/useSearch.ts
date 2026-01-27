@@ -1,7 +1,13 @@
 import { type ClipboardEvent, type KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { resolveSession, searchSessions } from '../api';
 import { logSearch } from '../debug';
-import type { LoadSessionOptions, SearchStatus, WorkspaceSearchGroup } from '../types';
+import type {
+  LoadSessionOptions,
+  SearchGroupSort,
+  SearchResultSort,
+  SearchStatus,
+  WorkspaceSearchGroup,
+} from '../types';
 
 interface UseSearchOptions {
   onError?: (message: string | null) => void;
@@ -10,12 +16,37 @@ interface UseSearchOptions {
 }
 
 const UUID_EXACT_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const FTS_TOKEN_REGEX = /[\p{L}\p{N}\p{M}]+/gu;
+const MAX_FTS_TOKENS = 32;
+const MIN_LATIN_TOKEN_LENGTH = 3;
+const MIN_NON_LATIN_TOKEN_LENGTH = 1;
+const MIN_NUMERIC_TOKEN_LENGTH = 2;
+const LATIN_SCRIPT_REGEX = /\p{Script=Latin}/u;
+const NUMERIC_TOKEN_REGEX = /^\p{N}+$/u;
+
+const getSearchTokens = (value: string) =>
+  (value.trim().match(FTS_TOKEN_REGEX) ?? []).filter(Boolean).slice(0, MAX_FTS_TOKENS);
+
+const isSearchableToken = (token: string) => {
+  if (!token) return false;
+  if (LATIN_SCRIPT_REGEX.test(token)) {
+    return token.length >= MIN_LATIN_TOKEN_LENGTH;
+  }
+  if (NUMERIC_TOKEN_REGEX.test(token)) {
+    return token.length >= MIN_NUMERIC_TOKEN_LENGTH;
+  }
+  return token.length >= MIN_NON_LATIN_TOKEN_LENGTH;
+};
+
+const hasSearchableToken = (value: string) => getSearchTokens(value).some(isSearchableToken);
 
 export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOptions) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchGroups, setSearchGroups] = useState<WorkspaceSearchGroup[]>([]);
   const [searchStatus, setSearchStatus] = useState<SearchStatus>('idle');
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [resultSort, setResultSort] = useState<SearchResultSort>('relevance');
+  const [groupSort, setGroupSort] = useState<SearchGroupSort>('last_seen');
   const searchTimeout = useRef<number | null>(null);
   const latestRequestId = useRef(0);
   const latestQuery = useRef('');
@@ -23,6 +54,7 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
   const skipNextSearchRef = useRef<string | null>(null);
   const pendingPasteRequestId = useRef<number | null>(null);
   const statusRef = useRef<SearchStatus>('idle');
+  const searchTooShort = Boolean(searchQuery.trim()) && !hasSearchableToken(searchQuery);
 
   const updateStatus = useCallback((next: SearchStatus, context?: Record<string, unknown>) => {
     const prev = statusRef.current;
@@ -63,9 +95,17 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
         return;
       }
       updateStatus('loading', { requestId, searchRequestId, query: trimmedQuery, source });
-      logSearch('request:start', { requestId, searchRequestId, query: trimmedQuery, workspace, source });
+      logSearch('request:start', {
+        requestId,
+        searchRequestId,
+        query: trimmedQuery,
+        workspace,
+        resultSort,
+        groupSort,
+        source,
+      });
       try {
-        const results = await searchSessions(trimmedQuery, 40, workspace, searchRequestId);
+        const results = await searchSessions(trimmedQuery, 40, workspace, searchRequestId, resultSort, groupSort);
         if (requestId !== latestRequestId.current || latestQuery.current !== trimmedQuery) return;
         setSearchGroups(results.groups);
         setSearchError(null);
@@ -75,6 +115,8 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
           searchRequestId,
           query: trimmedQuery,
           workspace,
+          resultSort,
+          groupSort,
           groupCount: results.groups.length,
           results,
           source,
@@ -97,6 +139,8 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
           searchRequestId,
           query: trimmedQuery,
           workspace,
+          resultSort,
+          groupSort,
           message,
           error,
           source,
@@ -119,12 +163,13 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
         }
       }
     },
-    [onError, updateStatus, workspace],
+    [groupSort, onError, resultSort, updateStatus, workspace],
   );
 
   useEffect(() => {
     const trimmedQuery = searchQuery.trim();
-    logSearch('input', { query: searchQuery, trimmedQuery, workspace });
+    const isSearchable = hasSearchableToken(trimmedQuery);
+    logSearch('input', { query: searchQuery, trimmedQuery, workspace, resultSort, groupSort });
     latestQuery.current = trimmedQuery;
     const nextRequestIdValue = pendingPasteRequestId.current ?? latestRequestId.current + 1;
     pendingPasteRequestId.current = null;
@@ -135,6 +180,13 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
       setSearchGroups([]);
       setSearchError(null);
       updateStatus('idle', { requestId, reason: 'empty-query' });
+      return;
+    }
+    if (!isSearchable) {
+      logSearch('clear', { requestId, reason: 'too-short' });
+      setSearchGroups([]);
+      setSearchError(null);
+      updateStatus('idle', { requestId, reason: 'too-short' });
       return;
     }
     setSearchGroups([]);
@@ -162,7 +214,7 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
         logSearch('debounce:cleanup', { requestId, query: trimmedQuery });
       }
     };
-  }, [executeSearch, nextRequestId, searchQuery, updateStatus, workspace]);
+  }, [executeSearch, groupSort, nextRequestId, resultSort, searchQuery, updateStatus, workspace]);
 
   const handleSearchKeyDown = useCallback(
     async (event: KeyboardEvent<HTMLInputElement>) => {
@@ -288,9 +340,14 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
   return {
     searchQuery,
     setSearchQuery,
+    searchTooShort,
     searchGroups,
     searchStatus,
     searchError,
+    resultSort,
+    setResultSort,
+    groupSort,
+    setGroupSort,
     handleSearchKeyDown,
     handleSearchPasteUuid,
   };

@@ -217,6 +217,83 @@
     gap: 0.5rem;
   }
 
+  .search-skeleton-card {
+    border-radius: 1rem;
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    background: rgba(255, 255, 255, 0.7);
+    padding: 0.75rem 1rem;
+    box-shadow: 0 10px 24px -22px rgba(15, 23, 42, 0.4);
+  }
+
+  .search-skeleton-row {
+    height: 10px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(226, 232, 240, 0.8), rgba(241, 245, 249, 0.9), rgba(226, 232, 240, 0.8));
+    background-size: 200% 100%;
+    animation: search-skeleton-pulse 1.6s ease-in-out infinite;
+  }
+
+  .search-skeleton-row + .search-skeleton-row {
+    margin-top: 0.5rem;
+  }
+
+  .search-skeleton-row-sm {
+    width: 40%;
+  }
+
+  .search-skeleton-row-lg {
+    width: 75%;
+  }
+
+  @keyframes search-skeleton-pulse {
+    0% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+
+  .search-sort-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .search-sort-desktop {
+    display: flex;
+  }
+
+  .search-sort-mobile {
+    display: none;
+  }
+
+  .search-sort-select {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .search-sort-label {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+  }
+
+  .search-sort-summary {
+    list-style: none;
+  }
+
+  .search-sort-summary::-webkit-details-marker {
+    display: none;
+  }
+
   .search-result-chip {
     @apply inline-flex min-w-0 items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 shadow-sm;
   }
@@ -232,6 +309,18 @@
   }
 
   @container search-panel (max-width: 500px) {
+    .search-sort-desktop {
+      display: none;
+    }
+    .search-sort-mobile {
+      display: block;
+    }
+    .search-sort-select {
+      width: 100%;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.25rem;
+    }
     .search-result-title {
       -webkit-line-clamp: 3;
     }

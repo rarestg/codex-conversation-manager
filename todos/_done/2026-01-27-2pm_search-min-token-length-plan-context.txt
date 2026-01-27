@@ -1,0 +1,22 @@
+Context: Script-aware minimum token length for search
+
+Summary
+Implemented a soft minimum token-length rule for search that blocks noisy single-letter Latin queries while preserving short non‑Latin and numeric searches. The server now short-circuits too-short queries, the client mirrors the same logic (including token cap), and the UI shows a clear “Type at least 3 characters to search” hint instead of “No matches.”
+
+Key changes
+- Added script-aware searchable-token rules in server normalizeFtsQuery: Latin >= 3, numeric >= 2, non‑Latin >= 1.
+- Mirrored the same rules and token cap in useSearch so client/server behavior stays aligned.
+- Introduced a derived `searchTooShort` flag and a dedicated UI hint in SearchPanel; forwarded through ConversationViewer and Sidebar.
+- Preserved the soft-min behavior: short tokens are still included when there is at least one searchable token.
+
+Files touched
+- server/apiPlugin.ts
+- src/features/conversation/hooks/useSearch.ts
+- src/features/conversation/components/SearchPanel.tsx
+- src/features/conversation/components/Sidebar.tsx
+- src/features/conversation/ConversationViewer.tsx
+
+Notes
+- Latin min length remains 3 (per decision), so “AI”/“Go” are intentionally blocked unless paired with a longer token.
+- UUID searches remain unaffected because they go through the resolve path, not FTS.
+- Ran npm run typecheck and npm run check (required a biome formatting pass).
