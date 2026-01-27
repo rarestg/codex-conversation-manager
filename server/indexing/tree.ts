@@ -1,6 +1,11 @@
 import path from 'node:path';
 import type Database from 'better-sqlite3';
-import type { SessionTreeEntry, YearsMap } from '../types';
+import type { SessionTreeEntry } from '../types';
+
+type SessionFileInfo = SessionTreeEntry;
+type DaysMap = Map<string, SessionFileInfo[]>;
+type MonthsMap = Map<string, DaysMap>;
+type YearsMap = Map<string, MonthsMap>;
 
 const MAX_PREVIEW_CHARS = 1000;
 const MAX_PREVIEW_LINES = 50;

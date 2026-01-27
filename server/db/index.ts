@@ -119,7 +119,7 @@ const ensureDb = () => {
   db = new Database(DB_PATH);
   db.pragma('journal_mode = WAL');
   db.pragma('synchronous = NORMAL');
-  db.pragma('trusted_schema = ON');
+  db.pragma('trusted_schema = ON'); // Allow schema-defined triggers/virtual tables in our local DB; we control the schema and accept the trade-off.
   logDebug('db open', DB_PATH);
   initSchema(db);
   ensureSessionColumns(db);

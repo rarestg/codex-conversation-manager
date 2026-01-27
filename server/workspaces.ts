@@ -10,7 +10,7 @@ export type WorkspaceSummary = {
   github_slug: string | null;
 };
 
-export const extractGithubSlug = (value?: string | null) => {
+const extractGithubSlug = (value?: string | null) => {
   if (!value) return null;
   const trimmed = value.trim();
   if (!trimmed) return null;

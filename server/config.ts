@@ -55,7 +55,8 @@ export const resolveSessionsRoot = async (): Promise<SessionsRootInfo> => {
 
 export const setSessionsRoot = async (root: string) => {
   cachedRoot = { value: root, source: 'config' };
-  await writeConfigFile({ sessionsRoot: root });
+  const existing = await readConfigFile();
+  await writeConfigFile({ ...existing, sessionsRoot: root });
 };
 
 export const ensureRootExists = async (root: string) => {

@@ -11,4 +11,4 @@ export const logSearchDebug = (...args: unknown[]) => {
   console.debug('[search]', ...args);
 };
 
-export { DEBUG_ENABLED, SEARCH_DEBUG_ENABLED };
+export { DEBUG_ENABLED };

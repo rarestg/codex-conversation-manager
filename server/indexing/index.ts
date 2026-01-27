@@ -158,6 +158,7 @@ const parseJsonlFile = async (filePath: string) => {
   let activeDurationPairs = 0;
   let sessionIdRank = 0;
   let sessionMetaSeen = false;
+  let malformedLines = 0;
 
   const parseTimestamp = (value?: string | null) => {
     if (!value) return null;
@@ -330,7 +331,14 @@ const parseJsonlFile = async (filePath: string) => {
           content: formatToolOutput(item),
         });
       }
-    } catch (_error) {}
+    } catch (error) {
+      if (malformedLines < 3) {
+        logDebug('parseJsonlFile: malformed line', { filePath, error });
+      } else if (malformedLines === 3) {
+        logDebug('parseJsonlFile: further malformed lines suppressed', { filePath });
+      }
+      malformedLines += 1;
+    }
   }
 
   closeActiveTurn();
@@ -356,6 +364,7 @@ const parseJsonlFile = async (filePath: string) => {
 const readSessionIdFromFile = async (filePath: string) => {
   let sessionId: string | null = null;
   let sessionIdRank = 0;
+  let malformedLines = 0;
 
   const updateSessionId = (value: unknown, rank: number) => {
     const extracted = extractSessionIdFromObject(value);
@@ -382,7 +391,14 @@ const readSessionIdFromFile = async (filePath: string) => {
         const payload = entry.payload ?? entry;
         updateSessionId(payload, 1);
       }
-    } catch (_error) {}
+    } catch (error) {
+      if (malformedLines < 3) {
+        logDebug('readSessionIdFromFile: malformed line', { filePath, error });
+      } else if (malformedLines === 3) {
+        logDebug('readSessionIdFromFile: further malformed lines suppressed', { filePath });
+      }
+      malformedLines += 1;
+    }
   }
 
   rl.close();
