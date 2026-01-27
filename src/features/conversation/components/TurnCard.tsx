@@ -5,9 +5,11 @@ import { MessageCard } from './MessageCard';
 interface TurnCardProps {
   turn: Turn;
   showFullContent: boolean;
+  highlightTokens?: string[];
+  isMatch?: boolean;
 }
 
-export const TurnCard = ({ turn, showFullContent }: TurnCardProps) => {
+export const TurnCard = ({ turn, showFullContent, highlightTokens, isMatch }: TurnCardProps) => {
   return (
     <section
       id={`turn-${turn.id}`}
@@ -31,7 +33,13 @@ export const TurnCard = ({ turn, showFullContent }: TurnCardProps) => {
           </div>
         ) : (
           turn.items.map((item, itemIndex) => (
-            <MessageCard key={item.id} item={item} itemIndex={itemIndex} showFullContent={showFullContent} />
+            <MessageCard
+              key={item.id}
+              item={item}
+              itemIndex={itemIndex}
+              showFullContent={showFullContent}
+              highlightTokens={isMatch ? highlightTokens : undefined}
+            />
           ))
         )}
       </div>

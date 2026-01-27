@@ -2,14 +2,14 @@ import { useMemo, useState } from 'react';
 import { canvasDemos } from './canvas/registry';
 import type { CanvasContext, CanvasDemoVariant } from './canvas/types';
 import { formatDate, formatTime } from './format';
-import type { SessionDetails, SessionFileEntry, SessionTree, Turn } from './types';
+import type { LoadSessionOptions, SessionDetails, SessionFileEntry, SessionTree, Turn } from './types';
 
 interface CanvasViewProps {
   sessionsTree: SessionTree | null;
   sessionsRoot: string;
   loadingSessions: boolean;
   onRefreshSessions: () => void;
-  onLoadSession: (sessionId: string, turnId?: number) => void;
+  onLoadSession: (sessionId: string, turnId?: number, options?: LoadSessionOptions) => void;
   activeSession: SessionFileEntry | null;
   sessionDetails: SessionDetails;
   turns: Turn[];

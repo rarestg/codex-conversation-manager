@@ -1,8 +1,8 @@
-import { type KeyboardEvent, memo } from 'react';
+import { type ClipboardEvent, type KeyboardEvent, memo } from 'react';
 import { isRenderDebugEnabled } from '../debug';
 import { useRenderDebug } from '../hooks/useRenderDebug';
 import { useWhyDidYouRender } from '../hooks/useWhyDidYouRender';
-import type { SessionFileEntry, SessionTree, WorkspaceSearchGroup } from '../types';
+import type { LoadSessionOptions, SearchStatus, SessionFileEntry, SessionTree, WorkspaceSearchGroup } from '../types';
 import { SearchPanel } from './SearchPanel';
 import { SessionsPanel } from './SessionsPanel';
 
@@ -13,9 +13,11 @@ interface SidebarProps {
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
   onSearchKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
+  onSearchPasteUuid?: (event: ClipboardEvent<HTMLInputElement>) => void;
   searchGroups: WorkspaceSearchGroup[];
-  searchLoading: boolean;
-  onLoadSession: (sessionId: string, turnId?: number) => void;
+  searchStatus: SearchStatus;
+  searchError?: string | null;
+  onLoadSession: (sessionId: string, turnId?: number, options?: LoadSessionOptions) => void;
   activeSession: SessionFileEntry | null;
   onRefreshSessions: () => void;
   activeWorkspace?: string | null;
@@ -29,8 +31,10 @@ const SidebarComponent = ({
   searchQuery,
   onSearchQueryChange,
   onSearchKeyDown,
+  onSearchPasteUuid,
   searchGroups,
-  searchLoading,
+  searchStatus,
+  searchError,
   onLoadSession,
   activeSession,
   onRefreshSessions,
@@ -41,7 +45,7 @@ const SidebarComponent = ({
   useRenderDebug('Sidebar', {
     sessionsLoading,
     searchQuery,
-    searchLoading,
+    searchStatus,
     searchGroupsCount: searchGroups.length,
     activeSessionId: activeSession?.id ?? null,
     activeWorkspace: activeWorkspace ?? null,
@@ -54,7 +58,8 @@ const SidebarComponent = ({
       sessionsLoading,
       searchQuery,
       searchGroups,
-      searchLoading,
+      searchStatus,
+      searchError,
       activeSession,
       activeWorkspace,
       onSearchQueryChange,
@@ -80,8 +85,10 @@ const SidebarComponent = ({
         searchQuery={searchQuery}
         onSearchQueryChange={onSearchQueryChange}
         onSearchKeyDown={onSearchKeyDown}
+        onSearchPasteUuid={onSearchPasteUuid}
         searchGroups={searchGroups}
-        searchLoading={searchLoading}
+        searchStatus={searchStatus}
+        searchError={searchError}
         onLoadSession={onLoadSession}
       />
       <SessionsPanel

@@ -66,30 +66,28 @@ Start Date: __________________________
 Target Date: _________________________
 
 Plan 2 — UUID Resolve + FTS Normalization
-Status: [ ] Not started  [ ] In progress  [ ] Blocked  [ ] Done
-Owner: _______________________________
+Status: [ ] Not started  [ ] In progress  [ ] Blocked  [x] Done
+Owner: Codex
 Notes:
-- 
-- 
+- Server now normalizes FTS queries and returns tokens; resolve-session ESCAPE fixed.
+- UUID paste auto-resolve added with debounced search suppression.
 
 Plan 1 — Search Debounce Status
-Status: [ ] Not started  [ ] In progress  [ ] Blocked  [ ] Done
-Owner: _______________________________
+Status: [ ] Not started  [ ] In progress  [ ] Blocked  [x] Done
+Owner: Codex
 Notes:
-- 
-- 
+- `searchStatus` lifecycle + error UI implemented; stale requests gated status updates.
 
 Plan 3 — Aggregated Results + Match Navigation
-Status: [ ] Not started  [ ] In progress  [ ] Blocked  [ ] Done
-Owner: _______________________________
+Status: [ ] Not started  [ ] In progress  [ ] Blocked  [x] Done
+Owner: Codex
 Notes:
-- 
-- 
+- /api/search aggregates per session; UI renders counts + snippets.
+- Added ?q= persistence, /api/session-matches, and in-session highlight + Next/Prev.
 
 Cross‑cutting Notes / Decisions
-- 
-- 
-- 
+- Search results now return `tokens` for highlight parity with server normalization.
+- URL sync extended to include `?q=` and preserved during turn navigation.
 
 Testing & Verification Checklist
 - FTS normalization: no “no such column” or `<` syntax errors; non‑Latin queries still work.
@@ -97,4 +95,3 @@ Testing & Verification Checklist
 - Debounce status: empty state does not flash during debounce; error state displays correctly; stale requests do not update status.
 - Aggregated results: one row per session, correct match counts, navigation uses session_path + first_match_turn_id.
 - Match navigation: `?q=` persists through refresh; `/api/session-matches` returns turn IDs; Next/Prev jumps correctly.
-

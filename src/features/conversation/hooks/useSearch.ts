@@ -1,80 +1,111 @@
-import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { type ClipboardEvent, type KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { resolveSession, searchSessions } from '../api';
 import { logSearch } from '../debug';
-import type { WorkspaceSearchGroup } from '../types';
+import type { LoadSessionOptions, SearchStatus, WorkspaceSearchGroup } from '../types';
 
 interface UseSearchOptions {
   onError?: (message: string | null) => void;
-  onLoadSession: (sessionId: string, turnId?: number) => Promise<void> | void;
+  onLoadSession: (sessionId: string, turnId?: number, options?: LoadSessionOptions) => Promise<void> | void;
   workspace?: string | null;
 }
+
+const UUID_EXACT_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOptions) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchGroups, setSearchGroups] = useState<WorkspaceSearchGroup[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchTokens, setSearchTokens] = useState<string[]>([]);
+  const [searchStatus, setSearchStatus] = useState<SearchStatus>('idle');
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [lastCompletedQuery, setLastCompletedQuery] = useState<string | null>(null);
   const searchTimeout = useRef<number | null>(null);
   const latestRequestId = useRef(0);
   const latestQuery = useRef('');
   const requestCounter = useRef(0);
+  const skipNextSearchRef = useRef<string | null>(null);
+  const pendingPasteRequestId = useRef<number | null>(null);
+  const statusRef = useRef<SearchStatus>('idle');
+
+  const updateStatus = useCallback((next: SearchStatus, context?: Record<string, unknown>) => {
+    const prev = statusRef.current;
+    if (prev !== next) {
+      logSearch('status:set', { from: prev, to: next, ...context });
+      statusRef.current = next;
+    }
+    setSearchStatus(next);
+  }, []);
 
   const nextRequestId = useCallback((prefix: string) => {
     requestCounter.current += 1;
     return `${prefix}-${Date.now().toString(36)}-${requestCounter.current.toString(36)}`;
   }, []);
 
-  useEffect(() => {
-    const trimmedQuery = searchQuery.trim();
-    logSearch('input', { query: searchQuery, trimmedQuery, workspace });
-    latestQuery.current = trimmedQuery;
-    latestRequestId.current += 1;
-    const requestId = latestRequestId.current;
-    if (!trimmedQuery) {
-      logSearch('clear', { requestId, reason: 'empty-query' });
-      setSearchGroups([]);
-      setSearchLoading(false);
-      return;
-    }
-    if (searchTimeout.current) {
-      window.clearTimeout(searchTimeout.current);
-      logSearch('debounce:clear', { requestId, query: trimmedQuery });
-    }
-    const searchRequestId = nextRequestId('search');
-    logSearch('debounce:start', { requestId, searchRequestId, query: trimmedQuery, delayMs: 350 });
-    searchTimeout.current = window.setTimeout(async () => {
-      logSearch('state:loading:set', { requestId, searchRequestId, query: trimmedQuery, value: true });
-      setSearchLoading(true);
-      logSearch('request:start', { requestId, searchRequestId, query: trimmedQuery, workspace });
+  const executeSearch = useCallback(
+    async ({
+      trimmedQuery,
+      requestId,
+      searchRequestId,
+      source,
+    }: {
+      trimmedQuery: string;
+      requestId: number;
+      searchRequestId: string;
+      source: 'debounce' | 'paste-fallback';
+    }) => {
+      const isStaleStart = requestId !== latestRequestId.current || latestQuery.current !== trimmedQuery;
+      if (isStaleStart) {
+        logSearch('request:stale:skip', {
+          requestId,
+          searchRequestId,
+          query: trimmedQuery,
+          latestRequestId: latestRequestId.current,
+          latestQuery: latestQuery.current,
+          source,
+        });
+        return;
+      }
+      updateStatus('loading', { requestId, searchRequestId, query: trimmedQuery, source });
+      logSearch('request:start', { requestId, searchRequestId, query: trimmedQuery, workspace, source });
       try {
         const results = await searchSessions(trimmedQuery, 40, workspace, searchRequestId);
         if (requestId !== latestRequestId.current || latestQuery.current !== trimmedQuery) return;
-        setSearchGroups(results);
+        setSearchGroups(results.groups);
+        setSearchTokens(results.tokens);
+        setSearchError(null);
+        setLastCompletedQuery(trimmedQuery);
+        updateStatus('success', { requestId, searchRequestId, query: trimmedQuery, source });
         logSearch('request:success', {
           requestId,
           searchRequestId,
           query: trimmedQuery,
           workspace,
-          groupCount: results.length,
+          groupCount: results.groups.length,
           results,
+          source,
         });
         logSearch('state:groups:set', {
           requestId,
           searchRequestId,
           query: trimmedQuery,
-          groupCount: results.length,
-          resultCount: results.reduce((total, group) => total + group.results.length, 0),
+          groupCount: results.groups.length,
+          resultCount: results.groups.reduce((total, group) => total + group.results.length, 0),
+          source,
         });
       } catch (error: any) {
         if (requestId !== latestRequestId.current || latestQuery.current !== trimmedQuery) return;
+        const message = error?.message || 'Search failed.';
+        setSearchError(message);
+        updateStatus('error', { requestId, searchRequestId, query: trimmedQuery, source });
         logSearch('request:error', {
           requestId,
           searchRequestId,
           query: trimmedQuery,
           workspace,
-          message: error?.message || 'Search failed.',
+          message,
           error,
+          source,
         });
-        onError?.(error?.message || 'Search failed.');
+        onError?.(message);
       } finally {
         const isStale = requestId !== latestRequestId.current || latestQuery.current !== trimmedQuery;
         if (isStale) {
@@ -84,14 +115,52 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
             query: trimmedQuery,
             latestRequestId: latestRequestId.current,
             latestQuery: latestQuery.current,
+            source,
           });
         }
         if (!isStale) {
-          logSearch('state:loading:set', { requestId, searchRequestId, query: trimmedQuery, value: false });
-          setSearchLoading(false);
-          logSearch('request:complete', { requestId, searchRequestId, query: trimmedQuery });
+          logSearch('request:complete', { requestId, searchRequestId, query: trimmedQuery, source });
         }
       }
+    },
+    [onError, updateStatus, workspace],
+  );
+
+  useEffect(() => {
+    const trimmedQuery = searchQuery.trim();
+    logSearch('input', { query: searchQuery, trimmedQuery, workspace });
+    latestQuery.current = trimmedQuery;
+    const nextRequestIdValue = pendingPasteRequestId.current ?? latestRequestId.current + 1;
+    pendingPasteRequestId.current = null;
+    latestRequestId.current = nextRequestIdValue;
+    const requestId = latestRequestId.current;
+    if (!trimmedQuery) {
+      logSearch('clear', { requestId, reason: 'empty-query' });
+      setSearchGroups([]);
+      setSearchTokens([]);
+      setSearchError(null);
+      setLastCompletedQuery(null);
+      updateStatus('idle', { requestId, reason: 'empty-query' });
+      return;
+    }
+    setSearchGroups([]);
+    setSearchTokens([]);
+    setSearchError(null);
+    updateStatus('debouncing', { requestId, query: trimmedQuery });
+    if (skipNextSearchRef.current === trimmedQuery) {
+      skipNextSearchRef.current = null;
+      logSearch('debounce:skip', { requestId, query: trimmedQuery, reason: 'paste-uuid' });
+      updateStatus('debouncing', { requestId, query: trimmedQuery, reason: 'paste-uuid' });
+      return;
+    }
+    if (searchTimeout.current) {
+      window.clearTimeout(searchTimeout.current);
+      logSearch('debounce:clear', { requestId, query: trimmedQuery });
+    }
+    const searchRequestId = nextRequestId('search');
+    logSearch('debounce:start', { requestId, searchRequestId, query: trimmedQuery, delayMs: 350 });
+    searchTimeout.current = window.setTimeout(async () => {
+      await executeSearch({ trimmedQuery, requestId, searchRequestId, source: 'debounce' });
     }, 350);
 
     return () => {
@@ -100,7 +169,7 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
         logSearch('debounce:cleanup', { requestId, query: trimmedQuery });
       }
     };
-  }, [nextRequestId, onError, searchQuery, workspace]);
+  }, [executeSearch, nextRequestId, searchQuery, updateStatus, workspace]);
 
   const handleSearchKeyDown = useCallback(
     async (event: KeyboardEvent<HTMLInputElement>) => {
@@ -117,6 +186,7 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
         await onLoadSession(resolved);
         setSearchQuery('');
         setSearchGroups([]);
+        setSearchTokens([]);
         logSearch('resolve:clear', { resolveRequestId, reason: 'session-loaded' });
       } catch (error: any) {
         logSearch('resolve:error', {
@@ -132,18 +202,94 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
     [nextRequestId, onError, onLoadSession, searchQuery, workspace],
   );
 
+  const handleSearchPasteUuid = useCallback(
+    async (event: ClipboardEvent<HTMLInputElement>) => {
+      const pasted = event.clipboardData?.getData('text')?.trim() ?? '';
+      if (!pasted || !UUID_EXACT_REGEX.test(pasted)) return;
+      event.preventDefault();
+      logSearch('paste:uuid', { query: pasted, workspace });
+      const requestId = latestRequestId.current + 1;
+      latestRequestId.current = requestId;
+      latestQuery.current = pasted;
+      pendingPasteRequestId.current = requestId;
+      skipNextSearchRef.current = pasted;
+      setSearchQuery(pasted);
+      setSearchGroups([]);
+      setSearchTokens([]);
+      setSearchError(null);
+      updateStatus('debouncing', { query: pasted, reason: 'paste-uuid' });
+      const resolveRequestId = nextRequestId('resolve');
+      logSearch('resolve:start', { resolveRequestId, query: pasted, workspace, source: 'paste' });
+      try {
+        const resolved = await resolveSession(pasted, workspace, resolveRequestId);
+        if (resolved) {
+          logSearch('resolve:found', { resolveRequestId, query: pasted, resolved, workspace, source: 'paste' });
+          await onLoadSession(resolved);
+          setSearchQuery('');
+          setSearchGroups([]);
+          setSearchTokens([]);
+          setSearchError(null);
+          setLastCompletedQuery(null);
+          logSearch('resolve:clear', { resolveRequestId, reason: 'session-loaded', source: 'paste' });
+          return;
+        }
+        logSearch('resolve:miss', { resolveRequestId, query: pasted, workspace, source: 'paste' });
+        if (latestQuery.current !== pasted || latestRequestId.current !== requestId) {
+          logSearch('paste:search-skip', {
+            resolveRequestId,
+            query: pasted,
+            reason: 'stale-query',
+            latestQuery: latestQuery.current,
+            latestRequestId: latestRequestId.current,
+            requestId,
+          });
+          return;
+        }
+        const searchRequestId = nextRequestId('search');
+        await executeSearch({
+          trimmedQuery: pasted,
+          requestId,
+          searchRequestId,
+          source: 'paste-fallback',
+        });
+      } catch (error: any) {
+        const message = error?.message || 'Unable to resolve session.';
+        setSearchError(message);
+        updateStatus('error', { query: pasted, reason: 'resolve-error', source: 'paste' });
+        logSearch('resolve:error', {
+          resolveRequestId,
+          query: pasted,
+          workspace,
+          message,
+          error,
+          source: 'paste',
+        });
+        onError?.(message);
+      }
+    },
+    [executeSearch, nextRequestId, onError, onLoadSession, updateStatus, workspace],
+  );
+
   const clearSearch = useCallback(() => {
     logSearch('clear', { reason: 'manual' });
     setSearchQuery('');
     setSearchGroups([]);
-  }, []);
+    setSearchTokens([]);
+    setSearchError(null);
+    setLastCompletedQuery(null);
+    updateStatus('idle', { reason: 'manual' });
+  }, [updateStatus]);
 
   return {
     searchQuery,
     setSearchQuery,
     searchGroups,
-    searchLoading,
+    searchTokens,
+    searchStatus,
+    searchError,
+    lastCompletedQuery,
     handleSearchKeyDown,
+    handleSearchPasteUuid,
     clearSearch,
   };
 };

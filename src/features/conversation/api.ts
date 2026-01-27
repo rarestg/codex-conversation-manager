@@ -1,4 +1,4 @@
-import type { IndexSummary, SessionTree, WorkspaceSearchGroup, WorkspaceSummary } from './types';
+import type { IndexSummary, SearchResponse, SessionMatchesResponse, SessionTree, WorkspaceSummary } from './types';
 
 const parseError = async (res: Response, fallback: string): Promise<never> => {
   let message = fallback;
@@ -43,7 +43,7 @@ export const searchSessions = async (
   limit = 40,
   workspace?: string | null,
   requestId?: string | null,
-) => {
+): Promise<SearchResponse> => {
   const params = new URLSearchParams({ q: query, limit: String(limit) });
   if (workspace) {
     params.set('workspace', workspace);
@@ -55,8 +55,11 @@ export const searchSessions = async (
   if (!res.ok) {
     await parseError(res, 'Search failed.');
   }
-  const data = await res.json();
-  return (data?.groups || []) as WorkspaceSearchGroup[];
+  const data = (await res.json()) as Partial<SearchResponse> | null;
+  return {
+    groups: data?.groups ?? [],
+    tokens: data?.tokens ?? [],
+  };
 };
 
 export const fetchWorkspaces = async (sort: 'last_seen' | 'session_count' = 'last_seen') => {
@@ -114,4 +117,21 @@ export const resolveSession = async (query: string, workspace?: string | null, r
   }
   const data = await res.json();
   return data?.id ? (data.id as string) : null;
+};
+
+export const fetchSessionMatches = async (sessionId: string, query: string, requestId?: string | null) => {
+  const params = new URLSearchParams({ session: sessionId, q: query });
+  if (requestId) {
+    params.set('requestId', requestId);
+  }
+  const res = await fetch(`/api/session-matches?${params.toString()}`);
+  if (!res.ok) {
+    await parseError(res, 'Unable to load session matches.');
+  }
+  const data = (await res.json()) as SessionMatchesResponse;
+  return {
+    session: data?.session ?? sessionId,
+    tokens: data?.tokens ?? [],
+    turn_ids: data?.turn_ids ?? [],
+  } as SessionMatchesResponse;
 };

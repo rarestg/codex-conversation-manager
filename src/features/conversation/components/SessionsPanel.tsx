@@ -16,7 +16,7 @@ import {
 } from '../format';
 import { useRenderDebug } from '../hooks/useRenderDebug';
 import { useWhyDidYouRender } from '../hooks/useWhyDidYouRender';
-import type { SessionFileEntry, SessionTree } from '../types';
+import type { LoadSessionOptions, SessionFileEntry, SessionTree } from '../types';
 import { CopyButton } from './CopyButton';
 
 const SESSIONS_SKELETON_KEYS = ['a', 'b', 'c', 'd', 'e'];
@@ -26,7 +26,7 @@ interface SessionsPanelProps {
   sessionsRoot: string;
   loading: boolean;
   onRefreshSessions: () => void;
-  onLoadSession: (sessionId: string, turnId?: number) => void;
+  onLoadSession: (sessionId: string, turnId?: number, options?: LoadSessionOptions) => void;
   activeSession: SessionFileEntry | null;
   activeWorkspace?: string | null;
   onClearWorkspace?: () => void;

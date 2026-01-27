@@ -1,4 +1,5 @@
 export type ParsedItemType = 'user' | 'assistant' | 'thought' | 'tool_call' | 'tool_output' | 'meta' | 'token_count';
+export type SearchStatus = 'idle' | 'debouncing' | 'loading' | 'success' | 'error';
 
 export interface ParsedItem {
   id: string;
@@ -73,6 +74,21 @@ export interface SearchResult {
   snippet?: string | null;
 }
 
+export interface SessionSearchResult {
+  session_path: string;
+  session_id: string | null;
+  first_user_message?: string | null;
+  session_timestamp?: string | null;
+  cwd?: string | null;
+  git_branch?: string | null;
+  git_repo?: string | null;
+  git_commit_hash?: string | null;
+  match_message_count: number;
+  match_turn_count: number;
+  first_match_turn_id: number | null;
+  snippet?: string | null;
+}
+
 export interface WorkspaceSummary {
   cwd: string;
   session_count: number;
@@ -85,14 +101,26 @@ export interface WorkspaceSummary {
 
 export interface WorkspaceSearchGroup {
   workspace: WorkspaceSummary;
-  results: SearchResult[];
+  results: SessionSearchResult[];
   match_count: number;
+}
+
+export interface SearchResponse {
+  groups: WorkspaceSearchGroup[];
+  tokens: string[];
+}
+
+export interface SessionMatchesResponse {
+  session: string;
+  tokens: string[];
+  turn_ids: number[];
 }
 
 export type HistoryMode = 'replace' | 'push';
 
 export interface LoadSessionOptions {
   historyMode?: HistoryMode;
+  searchQuery?: string | null;
 }
 
 export interface JumpToTurnOptions {

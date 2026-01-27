@@ -11,24 +11,24 @@ export const useUrlSync = (
   useEffect(() => {
     if (initialLoadRef.current) return;
     initialLoadRef.current = true;
-    const { sessionId, turnId } = getSessionParamsFromLocation();
+    const { sessionId, turnId, searchQuery } = getSessionParamsFromLocation();
     if (!sessionId) {
       clearSession();
       return;
     }
     const parsedTurn = typeof turnId === 'number' && Number.isFinite(turnId) ? turnId : undefined;
-    loadSession(sessionId, parsedTurn, { historyMode: 'replace' });
+    loadSession(sessionId, parsedTurn, { historyMode: 'replace', searchQuery });
   }, [clearSession, loadSession]);
 
   useEffect(() => {
     const handlePopState = () => {
-      const { sessionId, turnId } = getSessionParamsFromLocation();
+      const { sessionId, turnId, searchQuery } = getSessionParamsFromLocation();
       if (!sessionId) {
         clearSession();
         return;
       }
       const parsedTurn = typeof turnId === 'number' && Number.isFinite(turnId) ? turnId : undefined;
-      loadSession(sessionId, parsedTurn, { historyMode: 'replace' });
+      loadSession(sessionId, parsedTurn, { historyMode: 'replace', searchQuery });
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
