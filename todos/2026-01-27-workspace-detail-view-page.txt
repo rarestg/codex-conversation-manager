@@ -1,0 +1,17 @@
+Title: Workspace detail view + “Open workspace” entry point
+
+Why
+- Workspaces are a primary way users mentally organize sessions, but the UI only offers a filtered home list.
+- A workspace-forward view would make it easier to browse, slice, and search within a single repo.
+
+Scope / intent
+- Add an “Open workspace” button/link alongside “Open on GitHub” in the Workspaces panel.
+- New workspace detail page that focuses on a single workspace: grid/list of conversations, optimized for scanning.
+- Provide filters and sorting within the workspace view (branch, date, rounds/turns, etc.).
+- Include a dedicated search that scopes to this workspace only.
+- Use the available viewport space to show richer session cards (grid layout or dense list with metadata chips).
+
+Notes
+- Consider URL structure (e.g., `?workspace=...` or `/workspaces/:slug`) and deep-linking.
+- Ensure scoping does not require reindexing; reuse existing session metadata.
+- Decide how this interacts with global search + home filters.

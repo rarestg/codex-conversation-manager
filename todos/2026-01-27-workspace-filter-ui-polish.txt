@@ -1,0 +1,16 @@
+Title: Workspace filter clarity + sessions/search header alignment
+
+Why
+- Workspace selection filters both search + sessions, but only Sessions panel communicates this clearly.
+- The Sessions header layout makes the Refresh button look aligned with the workspace pills when the Clear pill wraps.
+- Workspace cards feel partially clickable; the area next to “Open on GitHub” doesn’t use the pointer, making selection feel inconsistent.
+
+Scope / intent
+- Search panel: show an explicit “Filtered by workspace” state when a workspace filter is active, aligned with the Sessions panel messaging.
+- Sessions panel: adjust the filter pill row so the Refresh button aligns with the same horizontal baseline as the filter pills, and the Clear pill doesn’t visually drop into a misleading second row.
+- Style: borrow the compact, structured look of SearchPanel sort controls for the workspace filter state (e.g., grouped pills, clear label, consistent spacing).
+- Workspace cards: ensure the entire row (excluding the GitHub link) remains clickable; avoid pointer dead-zones to the right of the link.
+
+Notes
+- The filter should read as global (affects search + sessions + any other home panels), not a Sessions-only filter.
+- Keep the GitHub link behaving as a distinct click target.
