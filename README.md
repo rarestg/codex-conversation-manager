@@ -42,6 +42,8 @@ pre-commit run --all-files
 - Debug logging: set `CODEX_DEBUG=1`.
 - Search debug logging: set `CODEX_SEARCH_DEBUG=1`.
 - Render debug logging (dev only): `VITE_RENDER_DEBUG=1`.
+- Search UI debug logging (dev only): `VITE_SEARCH_DEBUG=1`.
+- Turn navigation debug logging (dev only): `VITE_TURN_NAV_DEBUG=1`.
 
 ## Code Tour
 - `src/main.tsx` wires up the app and imports the feature entry.
@@ -67,18 +69,34 @@ pre-commit run --all-files
 - `src/features/conversation/parsing.ts` implements JSONL parsing rules and turn grouping.
 - `src/features/conversation/markdown.tsx` handles sanitized markdown + snippet highlighting.
 - `src/features/conversation/api.ts` wraps API fetches; `copy.ts` formats exports; `url.ts` handles deep links.
-- `vite.config.ts` contains API endpoints and SQLite indexing logic.
+- `shared/apiTypes.ts` shares API response types between client + server.
+- `server/apiPlugin.ts` is a thin Vite middleware adapter.
+- `server/routes/index.ts` maps API routes to handlers.
+- `server/http.ts` provides JSON/body helpers.
+- `server/config.ts` handles sessions root config + path safety.
+- `server/db/index.ts` owns SQLite connection + schema.
+- `server/indexing/` contains JSONL parsing + indexing + sessions tree.
+- `server/search/` owns FTS normalization + SQL queries.
+- `server/workspaces.ts` builds workspace summaries.
+- `server/logging.ts` centralizes debug logging.
+- `vite.config.ts` wires Vite + API plugin.
 
 ## API Endpoints (dev middleware)
 - `GET /api/config` / `POST /api/config`
 - `GET /api/sessions`
 - `GET /api/session?path=...`
-- `GET /api/search?q=...&limit=...`
+- `GET /api/search?q=...&limit=...&resultSort=...&groupSort=...`
 - `GET /api/session-matches?session=...&q=...`
 - `GET /api/workspaces?sort=...`
 - `POST /api/reindex`
 - `POST /api/clear-index`
 - `GET /api/resolve-session?id=...`
+
+## Search API Notes
+- Sorting is server-driven: `resultSort` applies in SQL, `groupSort` applies after grouping.
+- Search responses include `requestId` (echoed when supplied) and `Server-Timing` headers for profiling.
+- Workspace summaries are computed only for workspaces present in the search results (Option A).
+- If Option A becomes slow at scale, the clean third approach is to materialize a workspaces table during indexing and query it directly (requires schema/migration updates and reindex invalidation).
 
 ## Development
 ```bash

@@ -1,6 +1,6 @@
 Status as of 2026-01-27:
 
-Implemented (plan steps 1–8 complete; checks run after each):
+Implemented (plan steps 1–9 complete; checks run after each):
 - Server API refactor: new routing layer + utilities (server/routes/index.ts, server/http.ts) and slimmer server/apiPlugin.ts.
 - Config/path safety extracted to server/config.ts.
 - DB + logging extracted to server/db/index.ts and server/logging.ts.
@@ -9,10 +9,9 @@ Implemented (plan steps 1–8 complete; checks run after each):
 - Workspace helpers extracted and search updated to use Option A summaries (server/workspaces.ts).
 - Search performance: workspace filter applied in matches CTE, workspace summaries limited to result workspaces, early empty guard.
 - Server-Timing headers + requestId echo for /api/search and /api/session-matches.
+- Shared API types added in shared/apiTypes.ts and wired through client + server (tsconfig includes updated).
 
-Not implemented yet (plan steps 9–11):
-- Shared API types (shared/apiTypes.ts) + update client/server imports and tsconfig includes.
-- Docs updates (README/AGENTS + note about a “clean third approach” if Option A is slow).
+Not implemented yet (plan steps 10–11 remainder):
 - Tests (explicitly deferred).
 
 Docs to understand the original plan + current status:

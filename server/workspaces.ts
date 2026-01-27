@@ -1,14 +1,7 @@
 import type Database from 'better-sqlite3';
+import type { WorkspaceSummary } from '../shared/apiTypes';
 
-export type WorkspaceSummary = {
-  cwd: string;
-  session_count: number;
-  last_seen: string | null;
-  git_branch: string | null;
-  git_repo: string | null;
-  git_commit_hash: string | null;
-  github_slug: string | null;
-};
+export type { WorkspaceSummary };
 
 const extractGithubSlug = (value?: string | null) => {
   if (!value) return null;

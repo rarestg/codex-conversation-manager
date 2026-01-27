@@ -67,10 +67,11 @@ export const searchSessions = async (
   if (!res.ok) {
     await parseError(res, 'Search failed.');
   }
-  const data = (await res.json()) as Partial<SearchResponse> | null;
+  const data = (await res.json()) as SearchResponse | null;
   return {
     groups: data?.groups ?? [],
     tokens: data?.tokens ?? [],
+    requestId: data?.requestId,
   };
 };
 
@@ -145,5 +146,6 @@ export const fetchSessionMatches = async (sessionId: string, query: string, requ
     session: data?.session ?? sessionId,
     tokens: data?.tokens ?? [],
     turn_ids: data?.turn_ids ?? [],
+    requestId: data?.requestId,
   } as SessionMatchesResponse;
 };

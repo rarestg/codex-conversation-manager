@@ -1,47 +1,26 @@
 import { performance } from 'node:perf_hooks';
 import type Database from 'better-sqlite3';
+import type {
+  SearchGroupSort,
+  SearchResponse,
+  SearchResultSort,
+  SessionMatchesResponse,
+  SessionSearchResult,
+  WorkspaceSearchGroup,
+} from '../../shared/apiTypes';
 import { logDebug, logSearchDebug } from '../logging';
 import type { WorkspaceSummary } from '../workspaces';
 import { normalizeFtsQuery } from './normalize';
 
-export type SearchResultSort = 'relevance' | 'matches' | 'recent';
-export type SearchGroupSort = 'last_seen' | 'matches';
-
-type SearchResultRow = {
-  session_path: string;
-  session_id: string | null;
-  first_user_message?: string | null;
-  session_timestamp?: string | null;
-  cwd?: string | null;
-  git_branch?: string | null;
-  git_repo?: string | null;
-  git_commit_hash?: string | null;
-  match_message_count: number;
-  match_turn_count: number;
-  first_match_turn_id: number | null;
-  snippet?: string | null;
-  turn_count?: number | null;
-  started_at?: string | null;
-  ended_at?: string | null;
-  active_duration_ms?: number | null;
+export type {
+  SearchGroupSort,
+  SearchResponse,
+  SearchResultSort,
+  SessionMatchesResponse,
+  SessionSearchResult,
+  WorkspaceSearchGroup,
 };
-
-export type WorkspaceSearchGroup = {
-  workspace: WorkspaceSummary;
-  match_count: number;
-  results: SearchResultRow[];
-};
-
-export type SearchResponse = {
-  groups: WorkspaceSearchGroup[];
-  tokens: string[];
-};
-
-export type SessionMatchesResponse = {
-  session: string;
-  tokens: string[];
-  turn_ids: number[];
-};
+type SearchResultRow = SessionSearchResult;
 
 export type SearchTimings = {
   normalizeMs: number;

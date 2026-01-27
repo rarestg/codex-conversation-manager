@@ -58,8 +58,17 @@ Fix commands when needed:
 - `src/features/conversation/debug.ts` - render debug flag (`VITE_RENDER_DEBUG`).
 - `src/features/conversation/url.ts` - session/turn query-string helpers.
 - `src/index.css` - Tailwind entry, global theme, and animation utilities.
-- `server/apiPlugin.ts` - Vite API middleware + SQLite indexing.
+- `server/apiPlugin.ts` - Vite API middleware adapter (delegates to routes).
+- `server/routes/index.ts` - HTTP routing for API endpoints.
+- `server/http.ts` - JSON helpers + body parsing.
+- `server/config.ts` - sessions root config + path safety.
+- `server/db/index.ts` - SQLite connection + schema management.
+- `server/indexing/` - JSONL parsing + indexing + sessions tree.
+- `server/search/` - FTS normalization + query builders.
+- `server/workspaces.ts` - workspace summaries + GitHub slug extraction.
+- `server/logging.ts` - debug/search logging toggles.
 - `vite.config.ts` - Vite config wiring.
+- `shared/apiTypes.ts` - shared API response/types for client + server.
 - `IMPLEMENTATION_PLAN.txt` / `DESIGN_APPENDIX.txt` - historical spec + schema notes.
 
 ## Architecture at a Glance
@@ -70,7 +79,7 @@ Fix commands when needed:
   - `useSearch` queries FTS and resolves session IDs.
   - `useWorkspaces` loads workspace summaries for filtering.
   - `useUrlSync` keeps `?session=...&turn=...` in sync with the browser history.
-- **Backend**: Vite dev-server middleware (in `server/apiPlugin.ts`) serves config, sessions, search, workspaces, and indexing.
+- **Backend**: Vite dev-server middleware (`server/apiPlugin.ts`) delegates to route handlers in `server/routes/index.ts`, which call config/db/indexing/search/workspace helpers.
 - **Storage**: SQLite DB in user home directory; session JSONL files read from disk.
 
 ## JSONL Parsing Rules (Critical)
@@ -106,19 +115,23 @@ Fix commands when needed:
 - `url.ts` handles normalization + history updates; `useUrlSync` applies it on load/back/forward.
 
 ## Indexing & Search (SQLite FTS5)
-- Schema + indexing live in `server/apiPlugin.ts`.
+- Schema + DB wiring live in `server/db/index.ts`.
+- Indexing + session parsing live in `server/indexing/`.
+- FTS normalization + queries live in `server/search/`.
+- Workspace summaries live in `server/workspaces.ts`.
 - Tables: `sessions`, `files`, `messages`, `messages_fts` (FTS5).
 - Indexing is incremental via file size + mtime checks; it streams JSONL lines.
 - Session preview text is the first user message (bounded by a line limit).
 - Search results include highlighted snippets (`[[...]]`), rendered in `renderSnippet`.
+- Search responses echo `requestId` when provided and include `Server-Timing` headers.
 
 ## Server/API Endpoints
 - `GET /api/config` → read sessions root + source (`env`, `config`, `default`).
 - `POST /api/config` → update sessions root (disabled when env override is set).
 - `GET /api/sessions` → tree of available sessions grouped by year/month/day.
 - `GET /api/session?path=...` → raw JSONL for a single session.
-- `GET /api/search?q=...&limit=...` → FTS search results.
-- `GET /api/session-matches?session=...&q=...` → matching turn IDs for in-session navigation.
+- `GET /api/search?q=...&limit=...&resultSort=...&groupSort=...&requestId=...` → FTS search results.
+- `GET /api/session-matches?session=...&q=...&requestId=...` → matching turn IDs for in-session navigation.
 - `GET /api/workspaces?sort=...` → workspace summaries for filtering.
 - `POST /api/reindex` → rebuild/refresh index incrementally.
 - `POST /api/clear-index` → drop + rebuild index.
@@ -132,6 +145,8 @@ Fix commands when needed:
 - Debug logging: `CODEX_DEBUG=1`.
 - Search debug logging: `CODEX_SEARCH_DEBUG=1`.
 - Render debug logging (dev only): `VITE_RENDER_DEBUG=1` (see `.env.example`).
+- Search UI debug logging (dev only): `VITE_SEARCH_DEBUG=1`.
+- Turn navigation debug logging (dev only): `VITE_TURN_NAV_DEBUG=1`.
 - **Path safety**: reject `..`, absolute paths, or paths outside root.
 
 ## UI Behavior
@@ -175,6 +190,27 @@ Fix commands when needed:
 
 ## Communication Guardrails
 - If user-provided content appears redacted or summarized (e.g. `[Pasted Content ...]`), call it out immediately and ask for the full content.
+
+## Agent-Browser (UI Automation)
+- Before using, confirm availability: run `agent-browser --help`.
+- Use it for quick UI sanity checks while implementing:
+  - `agent-browser open http://localhost:5173` and `agent-browser wait --load networkidle`
+  - `agent-browser snapshot -i -c` for an interactive map with refs
+  - `agent-browser fill @ref "text"` + `agent-browser press Enter` for search
+  - `agent-browser select @ref "Option"` for sort/workspace filters
+  - `agent-browser click @ref` to open sessions and verify deep links (`?session=...&turn=...&q=...`)
+  - `agent-browser get url` to confirm navigation
+- Useful extra checks:
+  - `agent-browser console` and `agent-browser errors` for runtime issues
+  - `agent-browser screenshot --full` for UI snapshots during review
+  - `agent-browser set viewport <w> <h>` or `set device` to verify mobile layouts
+- Nudge: use agent-browser to validate UI changes as you implement, not just at the end.
+- Run the dev server in tmux for parallel log capture:
+  - `tmux new -s codex-dev 'VITE_RENDER_DEBUG=1 VITE_TURN_NAV_DEBUG=1 VITE_SEARCH_DEBUG=1 CODEX_DEBUG=1 CODEX_SEARCH_DEBUG=1 npm run dev'`
+  - `tmux attach -t codex-dev` to inspect logs while running UI checks.
+- Close out cleanly when done:
+  - `agent-browser close` to shut the browser session.
+  - `tmux kill-session -t codex-dev` to stop the dev server.
 
 ## Todos Index Usage
 - The canonical completed-plan index lives at `todos/_done/INDEX.txt`.
