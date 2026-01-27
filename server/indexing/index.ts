@@ -377,32 +377,34 @@ const readSessionIdFromFile = async (filePath: string) => {
   const stream = fs.createReadStream(filePath, { encoding: 'utf-8' });
   const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
 
-  for await (const line of rl) {
-    if (!line.trim()) continue;
-    try {
-      const entry = JSON.parse(line);
-      if (entry.type === 'session_meta') {
-        const payload = entry.payload ?? entry;
-        updateSessionId(payload, 2);
-        if (sessionId && sessionIdRank >= 2) break;
-        continue;
+  try {
+    for await (const line of rl) {
+      if (!line.trim()) continue;
+      try {
+        const entry = JSON.parse(line);
+        if (entry.type === 'session_meta') {
+          const payload = entry.payload ?? entry;
+          updateSessionId(payload, 2);
+          if (sessionId && sessionIdRank >= 2) break;
+          continue;
+        }
+        if (entry.type === 'turn_context') {
+          const payload = entry.payload ?? entry;
+          updateSessionId(payload, 1);
+        }
+      } catch (error) {
+        if (malformedLines < 3) {
+          logDebug('readSessionIdFromFile: malformed line', { filePath, error });
+        } else if (malformedLines === 3) {
+          logDebug('readSessionIdFromFile: further malformed lines suppressed', { filePath });
+        }
+        malformedLines += 1;
       }
-      if (entry.type === 'turn_context') {
-        const payload = entry.payload ?? entry;
-        updateSessionId(payload, 1);
-      }
-    } catch (error) {
-      if (malformedLines < 3) {
-        logDebug('readSessionIdFromFile: malformed line', { filePath, error });
-      } else if (malformedLines === 3) {
-        logDebug('readSessionIdFromFile: further malformed lines suppressed', { filePath });
-      }
-      malformedLines += 1;
     }
+  } finally {
+    rl.close();
+    stream.destroy();
   }
-
-  rl.close();
-  stream.close();
 
   return sessionId;
 };

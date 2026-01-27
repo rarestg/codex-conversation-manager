@@ -3,7 +3,7 @@ import type { WorkspaceSummary } from '../shared/apiTypes';
 
 export type { WorkspaceSummary };
 
-const extractGithubSlug = (value?: string | null) => {
+export const extractGithubSlug = (value?: string | null) => {
   if (!value) return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
