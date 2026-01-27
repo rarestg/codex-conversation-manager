@@ -17,6 +17,7 @@ Codex Conversation Manager (codex-formatter) is a local web app for parsing, vis
 Run these frequently while working on changes:
 - `npm run typecheck` (TypeScript checks for frontend + server)
 - `npm run check` (Biome lint + formatting validation)
+- `npm run mdlint` (run when adding or editing Markdown files)
 Note: use `python3` for local scripts (not `python`).
 
 Fix commands when needed:

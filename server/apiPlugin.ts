@@ -526,6 +526,7 @@ const parseJsonlFile = async (filePath: string) => {
         metaCount += 1;
         const payload = entry.payload ?? entry;
         const gitPayload = payload?.git ?? {};
+        // Branch ancestry can append older session_meta entries; keep the first (newest) metadata canonical.
         const nextCwd = sessionMetaSeen ? (sessionMeta.cwd ?? payload?.cwd) : (payload?.cwd ?? sessionMeta.cwd);
         sessionMeta = {
           cwd: nextCwd ? normalizeCwd(nextCwd) : sessionMeta.cwd,
@@ -829,6 +830,7 @@ const indexSessions = async (root: string) => {
 
       try {
         const fileSessionId = extractSessionIdFromPath(file.relPath);
+        // Filename session ID is authoritative; session_meta is only a fallback when filename lacks an ID.
         if (fileSessionId && parsed.sessionMeta.session_id && fileSessionId !== parsed.sessionMeta.session_id) {
           logDebug('session:id:mismatch', {
             path: file.relPath,
