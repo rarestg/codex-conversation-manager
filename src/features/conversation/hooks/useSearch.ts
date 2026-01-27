@@ -14,10 +14,8 @@ const UUID_EXACT_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA
 export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOptions) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchGroups, setSearchGroups] = useState<WorkspaceSearchGroup[]>([]);
-  const [searchTokens, setSearchTokens] = useState<string[]>([]);
   const [searchStatus, setSearchStatus] = useState<SearchStatus>('idle');
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [lastCompletedQuery, setLastCompletedQuery] = useState<string | null>(null);
   const searchTimeout = useRef<number | null>(null);
   const latestRequestId = useRef(0);
   const latestQuery = useRef('');
@@ -70,9 +68,7 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
         const results = await searchSessions(trimmedQuery, 40, workspace, searchRequestId);
         if (requestId !== latestRequestId.current || latestQuery.current !== trimmedQuery) return;
         setSearchGroups(results.groups);
-        setSearchTokens(results.tokens);
         setSearchError(null);
-        setLastCompletedQuery(trimmedQuery);
         updateStatus('success', { requestId, searchRequestId, query: trimmedQuery, source });
         logSearch('request:success', {
           requestId,
@@ -137,14 +133,11 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
     if (!trimmedQuery) {
       logSearch('clear', { requestId, reason: 'empty-query' });
       setSearchGroups([]);
-      setSearchTokens([]);
       setSearchError(null);
-      setLastCompletedQuery(null);
       updateStatus('idle', { requestId, reason: 'empty-query' });
       return;
     }
     setSearchGroups([]);
-    setSearchTokens([]);
     setSearchError(null);
     updateStatus('debouncing', { requestId, query: trimmedQuery });
     if (skipNextSearchRef.current === trimmedQuery) {
@@ -186,7 +179,6 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
         await onLoadSession(resolved);
         setSearchQuery('');
         setSearchGroups([]);
-        setSearchTokens([]);
         logSearch('resolve:clear', { resolveRequestId, reason: 'session-loaded' });
       } catch (error: any) {
         logSearch('resolve:error', {
@@ -215,21 +207,30 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
       skipNextSearchRef.current = pasted;
       setSearchQuery(pasted);
       setSearchGroups([]);
-      setSearchTokens([]);
       setSearchError(null);
       updateStatus('debouncing', { query: pasted, reason: 'paste-uuid' });
       const resolveRequestId = nextRequestId('resolve');
       logSearch('resolve:start', { resolveRequestId, query: pasted, workspace, source: 'paste' });
       try {
         const resolved = await resolveSession(pasted, workspace, resolveRequestId);
+        if (latestQuery.current !== pasted || latestRequestId.current !== requestId) {
+          logSearch('resolve:stale', {
+            resolveRequestId,
+            query: pasted,
+            workspace,
+            source: 'paste',
+            latestQuery: latestQuery.current,
+            latestRequestId: latestRequestId.current,
+            requestId,
+          });
+          return;
+        }
         if (resolved) {
           logSearch('resolve:found', { resolveRequestId, query: pasted, resolved, workspace, source: 'paste' });
           await onLoadSession(resolved);
           setSearchQuery('');
           setSearchGroups([]);
-          setSearchTokens([]);
           setSearchError(null);
-          setLastCompletedQuery(null);
           logSearch('resolve:clear', { resolveRequestId, reason: 'session-loaded', source: 'paste' });
           return;
         }
@@ -254,6 +255,20 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
         });
       } catch (error: any) {
         const message = error?.message || 'Unable to resolve session.';
+        if (latestQuery.current !== pasted || latestRequestId.current !== requestId) {
+          logSearch('resolve:error:stale', {
+            resolveRequestId,
+            query: pasted,
+            workspace,
+            message,
+            error,
+            source: 'paste',
+            latestQuery: latestQuery.current,
+            latestRequestId: latestRequestId.current,
+            requestId,
+          });
+          return;
+        }
         setSearchError(message);
         updateStatus('error', { query: pasted, reason: 'resolve-error', source: 'paste' });
         logSearch('resolve:error', {
@@ -270,26 +285,13 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
     [executeSearch, nextRequestId, onError, onLoadSession, updateStatus, workspace],
   );
 
-  const clearSearch = useCallback(() => {
-    logSearch('clear', { reason: 'manual' });
-    setSearchQuery('');
-    setSearchGroups([]);
-    setSearchTokens([]);
-    setSearchError(null);
-    setLastCompletedQuery(null);
-    updateStatus('idle', { reason: 'manual' });
-  }, [updateStatus]);
-
   return {
     searchQuery,
     setSearchQuery,
     searchGroups,
-    searchTokens,
     searchStatus,
     searchError,
-    lastCompletedQuery,
     handleSearchKeyDown,
     handleSearchPasteUuid,
-    clearSearch,
   };
 };

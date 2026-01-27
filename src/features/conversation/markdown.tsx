@@ -42,6 +42,127 @@ const escapeHtmlTagLines = (markdown: string) => {
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+const splitInlineCodeSegments = (line: string) => {
+  const segments: Array<{ text: string; isCode: boolean }> = [];
+  let lastIndex = 0;
+  let i = 0;
+  while (i < line.length) {
+    if (line[i] !== '`') {
+      i += 1;
+      continue;
+    }
+    let runLength = 1;
+    while (i + runLength < line.length && line[i + runLength] === '`') {
+      runLength += 1;
+    }
+    const openStart = i;
+    const openEnd = i + runLength;
+    let closeIndex = -1;
+    let j = openEnd;
+    while (j < line.length) {
+      if (line[j] !== '`') {
+        j += 1;
+        continue;
+      }
+      let closeLength = 1;
+      while (j + closeLength < line.length && line[j + closeLength] === '`') {
+        closeLength += 1;
+      }
+      if (closeLength === runLength) {
+        closeIndex = j;
+        break;
+      }
+      j += closeLength;
+    }
+    if (closeIndex === -1) {
+      i = openEnd;
+      continue;
+    }
+    if (openStart > lastIndex) {
+      segments.push({ text: line.slice(lastIndex, openStart), isCode: false });
+    }
+    const codeEnd = closeIndex + runLength;
+    segments.push({ text: line.slice(openStart, codeEnd), isCode: true });
+    i = codeEnd;
+    lastIndex = codeEnd;
+  }
+  if (lastIndex < line.length) {
+    segments.push({ text: line.slice(lastIndex), isCode: false });
+  }
+  return segments;
+};
+
+const splitLinkUrlSegments = (text: string) => {
+  const segments: Array<{ text: string; isUrl: boolean }> = [];
+  let lastIndex = 0;
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] === '\\\\') {
+      i += 2;
+      continue;
+    }
+    const isImage = text[i] === '!' && text[i + 1] === '[';
+    const isLinkStart = text[i] === '[' || isImage;
+    if (!isLinkStart) {
+      i += 1;
+      continue;
+    }
+    const labelStart = isImage ? i + 2 : i + 1;
+    let j = labelStart;
+    let labelFound = false;
+    while (j < text.length) {
+      if (text[j] === '\\\\') {
+        j += 2;
+        continue;
+      }
+      if (text[j] === ']') {
+        labelFound = true;
+        break;
+      }
+      j += 1;
+    }
+    if (!labelFound || text[j + 1] !== '(') {
+      i = labelFound ? j + 1 : i + 1;
+      continue;
+    }
+    const urlStart = j + 2;
+    let depth = 1;
+    let k = urlStart;
+    while (k < text.length) {
+      if (text[k] === '\\\\') {
+        k += 2;
+        continue;
+      }
+      if (text[k] === '(') {
+        depth += 1;
+        k += 1;
+        continue;
+      }
+      if (text[k] === ')') {
+        depth -= 1;
+        if (depth === 0) break;
+        k += 1;
+        continue;
+      }
+      k += 1;
+    }
+    if (depth !== 0) {
+      i = j + 1;
+      continue;
+    }
+    if (urlStart > lastIndex) {
+      segments.push({ text: text.slice(lastIndex, urlStart), isUrl: false });
+    }
+    segments.push({ text: text.slice(urlStart, k), isUrl: true });
+    lastIndex = k;
+    i = k;
+  }
+  if (lastIndex < text.length) {
+    segments.push({ text: text.slice(lastIndex), isUrl: false });
+  }
+  return segments;
+};
+
 const highlightMarkdown = (markdown: string, tokens: string[]) => {
   const uniqueTokens = Array.from(new Set(tokens.filter(Boolean)));
   if (uniqueTokens.length === 0) return markdown;
@@ -59,10 +180,24 @@ const highlightMarkdown = (markdown: string, tokens: string[]) => {
       continue;
     }
     if (inFence) continue;
-    lines[i] = line.replace(
-      regex,
-      '<mark class="match-highlight rounded bg-amber-200/70 px-1 text-slate-900">$1</mark>',
-    );
+    if (/^( {4}|\t)/.test(line)) continue;
+    const segments = splitInlineCodeSegments(line);
+    lines[i] = segments
+      .map((segment) =>
+        segment.isCode
+          ? segment.text
+          : splitLinkUrlSegments(segment.text)
+              .map((linkSegment) =>
+                linkSegment.isUrl
+                  ? linkSegment.text
+                  : linkSegment.text.replace(
+                      regex,
+                      '<mark class="match-highlight rounded bg-amber-200/70 px-1 text-slate-900">$1</mark>',
+                    ),
+              )
+              .join(''),
+      )
+      .join('');
   }
   return lines.join('\n');
 };
@@ -118,6 +253,10 @@ export const markdownToPlainText = async (markdown: string) => {
 
 export const renderSnippet = (snippet?: string | null) => {
   if (!snippet) return null;
+  const normalized = snippet
+    .replace(/\s+/g, ' ')
+    .replace(/(.)\1{4,}/g, '$1…')
+    .trim();
   const nodes: ReactNode[] = [];
   const regex = /\[\[(.+?)\]\]/g;
   let lastIndex = 0;
@@ -125,11 +264,11 @@ export const renderSnippet = (snippet?: string | null) => {
   let key = 0;
 
   while (true) {
-    match = regex.exec(snippet);
+    match = regex.exec(normalized);
     if (!match) break;
     const matchStart = match.index;
     if (matchStart > lastIndex) {
-      nodes.push(<span key={`snippet-${key++}`}>{snippet.slice(lastIndex, matchStart)}</span>);
+      nodes.push(<span key={`snippet-${key++}`}>{normalized.slice(lastIndex, matchStart)}</span>);
     }
     nodes.push(
       <mark key={`snippet-${key++}`} className="rounded bg-amber-200/70 px-1 text-slate-900">
@@ -139,8 +278,8 @@ export const renderSnippet = (snippet?: string | null) => {
     lastIndex = matchStart + match[0].length;
   }
 
-  if (lastIndex < snippet.length) {
-    nodes.push(<span key={`snippet-${key++}`}>{snippet.slice(lastIndex)}</span>);
+  if (lastIndex < normalized.length) {
+    nodes.push(<span key={`snippet-${key++}`}>{normalized.slice(lastIndex)}</span>);
   }
 
   return nodes;

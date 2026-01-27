@@ -1,4 +1,4 @@
-import { memo, useEffect } from 'react';
+import { memo, useEffect, useMemo } from 'react';
 import { isRenderDebugEnabled } from '../debug';
 import { useRenderDebug } from '../hooks/useRenderDebug';
 import { useWhyDidYouRender } from '../hooks/useWhyDidYouRender';
@@ -43,6 +43,7 @@ const TurnListComponent = ({
     },
     { includeFunctions: true },
   );
+  const matchTurnIdSet = useMemo(() => new Set(matchTurnIds ?? []), [matchTurnIds]);
   useEffect(() => {
     if (!isRenderDebugEnabled) return;
     const duration = performance.now() - renderStart;
@@ -87,7 +88,7 @@ const TurnListComponent = ({
           turn={turn}
           showFullContent={showFullContent}
           highlightTokens={highlightTokens}
-          isMatch={Boolean(matchTurnIds?.includes(turn.id))}
+          isMatch={matchTurnIdSet.has(turn.id)}
         />
       ))}
     </div>

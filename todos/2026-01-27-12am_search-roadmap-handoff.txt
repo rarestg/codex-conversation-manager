@@ -1,97 +1,79 @@
-Search Roadmap Handoff (Debounce Status, UUID Resolve, Aggregated Results)
+Search Roadmap Handoff (Status + Remaining Work)
 
 Context
-We have three related plans that improve search correctness, UX, and performance. They can be worked by multiple engineers, but there are dependencies and cross‑cutting decisions that should be understood upfront. This document explains how the plans relate, the recommended order, and how to split work across multiple engineers without conflicts.
+The search roadmap was implemented in three phases (FTS normalization + UUID resolve, search lifecycle state, and aggregated results + match navigation). The system is now functionally correct and stable, but two UX-level goals from the original request are still missing: true conversation de-duplication across multiple JSONL files that share the same session UUID, and per-session metadata pills in the result rows (date/time + git branch). This handoff summarizes what has been done, what remains, and how the pieces connect.
 
-Plans In Scope
-1) Debounced Search Status (first‑class lifecycle)
-   File: todos/2026-01-26-10pm_search-debounce-state-plan.txt
-   Goal: Introduce explicit search lifecycle states so the empty state no longer flashes during debounce; add error UI behavior; ensure stale requests cannot flip status.
+Where We Stand (Summary)
+- Plan 2 (UUID resolve + FTS normalization): complete.
+- Plan 1 (search lifecycle status): complete.
+- Plan 3 (aggregation + match navigation): mostly complete.
+  - Outstanding: (a) de-dup by session UUID, (b) per-session metadata pills.
 
-2) UUID Auto‑Resolve + FTS Normalization
-   File: todos/2026-01-26-11pm_search-uuid-resolve-and-fts-normalization-plan.txt
-   Goal: Normalize FTS queries to prevent parser errors, fix resolve‑session ESCAPE bug, and auto‑resolve pasted UUIDs without firing the debounced search.
+What Was Implemented
+Server (apiPlugin.ts)
+- FTS normalization (Unicode-aware tokenization, quoted AND tokens, token cap) now drives /api/search.
+- /api/resolve-session ESCAPE bug fixed.
+- /api/search returns aggregated session-level results with match counts, snippet, and tokens.
+- /api/session-matches supports match navigation and filters turn_id > 0.
+- first_match_turn_id now falls back to the first real turn when the top snippet is preamble.
 
-3) Aggregated Search Results (One Row per Session)
-   File: todos/2026-01-26-11pm_search-result-session-aggregation-plan.txt
-   Goal: Deduplicate search results by session, return aggregate match counts, improve result rendering, and add match highlighting + Next/Prev navigation (with `/api/session-matches`).
+Client (search + navigation)
+- Search lifecycle uses searchStatus (idle/debouncing/loading/success/error) and avoids empty-state flash.
+- UUID paste auto-resolves and suppresses debounce; resolve failures set error state.
+- Match highlighting is limited to matched turns; stale match state is cleared at fetch start.
+- URL includes ?q= for deep-linking; Next/Prev match controls implemented.
+- Search UI cleanup: title/snippet clamping, snippet normalization (whitespace + repeated char trimming), overflow fixes, container-query based layout, and responsive GitHub link behavior.
 
-How They Relate
-- Plan 2 (FTS normalization) is foundational for Plan 3. Aggregated search must use normalized queries to avoid FTS errors for UUIDs and special characters.
-- Plan 1 (searchStatus) is mostly UI state hygiene and can be done independently, but will touch SearchPanel props and the search hook. Plan 3 will also touch SearchPanel rendering, so coordinate if multiple engineers are working in parallel.
-- Plan 3 introduces `?q=` and match navigation; this depends on Plan 2’s normalized query tokens if we want consistent highlighting.
+Key Files
+- server/apiPlugin.ts (search aggregation, normalization, resolve, session matches)
+- src/features/conversation/hooks/useSearch.ts
+- src/features/conversation/components/SearchPanel.tsx
+- src/features/conversation/ConversationMain.tsx
+- src/features/conversation/markdown.tsx
+- src/features/conversation/url.ts
+- src/index.css (container queries for search panel)
 
-Recommended Execution Order
-1) Plan 2: UUID resolve + FTS normalization (server correctness first)
-   - Fix ESCAPE bug in /api/resolve-session.
-   - Add normalization + token cap to /api/search and return normalized tokens.
-   - Add client UUID auto‑resolve on paste (with debounced search suppression).
-   This stabilizes search behavior and fixes current server errors.
+Remaining Work
+1) De-duplicate “same conversation” rows
+Problem: Multiple JSONL files can share the same session UUID (sessions.session_id), but /api/search aggregates by sessions.id/path. This produces duplicate rows for the same conversation.
+Fix: Group on a conversation key that prefers session UUIDs when available. See detailed plan below.
 
-2) Plan 1: Debounced search status model (UI correctness)
-   - Introduce searchStatus and derive loading flags from it.
-   - Ensure stale requests cannot update status.
-   - Add error UI state and reset rules.
-   This eliminates the flashing empty state and clarifies lifecycle behavior.
+2) Add per-session metadata pills (date/time + git branch)
+Problem: Rows still look flat compared to session picker; the date/time and git branch are not shown per session, only at the workspace group header.
+Fix: Add pills in the session result row, using session_timestamp and git_branch from the search result.
 
-3) Plan 3: Aggregated results + match navigation
-   - Change /api/search to return one row per session with aggregated counts.
-   - Update SearchPanel rendering and types.
-   - Add match navigation (`?q=` + `/api/session-matches`).
-   This is the largest change and benefits from the normalization work already in place.
+Detailed Plan for Remaining Work
+See: todos/2026-01-27-2am_search-result-dedupe-and-metadata-plan.txt
+This plan covers:
+- Grouping key changes (COALESCE(session_id, session_path)).
+- Picking a representative session_path for navigation.
+- Ensuring timestamp/branch come from the chosen representative row.
+- Updating the SearchPanel row rendering with pills.
+- Verification steps to confirm de-duping and UI correctness.
 
-Parallelization Guidance
-If multiple engineers are available, work can be parallelized with care:
-- Engineer A: Plan 2 (server normalization + resolve) — isolated to server/apiPlugin.ts and useSearch/SearchPanel for paste handler.
-- Engineer B: Plan 1 (searchStatus lifecycle) — mostly useSearch and SearchPanel props; coordinate with Engineer C to avoid prop conflicts.
-- Engineer C: Plan 3 (aggregation + match navigation) — server query overhaul + UI rendering updates + URL handling.
+Landmines / Gotchas
+- session_id vs session_path: UI must navigate with session_path (sessions.id). Grouping by session_id must not break this.
+- Representative row mismatch: if you choose “best match” for session_path but “latest timestamp” for metadata, document the tradeoff in code comments to avoid confusion later.
+- Container queries: some SearchPanel behaviors depend on container-name: search-panel; avoid reintroducing Tailwind utilities that override component-layer CSS.
 
-Avoid conflicts by agreeing on:
-- SearchPanel props and final shape (Plan 1 changes props and Plan 3 changes rendering). If working in parallel, choose a short branch‑level integration plan.
-- Types for search results. Plan 3 changes type shapes used in Plan 1 UI. Align on the final `SessionSearchResult` type.
+Verification Checklist (Current State)
+- FTS normalization: no parser errors on UUIDs/special chars; tokens logged.
+- UUID paste: resolves immediately; debounce suppressed; errors set status.
+- Search lifecycle: empty state no longer flashes; error state renders properly.
+- Aggregation: one row per session path, counts correct, match navigation works.
 
-Integration Strategy
-- Land Plan 2 first (server fixes). It is the least UI‑coupled and unblocks UUID and FTS errors.
-- Land Plan 1 next. This is a UI-only change that should be straightforward once Plan 2 stabilizes search behavior.
-- Land Plan 3 last, since it changes the response schema and UI rendering.
+Verification Checklist (Remaining Work)
+- Duplicate session_id entries no longer produce multiple rows.
+- Result row shows date/time + git branch pills in both wide and narrow layouts.
+- Clicking a deduped row still opens a valid session path.
 
-Notes on Shared Dependencies
-- SearchPanel and useSearch are touched by Plans 1 and 2 and heavily changed in Plan 3.
-- server/apiPlugin.ts is touched by Plans 2 and 3.
-- url.ts/useUrlSync will need updates for `?q=` (Plan 3).
+Notes on Recent UI Work
+- Title clamps to 2 lines (3 lines in narrow containers).
+- Snippet clamps to 3 lines, breaks words, and normalizes whitespace/repeated characters.
+- Workspace header stacks based on container width (search panel, not viewport).
+- “Open on GitHub” link hidden in narrow views; GitHub icon remains clickable with confirmation.
 
-Progress Tracking (fill in as you go)
-Owner(s): ____________________________
-Start Date: __________________________
-Target Date: _________________________
-
-Plan 2 — UUID Resolve + FTS Normalization
-Status: [ ] Not started  [ ] In progress  [ ] Blocked  [x] Done
-Owner: Codex
-Notes:
-- Server now normalizes FTS queries and returns tokens; resolve-session ESCAPE fixed.
-- UUID paste auto-resolve added with debounced search suppression.
-
-Plan 1 — Search Debounce Status
-Status: [ ] Not started  [ ] In progress  [ ] Blocked  [x] Done
-Owner: Codex
-Notes:
-- `searchStatus` lifecycle + error UI implemented; stale requests gated status updates.
-
-Plan 3 — Aggregated Results + Match Navigation
-Status: [ ] Not started  [ ] In progress  [ ] Blocked  [x] Done
-Owner: Codex
-Notes:
-- /api/search aggregates per session; UI renders counts + snippets.
-- Added ?q= persistence, /api/session-matches, and in-session highlight + Next/Prev.
-
-Cross‑cutting Notes / Decisions
-- Search results now return `tokens` for highlight parity with server normalization.
-- URL sync extended to include `?q=` and preserved during turn navigation.
-
-Testing & Verification Checklist
-- FTS normalization: no “no such column” or `<` syntax errors; non‑Latin queries still work.
-- UUID paste: resolves immediately when session exists; debounced search is suppressed for that paste.
-- Debounce status: empty state does not flash during debounce; error state displays correctly; stale requests do not update status.
-- Aggregated results: one row per session, correct match counts, navigation uses session_path + first_match_turn_id.
-- Match navigation: `?q=` persists through refresh; `/api/session-matches` returns turn IDs; Next/Prev jumps correctly.
+Ownership / Status (fill in as needed)
+- Remaining work owner: ____________________
+- Start date: ______________________________
+- Target date: _____________________________
