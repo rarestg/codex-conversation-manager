@@ -82,6 +82,11 @@ const logDebug = (...args: unknown[]) => {
   if (!DEBUG_ENABLED) return;
   console.log('[debug]', ...args);
 };
+const SEARCH_DEBUG_ENABLED = ['1', 'true', 'yes', 'on'].includes(String(process.env.CODEX_SEARCH_DEBUG).toLowerCase());
+const logSearchDebug = (...args: unknown[]) => {
+  if (!SEARCH_DEBUG_ENABLED) return;
+  console.debug('[search]', ...args);
+};
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
@@ -1362,6 +1367,7 @@ export const apiPlugin = (): Plugin => {
           if (pathname === '/api/resolve-session' && req.method === 'GET') {
             const id = url.searchParams.get('id')?.trim();
             if (!id) return sendJson(res, 400, { error: 'id is required.' });
+            const requestId = url.searchParams.get('requestId')?.trim() || null;
             const workspace = url.searchParams.get('workspace')?.trim();
             const database = ensureDb();
             const escaped = id.replace(/[\\%_]/g, '\\$&');
@@ -1372,37 +1378,54 @@ export const apiPlugin = (): Plugin => {
               whereClause = `(${whereClause}) AND cwd = ?`;
               params.push(workspace);
             }
-            const row = database
-              .prepare(
-                `
-                  SELECT id
-                  FROM sessions
-                  WHERE ${whereClause}
-                  ORDER BY
-                    CASE
-                      WHEN session_id = ? THEN 0
-                      WHEN path = ? THEN 1
-                      ELSE 2
-                    END,
-                    LENGTH(path) ASC,
-                    path ASC
-                  LIMIT 1
-                `,
-              )
-              .get(...params, id, id) as { id?: string } | undefined;
-            if (!row?.id) {
-              logDebug('resolve-session miss', { id });
-              return sendJson(res, 404, { error: 'Session not found.' });
+            logSearchDebug('resolve:request', {
+              requestId,
+              id,
+              workspace,
+              whereClause,
+              params,
+            });
+            try {
+              const row = database
+                .prepare(
+                  `
+                    SELECT id
+                    FROM sessions
+                    WHERE ${whereClause}
+                    ORDER BY
+                      CASE
+                        WHEN session_id = ? THEN 0
+                        WHEN path = ? THEN 1
+                        ELSE 2
+                      END,
+                      LENGTH(path) ASC,
+                      path ASC
+                    LIMIT 1
+                  `,
+                )
+                .get(...params, id, id) as { id?: string } | undefined;
+              if (!row?.id) {
+                logDebug('resolve-session miss', { id });
+                logSearchDebug('resolve:miss', { requestId, id, workspace });
+                return sendJson(res, 404, { error: 'Session not found.' });
+              }
+              logDebug('resolve-session hit', { id, resolved: row.id });
+              logSearchDebug('resolve:hit', { requestId, id, workspace, resolved: row.id });
+              return sendJson(res, 200, { id: row.id });
+            } catch (error) {
+              logSearchDebug('resolve:error', { requestId, id, workspace, error });
+              throw error;
             }
-            logDebug('resolve-session hit', { id, resolved: row.id });
-            return sendJson(res, 200, { id: row.id });
           }
 
           if (pathname === '/api/search' && req.method === 'GET') {
             const q = url.searchParams.get('q');
             const limit = Number(url.searchParams.get('limit') || '20');
             const workspace = url.searchParams.get('workspace')?.trim() || null;
+            const requestId = url.searchParams.get('requestId')?.trim() || null;
             if (!q) return sendJson(res, 400, { error: 'q is required.' });
+            const searchStartedAt = performance.now();
+            logSearchDebug('search:request', { requestId, q, limit, workspace });
             const database = ensureDb();
             const params: Array<string | number> = [q];
             let whereClause = 'messages_fts MATCH ?';
@@ -1425,91 +1448,110 @@ export const apiPlugin = (): Plugin => {
               git_commit_hash?: string | null;
               snippet?: string | null;
             };
-            const stmt = database.prepare(`
-              SELECT
-                messages_fts.rowid AS id,
-                messages_fts.content AS content,
-                messages_fts.session_id AS session_id,
-                messages_fts.turn_id AS turn_id,
-                messages_fts.role AS role,
-                messages.timestamp AS timestamp,
-                sessions.timestamp AS session_timestamp,
-                sessions.cwd AS cwd,
-                sessions.git_branch AS git_branch,
-                sessions.git_repo AS git_repo,
-                sessions.git_commit_hash AS git_commit_hash,
-                snippet(messages_fts, 0, '[[', ']]', '…', 18) AS snippet
-              FROM messages_fts
-              JOIN messages ON messages_fts.rowid = messages.id
-              JOIN sessions ON sessions.id = messages_fts.session_id
-              WHERE ${whereClause}
-              ORDER BY bm25(messages_fts)
-              LIMIT ?
-            `);
-            const results = stmt.all(...params) as SearchResultRow[];
-            const summaries = getWorkspaceSummaries(database);
-            const summaryMap = new Map(summaries.map((summary) => [summary.cwd, summary]));
-            const groupsMap = new Map<
-              string,
-              {
-                workspace: {
-                  cwd: string;
-                  session_count: number;
-                  last_seen: string | null;
-                  git_branch: string | null;
-                  git_repo: string | null;
-                  git_commit_hash: string | null;
-                  github_slug: string | null;
-                };
-                match_count: number;
-                results: SearchResultRow[];
-              }
-            >();
-
-            for (const result of results) {
-              const workspaceKey = result.cwd || 'Unknown workspace';
-              const summary = summaryMap.get(workspaceKey);
-              const workspaceSummary = summary
-                ? summary
-                : {
-                    cwd: workspaceKey,
-                    session_count: 0,
-                    last_seen: result.session_timestamp ?? null,
-                    git_branch: result.git_branch ?? null,
-                    git_repo: result.git_repo ?? null,
-                    git_commit_hash: result.git_commit_hash ?? null,
-                    github_slug: extractGithubSlug(result.git_repo ?? undefined),
+            try {
+              const stmt = database.prepare(`
+                SELECT
+                  messages_fts.rowid AS id,
+                  messages_fts.content AS content,
+                  messages_fts.session_id AS session_id,
+                  messages_fts.turn_id AS turn_id,
+                  messages_fts.role AS role,
+                  messages.timestamp AS timestamp,
+                  sessions.timestamp AS session_timestamp,
+                  sessions.cwd AS cwd,
+                  sessions.git_branch AS git_branch,
+                  sessions.git_repo AS git_repo,
+                  sessions.git_commit_hash AS git_commit_hash,
+                  snippet(messages_fts, 0, '[[', ']]', '…', 18) AS snippet
+                FROM messages_fts
+                JOIN messages ON messages_fts.rowid = messages.id
+                JOIN sessions ON sessions.id = messages_fts.session_id
+                WHERE ${whereClause}
+                ORDER BY bm25(messages_fts)
+                LIMIT ?
+              `);
+              const results = stmt.all(...params) as SearchResultRow[];
+              const summaries = getWorkspaceSummaries(database);
+              const summaryMap = new Map(summaries.map((summary) => [summary.cwd, summary]));
+              const groupsMap = new Map<
+                string,
+                {
+                  workspace: {
+                    cwd: string;
+                    session_count: number;
+                    last_seen: string | null;
+                    git_branch: string | null;
+                    git_repo: string | null;
+                    git_commit_hash: string | null;
+                    github_slug: string | null;
                   };
-              const group = groupsMap.get(workspaceKey) ?? {
-                workspace: workspaceSummary,
-                match_count: 0,
-                results: [] as SearchResultRow[],
-              };
-              group.results.push(result);
-              group.match_count += 1;
-              groupsMap.set(workspaceKey, group);
-            }
+                  match_count: number;
+                  results: SearchResultRow[];
+                }
+              >();
 
-            const groups = Array.from(groupsMap.values())
-              .map((group) => {
-                if (!group.workspace.last_seen) {
-                  group.workspace.last_seen = group.results[0]?.session_timestamp ?? null;
-                }
-                if (!group.match_count) {
-                  group.match_count = group.results.length;
-                }
-                return group;
-              })
-              .sort((a, b) => {
-                const lastSeenCompare = (b.workspace.last_seen ?? '').localeCompare(a.workspace.last_seen ?? '');
-                if (lastSeenCompare !== 0) return lastSeenCompare;
-                if (b.workspace.session_count !== a.workspace.session_count) {
-                  return b.workspace.session_count - a.workspace.session_count;
-                }
-                return a.workspace.cwd.localeCompare(b.workspace.cwd);
+              for (const result of results) {
+                const workspaceKey = result.cwd || 'Unknown workspace';
+                const summary = summaryMap.get(workspaceKey);
+                const workspaceSummary = summary
+                  ? summary
+                  : {
+                      cwd: workspaceKey,
+                      session_count: 0,
+                      last_seen: result.session_timestamp ?? null,
+                      git_branch: result.git_branch ?? null,
+                      git_repo: result.git_repo ?? null,
+                      git_commit_hash: result.git_commit_hash ?? null,
+                      github_slug: extractGithubSlug(result.git_repo ?? undefined),
+                    };
+                const group = groupsMap.get(workspaceKey) ?? {
+                  workspace: workspaceSummary,
+                  match_count: 0,
+                  results: [] as SearchResultRow[],
+                };
+                group.results.push(result);
+                group.match_count += 1;
+                groupsMap.set(workspaceKey, group);
+              }
+
+              const groups = Array.from(groupsMap.values())
+                .map((group) => {
+                  if (!group.workspace.last_seen) {
+                    group.workspace.last_seen = group.results[0]?.session_timestamp ?? null;
+                  }
+                  if (!group.match_count) {
+                    group.match_count = group.results.length;
+                  }
+                  return group;
+                })
+                .sort((a, b) => {
+                  const lastSeenCompare = (b.workspace.last_seen ?? '').localeCompare(a.workspace.last_seen ?? '');
+                  if (lastSeenCompare !== 0) return lastSeenCompare;
+                  if (b.workspace.session_count !== a.workspace.session_count) {
+                    return b.workspace.session_count - a.workspace.session_count;
+                  }
+                  return a.workspace.cwd.localeCompare(b.workspace.cwd);
+                });
+
+              logSearchDebug('search:results', {
+                requestId,
+                q,
+                workspace,
+                limit,
+                whereClause,
+                params,
+                resultCount: results.length,
+                groupCount: groups.length,
+                results,
+                groups,
+                durationMs: Number((performance.now() - searchStartedAt).toFixed(2)),
               });
 
-            return sendJson(res, 200, { groups });
+              return sendJson(res, 200, { groups });
+            } catch (error) {
+              logSearchDebug('search:error', { requestId, q, workspace, limit, whereClause, params, error });
+              throw error;
+            }
           }
 
           return sendJson(res, 404, { error: 'Not found' });

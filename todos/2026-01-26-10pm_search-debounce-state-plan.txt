@@ -1,0 +1,130 @@
+Search Debounce as First-Class State
+
+Context
+The current search UI flashes the “No matches yet” empty state immediately after each keystroke, then hides it when the debounced request starts, then shows it again after the request finishes with zero results. This is not a UI bug so much as a state-modeling issue: the UI cannot distinguish “no results from a completed search” from “no results because we have not searched yet.” We observed this explicitly in logs (empty state toggles on during the debounce window because loading is still false). The right fix is to treat debouncing as a first-class search lifecycle state, not just a timeout. This ensures the UI is semantically correct and avoids misleading empty states.
+
+This work is timely because search behavior is central to navigation, and we are actively debugging search correctness (FTS errors, resolve-session flow). We already introduced verbose logging and per-request IDs; this plan builds on that by giving the UI a reliable, explicit notion of “search in progress” vs. “search not yet run.”
+
+Relevant codebase areas
+- src/features/conversation/hooks/useSearch.ts
+  This is the control center for search state. It owns searchQuery, searchGroups, and searchLoading, and it performs the debounce + request lifecycle. It already logs debounced actions and request lifecycle events. We will refactor this hook to emit a true search status instead of inferring from loading only.
+- src/features/conversation/components/SearchPanel.tsx
+  This component renders the empty state, loading indicator, and results. It currently uses `searchLoading` and `searchGroups.length` to decide whether to show the empty state. We will change it to respond to an explicit search status from the hook.
+- src/features/conversation/ConversationViewer.tsx and src/features/conversation/components/Sidebar.tsx
+  These components pass the search props down. They don’t own logic but will need to pass a new status prop if we add it.
+- src/features/conversation/debug.ts
+  Contains logging helpers. We may add status transition logging here to keep output consistent.
+
+How the parts connect
+useSearch runs on every input change. It debounces before sending a request and then updates searchGroups when the request finishes. SearchPanel renders using those props. Because SearchPanel has no signal that a search is pending but not yet started, it shows the empty state during the debounce window. By adding an explicit search status in useSearch and using that in SearchPanel, the UI can correctly distinguish “no results yet” from “no results found.”
+
+The Plan
+Step 1 — Define a search lifecycle model in useSearch
+What to do:
+- In src/features/conversation/hooks/useSearch.ts, introduce a new state value, e.g. `searchStatus`, with a string union like:
+  - 'idle' (empty query)
+  - 'debouncing' (non-empty query, timer running, request not sent yet)
+  - 'loading' (request in flight)
+  - 'success' (last request completed, results available)
+  - 'error' (last request failed)
+- Keep `searchGroups` as the current results for the last completed request, and store `lastCompletedQuery` so the UI can reason about whether results are aligned with the current query.
+- When a new non-empty query is typed:
+  - Set status to 'debouncing'.
+  - Clear previous results immediately (preferred for correctness), or keep them but mark them as stale (see Decisions & Tradeoffs below).
+  - Start the debounce timer.
+- When the request actually starts (after the debounce delay): set status to 'loading'.
+- When the request resolves successfully: set status to 'success', set results, and record lastCompletedQuery = current query.
+- When it fails: set status to 'error', keep results cleared (or keep last successful results but mark stale if we choose that model).
+- When query is cleared: set status back to 'idle', clear results, and clear lastCompletedQuery.
+- Guard all async-driven status transitions (`loading`, `success`, `error`) with the same stale-request checks used for results. If the request is stale (requestId or query mismatch), it must not mutate status or results.
+- Define error reset rules: any new non-empty input should move status to 'debouncing' and clear the error state; clearing the query should move to 'idle' and clear the error.
+ - Eliminate `searchLoading` as a separate source of truth. Derive “loading” booleans from `searchStatus` (e.g., `isSearching = status === 'debouncing' || status === 'loading'`). If a loading flag is still exposed, it should be derived from status, not stored independently.
+
+Why:
+This adds a crisp, explicit lifecycle so the UI can render correctly based on “search has been performed” rather than inferring from loading + results.
+
+Dependencies:
+None. This is contained inside useSearch.
+
+Step 2 — Update SearchPanel to use the new status
+What to do:
+- Add a new prop (e.g. `searchStatus`) to SearchPanel.
+- Replace the empty-state condition with something equivalent to:
+  - show empty state only when status === 'success' AND searchQuery is non-empty AND searchGroups is empty.
+- Decide how to reflect debouncing in the UI:
+  - Option A: reuse the existing “Searching…” badge for both 'debouncing' and 'loading'.
+  - Option B: show a distinct “Waiting to search…” message for debouncing.
+  Choose one and be consistent; correctness matters more than micro‑UX polish at this stage.
+- If results are cleared during debouncing, the results list will be empty until the request finishes. That’s acceptable as long as the empty state is hidden while status is 'debouncing' or 'loading'.
+- Add explicit error UI when status === 'error' (e.g., a non-empty warning panel with a retry hint). Ensure this error state suppresses the empty-state panel to avoid “No matches yet” on failures.
+ - Ensure any “Searching…” indicator is driven from the derived status flag (not from a separate `searchLoading` state).
+
+Why:
+The UI should not claim “No matches yet” before a query has been sent. This change makes the UI semantics match the actual search lifecycle.
+
+Dependencies:
+Depends on Step 1’s `searchStatus` in useSearch.
+
+Step 3 — Propagate status through ConversationViewer and Sidebar
+What to do:
+- Update `useSearch` usage in ConversationViewer to capture the new `searchStatus` and pass it to SearchPanel and Sidebar.
+- Update Sidebar’s props to accept and forward `searchStatus` into the SearchPanel it renders.
+- Keep the current searchLogging as-is, but add status transition logs from useSearch so that logs reflect state changes explicitly (e.g., `status:set` events with from/to and requestId).
+
+Why:
+SearchPanel is used both on the home view and in the sidebar, so the new status must be passed to both. Keeping logs in useSearch ensures the status model is observable during debugging.
+
+Dependencies:
+Requires Step 1 and Step 2 changes.
+
+Step 4 — Update logging to reflect lifecycle explicitly
+What to do:
+- In useSearch, log every status transition along with requestId and query. This will let you correlate the UI (empty state) with the actual search lifecycle.
+- If we choose to clear results on input change, add a log entry that clearly states results were cleared because the query changed.
+ - Log when a request is detected as stale and confirm that no status changes occurred as a result.
+
+Why:
+The team is actively using logs to understand the search behavior. The status model should be visible and traceable to avoid ambiguity.
+
+Dependencies:
+Depends on Step 1.
+
+Decisions & Tradeoffs
+Clearing results vs. keeping stale results during debouncing:
+- Clearing results is the cleanest and most correct approach. It avoids showing results that do not match the current query. The cost is a short “empty list but not empty state” window during debounce.
+- Keeping old results reduces visual emptiness but can be misleading because results no longer correspond to the current query. If we do keep them, we must mark them as “stale” or “from previous query” in the UI.
+- Recommended: clear results on query change and rely on the status to suppress empty state until a request completes. This keeps the UI truthful, which is the priority.
+
+Single “loading” flag vs. explicit status:
+- Using only `searchLoading` is insufficient to represent the debounce window; it causes the empty state to flash.
+- An explicit status is slightly more state to manage but is semantically correct and much easier to reason about.
+
+UI messaging for debouncing:
+- The simplest correct choice is to show “Searching…” for both 'debouncing' and 'loading'. This avoids over‑explaining in the UI.
+- If we want to be more precise, a separate “Waiting to search…” message could be used, but it adds UI complexity without much benefit.
+
+Landmines
+- Avoid conflating “no results” with “no search yet.” The empty state must only appear after a successful search for the current query.
+- If you keep previous results, make sure they don’t appear as if they belong to the current query. If we choose that route, we must label them or show “results from previous query.”
+- Ensure that the status resets correctly when `searchQuery` is cleared; otherwise the empty state may never render again or the UI may get stuck in a non‑idle state.
+- Be careful with stale request handling: the existing `latestRequestId` and `latestQuery` checks must still gate all state updates so results from earlier queries do not overwrite the status/results for the latest query.
+- SearchPanel is used in two places (home and sidebar). Both must receive the new status or the bug will appear in one context but not the other.
+- Logging is now verbose. Make sure logs describe status transitions clearly to avoid confusing the debugging output.
+
+Verification
+Manual testing is the right approach here; no automated tests currently cover this UI behavior.
+
+Verify the lifecycle states:
+- Type a query slowly. While the debounce timer is pending, confirm status is 'debouncing' and the empty state does not show.
+- After 350ms, confirm status changes to 'loading' and still no empty state.
+- When the request completes with zero results, confirm status is 'success' and the empty state appears.
+- When results exist, confirm status is 'success' and the results list appears.
+
+Verify query changes:
+- Type a query, wait for results, then add another character. Confirm the results are cleared (if that approach is chosen), status goes to 'debouncing', and the empty state stays hidden until the new search completes.
+
+Verify clearing:
+- Delete the query to an empty string. Confirm status goes to 'idle', results clear, and the empty state does not appear.
+
+Verify logging:
+- With VITE_SEARCH_DEBUG=1, ensure logs show status transitions and correlate with UI rendering (empty state changes should align with status transitions). This should make the previous “flash” explainable and confirm it is resolved.

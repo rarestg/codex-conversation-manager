@@ -23,6 +23,9 @@ Fix commands when needed:
 - `npm run lint:fix` (lint autofix only)
 - `npm run format:write` (formatting only)
 
+## Engineering Principles
+- Prefer clean, long-term solutions over "low risk" or "fast" changes. Optimize for correctness and maintainability first.
+
 ## Repository Layout
 - `src/main.tsx` - React entry.
 - `src/features/conversation/ConversationViewer.tsx` - page layout + top-level hooks.

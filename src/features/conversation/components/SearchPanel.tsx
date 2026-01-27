@@ -1,4 +1,5 @@
-import type { KeyboardEvent } from 'react';
+import { type KeyboardEvent, useEffect, useRef } from 'react';
+import { logSearch } from '../debug';
 import { formatDate, formatTime, formatWorkspacePath } from '../format';
 import { renderSnippet } from '../markdown';
 import type { WorkspaceSearchGroup } from '../types';
@@ -33,6 +34,57 @@ export const SearchPanel = ({
   onLoadSession,
   className,
 }: SearchPanelProps) => {
+  const resultCount = searchGroups.reduce((total, group) => total + group.results.length, 0);
+  const showEmptyState = Boolean(searchQuery) && !searchLoading && searchGroups.length === 0;
+  const lastStateRef = useRef({
+    loading: searchLoading,
+    groupCount: searchGroups.length,
+    resultCount,
+    showEmptyState,
+    renderedAt: performance.now(),
+  });
+  useEffect(() => {
+    const now = performance.now();
+    const last = lastStateRef.current;
+    if (last.loading !== searchLoading) {
+      logSearch('ui:loading:change', {
+        query: searchQuery,
+        from: last.loading,
+        to: searchLoading,
+        deltaMs: Number((now - last.renderedAt).toFixed(2)),
+      });
+    }
+    if (last.groupCount !== searchGroups.length || last.resultCount !== resultCount) {
+      logSearch('ui:results:change', {
+        query: searchQuery,
+        groupCount: searchGroups.length,
+        resultCount,
+        deltaMs: Number((now - last.renderedAt).toFixed(2)),
+      });
+    }
+    if (last.showEmptyState !== showEmptyState) {
+      logSearch('ui:empty-state:change', {
+        query: searchQuery,
+        from: last.showEmptyState,
+        to: showEmptyState,
+        deltaMs: Number((now - last.renderedAt).toFixed(2)),
+      });
+    }
+    lastStateRef.current = {
+      loading: searchLoading,
+      groupCount: searchGroups.length,
+      resultCount,
+      showEmptyState,
+      renderedAt: now,
+    };
+  }, [resultCount, searchGroups.length, searchLoading, searchQuery, showEmptyState]);
+  logSearch('ui:render', {
+    query: searchQuery,
+    loading: searchLoading,
+    groupCount: searchGroups.length,
+    resultCount,
+    showEmptyState,
+  });
   return (
     <div className={className}>
       <div className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur">

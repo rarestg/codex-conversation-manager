@@ -38,10 +38,18 @@ export const fetchSession = async (sessionId: string) => {
   return await res.text();
 };
 
-export const searchSessions = async (query: string, limit = 40, workspace?: string | null) => {
+export const searchSessions = async (
+  query: string,
+  limit = 40,
+  workspace?: string | null,
+  requestId?: string | null,
+) => {
   const params = new URLSearchParams({ q: query, limit: String(limit) });
   if (workspace) {
     params.set('workspace', workspace);
+  }
+  if (requestId) {
+    params.set('requestId', requestId);
   }
   const res = await fetch(`/api/search?${params.toString()}`);
   if (!res.ok) {
@@ -91,10 +99,13 @@ export const clearIndex = async () => {
   return data.summary as IndexSummary;
 };
 
-export const resolveSession = async (query: string, workspace?: string | null) => {
+export const resolveSession = async (query: string, workspace?: string | null, requestId?: string | null) => {
   const params = new URLSearchParams({ id: query });
   if (workspace) {
     params.set('workspace', workspace);
+  }
+  if (requestId) {
+    params.set('requestId', requestId);
   }
   const res = await fetch(`/api/resolve-session?${params.toString()}`);
   if (!res.ok) {
