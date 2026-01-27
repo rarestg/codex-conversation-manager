@@ -1,0 +1,69 @@
+Search Roadmap Handoff (Completed)
+
+Context
+The search roadmap was implemented in three phases (FTS normalization + UUID resolve, search lifecycle state, and aggregated results + match navigation). A later audit found that “de-dup by session UUID” was actually the wrong fix for branched sessions: multiple JSONL files can legitimately share ancestor session_meta IDs, so grouping by UUID would incorrectly merge distinct sessions. The real issue was incorrect session_id indexing (later session_meta lines overwrote the filename ID). That indexing bug was fixed, and the UI now shows correct per-file results with per-session metadata pills. This handoff records the completed state and the rationale for the final behavior.
+
+Where We Stand (Summary)
+- Plan 1 (search lifecycle status): complete (explicit idle/debouncing/loading/success/error, no empty-state flash).
+- Plan 2 (UUID resolve + FTS normalization): complete (server-side normalization, ESCAPE fix, UUID paste auto-resolve).
+- Plan 3 (aggregation + match navigation): complete (one row per session file, match counts/snippets, q= deep links, Next/Prev).
+- Follow-up: per-session pills added (date/time, duration, total turns, branch) with icons and consistent styling.
+- Follow-up: session_id indexing corrected; per-file grouping retained by design.
+
+What Was Implemented
+Server (apiPlugin.ts)
+- FTS normalization (Unicode-aware tokenization, quoted AND tokens, token cap) now drives /api/search.
+- /api/resolve-session ESCAPE bug fixed.
+- /api/search returns aggregated session-level results with match counts, snippet, and tokens.
+- /api/session-matches supports match navigation and filters turn_id > 0.
+- first_match_turn_id now falls back to the first real turn when the top snippet is preamble.
+- Session ID indexing now prefers filename IDs and no longer overwrites with ancestor session_meta lines; mismatches are logged.
+
+Client (search + navigation)
+- Search lifecycle uses searchStatus (idle/debouncing/loading/success/error) and avoids empty-state flash.
+- UUID paste auto-resolves and suppresses debounce; resolve failures set error state.
+- Match highlighting is limited to matched turns; stale match state is cleared at fetch start.
+- URL includes ?q= for deep-linking; Next/Prev match controls implemented.
+- Search UI cleanup: title/snippet clamping, snippet normalization (whitespace + repeated char trimming), overflow fixes, container-query based layout, and responsive GitHub link behavior.
+- Search result rows show per-session pills (date/time, duration, total turns, branch) with icons.
+
+Key Files
+- server/apiPlugin.ts (search aggregation, normalization, resolve, session matches)
+- src/features/conversation/hooks/useSearch.ts
+- src/features/conversation/components/SearchPanel.tsx
+- src/features/conversation/ConversationMain.tsx
+- src/features/conversation/markdown.tsx
+- src/features/conversation/url.ts
+- src/index.css (container queries for search panel)
+
+Remaining Work
+- None. All planned items are complete. Note: session UUID de-duplication was intentionally rejected after discovering branched sessions reuse ancestor IDs. The correct fix was to stop overwriting session_id during indexing and prefer filename IDs.
+
+Detailed Plan for Remaining Work
+- No longer applicable. The original de-dup plan was superseded by the session_id indexing correction and explicit per-file grouping.
+
+Landmines / Gotchas
+- session_id vs session_path: UI must navigate with session_path (sessions.id). Per-file grouping is intentional to avoid merging branched sessions.
+- session_meta ancestry: session_meta can include ancestor IDs; do not overwrite the filename session_id during indexing.
+- Tailwind @apply cannot reference custom component classes (e.g., .chip); use utilities directly for new composed classes.
+- Container queries: some SearchPanel behaviors depend on container-name: search-panel; avoid reintroducing Tailwind utilities that override component-layer CSS.
+
+Verification Checklist (Current State)
+- FTS normalization: no parser errors on UUIDs/special chars; tokens logged.
+- UUID paste: resolves immediately; debounce suppressed; errors set status.
+- Search lifecycle: empty state no longer flashes; error state renders properly.
+- Aggregation: one row per session path, counts correct, match navigation works.
+- Per-session pills: date/time, duration, turns, and branch render in both wide + narrow layouts.
+- Indexing: filename session_id wins; mismatches logged; reindex fixes legacy rows.
+
+Verification Checklist (Remaining Work)
+- None.
+
+Notes on Recent UI Work
+- Title clamps to 2 lines (3 lines in narrow containers).
+- Snippet clamps to 3 lines, breaks words, and normalizes whitespace/repeated characters.
+- Workspace header stacks based on container width (search panel, not viewport).
+- “Open on GitHub” link hidden in narrow views; GitHub icon remains clickable with confirmation.
+
+Ownership / Status
+- Status: complete.

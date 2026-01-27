@@ -17,6 +17,7 @@ Codex Conversation Manager (codex-formatter) is a local web app for parsing, vis
 Run these frequently while working on changes:
 - `npm run typecheck` (TypeScript checks for frontend + server)
 - `npm run check` (Biome lint + formatting validation)
+Note: use `python3` for local scripts (not `python`).
 
 Fix commands when needed:
 - `npm run check:write` (autofix lint + formatting)
@@ -56,7 +57,8 @@ Fix commands when needed:
 - `src/features/conversation/debug.ts` - render debug flag (`VITE_RENDER_DEBUG`).
 - `src/features/conversation/url.ts` - session/turn query-string helpers.
 - `src/index.css` - Tailwind entry, global theme, and animation utilities.
-- `vite.config.ts` - Vite config + API middleware + SQLite indexing.
+- `server/apiPlugin.ts` - Vite API middleware + SQLite indexing.
+- `vite.config.ts` - Vite config wiring.
 - `IMPLEMENTATION_PLAN.txt` / `DESIGN_APPENDIX.txt` - historical spec + schema notes.
 
 ## Architecture at a Glance
@@ -67,7 +69,7 @@ Fix commands when needed:
   - `useSearch` queries FTS and resolves session IDs.
   - `useWorkspaces` loads workspace summaries for filtering.
   - `useUrlSync` keeps `?session=...&turn=...` in sync with the browser history.
-- **Backend**: Vite dev-server middleware (in `vite.config.ts`) serves config, sessions, search, and indexing.
+- **Backend**: Vite dev-server middleware (in `server/apiPlugin.ts`) serves config, sessions, search, workspaces, and indexing.
 - **Storage**: SQLite DB in user home directory; session JSONL files read from disk.
 
 ## JSONL Parsing Rules (Critical)
@@ -89,7 +91,8 @@ Fix commands when needed:
    - Rendering is a filtered view of that order (toggles hide items, never reorder).
 5) **Session details**:
    - `session_meta` and `turn_context` are parsed to extract session ID + cwd.
-   - Filename-based fallback for session ID lives in `extractSessionIdFromPath`.
+   - Filename-based session ID is canonical; do not overwrite it with ancestor session_meta IDs.
+   - Fallback for session ID lives in `extractSessionIdFromPath`.
 
 ## Data Model (Implemented)
 - `Turn`: `{ id, startedAt?, items[], isPreamble? }`
@@ -98,10 +101,11 @@ Fix commands when needed:
 
 ## URL / Deep Linking
 - Session + turn are encoded as query params (`?session=...&turn=...`).
+- Search deep links include `?q=` for match highlighting + navigation.
 - `url.ts` handles normalization + history updates; `useUrlSync` applies it on load/back/forward.
 
 ## Indexing & Search (SQLite FTS5)
-- Schema + indexing live in `vite.config.ts`.
+- Schema + indexing live in `server/apiPlugin.ts`.
 - Tables: `sessions`, `files`, `messages`, `messages_fts` (FTS5).
 - Indexing is incremental via file size + mtime checks; it streams JSONL lines.
 - Session preview text is the first user message (bounded by a line limit).
@@ -113,6 +117,8 @@ Fix commands when needed:
 - `GET /api/sessions` → tree of available sessions grouped by year/month/day.
 - `GET /api/session?path=...` → raw JSONL for a single session.
 - `GET /api/search?q=...&limit=...` → FTS search results.
+- `GET /api/session-matches?session=...&q=...` → matching turn IDs for in-session navigation.
+- `GET /api/workspaces?sort=...` → workspace summaries for filtering.
 - `POST /api/reindex` → rebuild/refresh index incrementally.
 - `POST /api/clear-index` → drop + rebuild index.
 - `GET /api/resolve-session?id=...` → resolve a session ID or path fragment.
@@ -123,6 +129,7 @@ Fix commands when needed:
 - Optional config file: `~/.codex-formatter/config.json`.
 - SQLite DB: `~/.codex-formatter/codex_index.db`.
 - Debug logging: `CODEX_DEBUG=1`.
+- Search debug logging: `CODEX_SEARCH_DEBUG=1`.
 - Render debug logging (dev only): `VITE_RENDER_DEBUG=1` (see `.env.example`).
 - **Path safety**: reject `..`, absolute paths, or paths outside root.
 
@@ -131,11 +138,13 @@ Fix commands when needed:
 - Home view: search + workspaces panel + sessions panel.
 - Search:
   - Typing performs FTS search after a short debounce.
+  - Pasting a UUID auto-resolves (if found) and suppresses debounce.
   - Pressing Enter attempts `/api/resolve-session` for direct session IDs.
 - Main viewer:
   - Conversation grouped by turn, with "Session Preamble" for pre-user entries.
   - Toggles: Show Thoughts, Show Tools, Show Metadata, Show Full Content.
   - Session header displays session ID + cwd chips with copy actions.
+  - Search matches are highlighted and navigable with Next/Prev when `?q=` is present.
 - Settings modal:
   - Manage sessions root and indexing (reindex, clear & rebuild).
 
@@ -165,3 +174,8 @@ Fix commands when needed:
 
 ## Communication Guardrails
 - If user-provided content appears redacted or summarized (e.g. `[Pasted Content ...]`), call it out immediately and ask for the full content.
+
+## Todos Index Usage
+- The canonical completed-plan index lives at `todos/_done/INDEX.txt`.
+- New entries must use timestamped filenames (see the index instructions).
+- Run `python3 todos/_done/reorder_index.py` after edits to keep newest-first ordering.

@@ -204,6 +204,23 @@
     -webkit-line-clamp: 2;
   }
 
+  .search-result-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .search-result-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .search-result-chip {
+    @apply inline-flex min-w-0 items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 shadow-sm;
+  }
+
   .search-github-link {
     display: inline-flex;
   }
@@ -217,6 +234,12 @@
   @container search-panel (max-width: 500px) {
     .search-result-title {
       -webkit-line-clamp: 3;
+    }
+    .search-result-stack {
+      gap: 0.25rem;
+    }
+    .search-result-chip {
+      @apply px-2 py-1 text-[10px]/[12px];
     }
     .search-group-header {
       flex-direction: column;

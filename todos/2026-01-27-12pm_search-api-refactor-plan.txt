@@ -1,0 +1,126 @@
+Search API Refactor Plan (Performance, Modularity, DevEx)
+
+Context
+The search stack has grown quickly and is now concentrated in a single file, server/apiPlugin.ts. That file currently owns routing, config I/O, SQLite schema + migrations, indexing, search query composition, workspace summaries, and all API endpoint logic. This makes changes risky (unrelated edits collide), slows down code review, and makes performance work hard to isolate and measure. We also have a performance smell: /api/search computes workspace summaries for the entire sessions table on every search and applies workspace filtering only after aggregating results, which increases work on large datasets. This plan is intended to split the search API into clear modules, isolate responsibilities, and improve performance while preserving the current behavior and UI contracts.
+
+Must-not-change behavior (explicit invariants)
+- Search results remain one row per session file. Per-file grouping is intentional; do not de-duplicate by session UUID.
+- session_path (sessions.id/path) is the navigation key used by the client. session_id is metadata only.
+- snippet() must continue to emit [[...]] markers for highlight rendering (renderSnippet expects these).
+- /api/session-matches must continue to exclude preamble turns (turn_id <= 0).
+- Filename-based session_id is canonical; session_meta ancestry must not overwrite it.
+
+Relevant code and how it connects
+- server/apiPlugin.ts: Vite dev-server middleware and the entire backend. Search endpoints are /api/search, /api/resolve-session, and /api/session-matches. FTS normalization and SQL live here, along with indexing and schema logic.
+- src/features/conversation/api.ts: client fetch wrappers for /api/search, /api/resolve-session, /api/session-matches.
+- src/features/conversation/hooks/useSearch.ts: debounced search state machine and UUID paste/resolve path.
+- src/features/conversation/components/SearchPanel.tsx: renders grouped search results and snippets.
+- src/features/conversation/ConversationMain.tsx: uses /api/session-matches for per-session match navigation and highlighting.
+- src/features/conversation/markdown.tsx: renderSnippet expects [[...]] markers in the FTS snippet output.
+
+If the search-sorting-controls plan (todos/2026-01-27-12pm_search-sorting-controls-plan.txt) is completed before this
+Sorting controls introduce new public query params and ordering behavior. The refactor must preserve those contracts verbatim.
+Callouts:
+- /api/search must continue to accept sort params (e.g., resultSort and groupSort) with the same defaults.
+- Sorting should remain server-driven: resultSort applied in SQL, groupSort applied after grouping.
+- Shared types (shared/apiTypes.ts) must include SearchResultSort and SearchGroupSort unions so client/server stay aligned.
+- Deterministic ordering is even more important once multiple sort modes exist; keep the tie-breaker (sessions.id ASC) in all ORDER BY variants.
+- Verification should include explicit sorting scenarios (relevance vs matches vs recent, and group ordering by last_seen vs matches) to confirm no regressions after refactor.
+
+Any change to /api/search must preserve these client behaviors: grouping shape (WorkspaceSearchGroup), snippet highlighting markers, match counts, and session path used for navigation. Any change to /api/session-matches must continue to exclude preamble turns (turn_id <= 0), since the UI assumes that alignment.
+
+Preferred server layout (tailored structure)
+This layout keeps apiPlugin.ts as the Vite adapter while splitting actual behavior into focused modules. It also avoids deep nesting so the server folder remains easy to scan.
+
+server/
+- apiPlugin.ts (thin adapter; constructs router, delegates to handlers)
+- routes/index.ts (maps method + pathname to handler functions)
+- http.ts (sendJson, readJsonBody, query param helpers, error helpers)
+- logging.ts (DEBUG/SEARCH_DEBUG flags and logDebug/logSearchDebug)
+- config.ts (CONFIG_DIR/PATH, resolveSessionsRoot, setSessionsRoot, ensureRootExists, ensurePathSafe)
+- db/index.ts (DB_PATH, ensureDb/getDb, initSchema, ensureSessionColumns, clearDbSchema)
+- indexing/index.ts (indexSessions entrypoint, scanSessionFiles, parseJsonlFile, readSessionIdFromFile, helpers)
+- indexing/tree.ts (getSessionsForTree, buildSessionsTree, truncatePreview)
+- search/normalize.ts (normalizeFtsQuery, FTS_TOKEN_REGEX, MAX_FTS_TOKENS)
+- search/queries.ts (searchSessions, resolveSession, sessionMatches; all SQL lives here)
+- workspaces.ts (getWorkspaceSummaries, extractGithubSlug)
+- types.ts (server-only types for session/indexing rows and internal DTOs, if needed)
+
+shared/
+- apiTypes.ts (SearchResponse, SessionMatchesResponse, WorkspaceSummary, etc. used by both server and client)
+
+Naming conventions:
+- Prefer noun-based modules (config, db, workspaces) and verb-based entrypoints (indexing/index.ts, search/queries.ts) so callsites read clearly.
+- Keep route handlers thin: they should parse input, call a domain function, and format output, with no SQL or indexing logic inside.
+
+The Plan
+Step 1: Establish a minimal routing layer and shared HTTP helpers.
+Create a small router module (e.g., server/router.ts or server/routes/index.ts) that maps a method + pathname to a handler. Move sendJson, readJsonBody, and common query parsing into a server/http.ts utility. Keep behavior identical. The goal is to make apiPlugin.ts a thin adapter that calls the router, so subsequent extraction does not require editing a monolith. This step is a prerequisite for the rest, because it decouples endpoint registration from implementation details.
+Note: define a single error boundary and a simple handler contract so 400/404 vs 500 behavior stays consistent after extraction (e.g., HttpError with status + payload, or a shared sendError helper).
+
+Step 2: Extract config and sessions-root management.
+Move config file I/O (CONFIG_DIR, CONFIG_PATH, readConfigFile, writeConfigFile), sessions-root resolution (resolveSessionsRoot, setSessionsRoot), and path safety helpers into server/config.ts (or server/config/). This isolates configuration concerns from API routing and search logic and aligns with the existing responsibility split described in the overview.
+
+Step 3: Extract database connection and schema management.
+Move ensureDb, initSchema, ensureSessionColumns, clearDbSchema, and related constants into server/db/. The exported surface should be small and explicit: getDb(), initDb(), clearDb(). The api layer should call these helpers instead of handling schema logic directly. This isolates the SQLite contract and enables future changes such as statement caching without touching the router. This step must happen before search extraction so all search modules can import a single DB entry point.
+
+Step 4: Extract indexing and session parsing.
+Move scanSessionFiles, parseJsonlFile, indexSessions, and related parsing helpers (session ID extraction, timestamp parsing, formatToolCall/output, normalizeCwd, truncatePreview, etc.) into server/indexer.ts or server/indexing/. Keep the existing behavior, including session_meta precedence and the filename-first session_id rule in the metadataChecked branch. This step also owns getSessionsForTree and buildSessionsTree if you want all session-listing logic to live alongside indexing. The handlers for /api/sessions, /api/reindex, and /api/clear-index should depend on this module.
+Document the filename-first session_id invariant in the indexer module with an explicit comment and keep the mismatch logging so future maintainers understand why UUID de-duplication is not safe.
+
+Step 5: Extract search primitives and query composition.
+Create server/search/normalize.ts for normalizeFtsQuery and tokenization rules (MAX_FTS_TOKENS, FTS_TOKEN_REGEX) and server/search/queries.ts for SQL builders. Expose functions like searchSessions(db, query, options) and resolveSession(db, id, workspace). Keep the return shape identical to current SearchResponse/SessionMatchesResponse. This is the foundation for performance work and for test coverage.
+
+Step 6: Extract workspace summary helpers.
+Move getWorkspaceSummaries and extractGithubSlug into server/workspaces.ts. This reduces coupling between search queries and metadata shaping, and keeps the workspace summary schema in a single place. It also makes it easier to later introduce caching or a materialized table.
+
+Step 7: Apply performance improvements in /api/search.
+Adjust the SQL so workspace filtering happens before aggregation. Concretely, join sessions in the matches CTE and apply the workspace filter there, so the FTS scan is constrained as early as possible. Preserve the existing output and ordering (best_score ASC, timestamp DESC), but reduce unnecessary work. Also stop computing full workspace summaries on each search. Prefer one of these approaches and codify it:
+- Preferred: compute summaries only for the set of workspaces present in the search results (use a WHERE cwd IN (...) query), then merge with groups in JS. This keeps the existing summaries schema and avoids scanning the full sessions table.
+- Alternative: materialize a workspaces table during indexing. This yields faster search responses and fewer runtime queries but adds schema/migration complexity and requires keeping the table updated on reindex and clear-index.
+Choose one and document it in the code, including why it was selected.
+In the same pass, consider caching workspace summaries and the sessions tree in memory and invalidating on reindex/clear-index to reduce repeated queries in large datasets.
+Add a guard for empty result sets to avoid generating a WHERE cwd IN () clause.
+Preserve the existing “Unknown workspace” bucket for null/empty cwd values when grouping results.
+
+Step 8: Add lightweight performance instrumentation for search.
+Add Server-Timing headers to /api/search and /api/session-matches similar to /api/sessions (e.g., normalize, query, group, json, total). This provides quick feedback when refactoring the SQL and helps identify regressions. While touching responses, consider echoing requestId in JSON responses to make client/server log correlation trivial.
+
+Step 9: Improve developer experience and typing discipline.
+Introduce a shared API types file (for example, shared/apiTypes.ts at the repo root) and update both the root tsconfig.json and server/tsconfig.json to include it. Move SearchResponse and SessionMatchesResponse definitions there and reuse them on both client and server. Update src/features/conversation/api.ts to return those types directly (no Partial<>). This reduces drift between backend and frontend. Keep the file path stable and avoid circular imports.
+Keep the shared file types-only. Do not place helpers or runtime values there to avoid server/client import leakage.
+Optionally, add a small typed fetch wrapper (apiFetch) in the client layer so request/response shape changes are centralized rather than duplicated across every API call.
+
+Step 10: Add targeted tests for the brittle parts.
+Add a small unit-test harness (even a Node script under server/tests or scripts) for normalizeFtsQuery and extractGithubSlug, and for a sample search query if feasible. If a testing framework is not in place, at minimum add a script in scripts/ that runs these functions with assertions. The goal is to freeze current behavior and prevent subtle regressions (token truncation, quoting, workspace slug parsing, and session_id extraction).
+
+Step 11: Wire everything back into apiPlugin.ts and ensure parity.
+Update apiPlugin.ts to call the new router and handlers. Keep the endpoint URLs and response shapes exactly the same. Ensure that DEBUG and SEARCH_DEBUG logs are preserved (possibly via a centralized logger module). This is the final integration step; do it after extractions to avoid double-editing.
+Add a final docs update step (README.md + AGENTS.md) to point to the new server module layout and avoid future confusion about where indexing/search logic lives.
+
+Decisions and Tradeoffs
+- Extracting modules first (before performance changes) reduces risk. It is easier to validate behavior when the code is identical but reorganized. The tradeoff is more files and a temporarily longer diff.
+- Optional simplification: you can skip a standalone router and keep apiPlugin.ts as the only middleware while extracting modules. If you do add a router, keep it minimal and avoid framework-like complexity.
+- Applying workspace filtering early is favored because it cuts the FTS workload for filtered searches. The tradeoff is a slightly more complex SQL query and a dependency on joining sessions within the FTS CTE.
+- Computing workspace summaries only for result workspaces is chosen for simplicity and minimal schema changes. The tradeoff is one extra query per search, but it scales with result size rather than total sessions. If search latency remains high, a materialized workspaces table can be considered later.
+- Sharing API types in a root-level shared module avoids server-to-client drift but requires tsconfig include adjustments. The tradeoff is a new shared boundary and potential circular import pitfalls if utility code is mixed into that file.
+
+Landmines and gotchas
+- Snippet rendering depends on snippet() returning [[...]] markers. Any change to snippet delimiters or normalization will silently break highlight rendering in SearchPanel.
+- /api/session-matches intentionally excludes preamble turns (turn_id <= 0). Changing that will break match navigation alignment in ConversationMain.
+- Search grouping uses sessions.id (path) for navigation. If you introduce any deduping by session_id later, keep session_path intact in results to avoid breaking loadSession.
+- normalizeFtsQuery is Unicode-aware and token-capped. Subtle changes to regex or quoting can break matching for non-ASCII queries or emoji-heavy text. Preserve the current rules unless you update tests.
+- Caching workspace summaries must be invalidated on reindex and clear-index, or you will return stale counts and last_seen timestamps.
+- Route handlers currently assume sendJson catches and formats errors consistently. When splitting handlers, keep error handling behavior consistent (including 400/404 vs 500).
+- ORDER BY should be deterministic; add a stable tie-breaker (e.g., sessions.id ASC) to avoid flicker when scores/timestamps match.
+
+Verification
+After each step, run npm run typecheck and npm run check to ensure TS and Biome are clean. Manual verification should follow this sequence:
+1) Start the app (npm run dev). Confirm that the home page renders and the search input debounces properly (status pill shows “Searching…”).
+2) Search with a normal query and verify that grouped results render, snippets highlight, and clicking a result loads the session.
+3) Paste a UUID and confirm the fast resolve path still works; if unresolved, confirm the fallback search runs.
+4) Apply a workspace filter and confirm search results and match counts still reflect only that workspace. Compare search timings (Server-Timing header) before and after the workspace filter refactor to ensure improvements.
+5) Open a session with an active search query and use Prev/Next match navigation. Confirm that matches exist only for turns > 0 and highlighting aligns with match tokens.
+6) Reindex and clear-index flows should still work; verify that cached summaries (if introduced) refresh correctly.
+
+When all steps complete, repeat the manual search scenarios above and ensure no behavior changes in the UI. If any endpoint response shape changes, update src/features/conversation/api.ts and SearchPanel rendering to match, and add explicit notes in the shared types file.

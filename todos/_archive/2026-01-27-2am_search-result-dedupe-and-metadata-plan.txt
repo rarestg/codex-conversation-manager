@@ -1,4 +1,7 @@
-Search Results: Conversation De-duplication + Per-Session Metadata Pills
+Search Results: Conversation De-duplication + Per-Session Metadata Pills (Deprecated)
+
+Deprecation notice (2026-01-27)
+This plan is superseded. We discovered that session_meta can include ancestor IDs when branching sessions, so multiple JSONL files may legitimately share the same session_id value even though they are distinct sessions. De-duplicating by session_id would incorrectly merge branched sessions. The correct fix was to stop overwriting session_id during indexing and to prefer the filename ID as the canonical session_id, while keeping per-file grouping in /api/search. Per-session pills were still implemented, but de-duplication by UUID is intentionally not used.
 
 Context
 We already upgraded search to aggregate per session, but users still see duplicate rows for what is conceptually the same conversation. This happens because multiple JSONL files can share the same session UUID (sessions.session_id) while the search UI groups by sessions.id/path. As a result, “one row per conversation” is not actually enforced when a single conversation has multiple files/paths. Separately, the search result rows are missing the per-session metadata pills called out in the original request: date/time and git branch (workspace/repo is already surfaced at the group header). We should implement both fixes together because they touch the same server response shape and the same UI rendering path.
