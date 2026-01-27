@@ -1,4 +1,4 @@
-import { type ClipboardEvent, type KeyboardEvent, useEffect, useRef } from 'react';
+import { type ClipboardEvent, type KeyboardEvent, type MouseEvent, useEffect, useRef } from 'react';
 import { logSearch } from '../debug';
 import { formatDate, formatTime, formatWorkspacePath } from '../format';
 import { renderSnippet } from '../markdown';
@@ -42,6 +42,11 @@ export const SearchPanel = ({
   const isSearching = searchStatus === 'debouncing' || searchStatus === 'loading';
   const showEmptyState = Boolean(searchQuery) && searchStatus === 'success' && searchGroups.length === 0;
   const showErrorState = searchStatus === 'error';
+  const handleOpenGithub = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (!window.confirm('Open this repository on GitHub in a new tab?')) {
+      event.preventDefault();
+    }
+  };
   const lastStateRef = useRef({
     status: searchStatus,
     isSearching,
@@ -137,11 +142,7 @@ export const SearchPanel = ({
                         rel="noreferrer"
                         title="Open on GitHub"
                         aria-label={`Open ${group.workspace.github_slug} on GitHub`}
-                        onClick={(event) => {
-                          if (!window.confirm('Open this repository on GitHub in a new tab?')) {
-                            event.preventDefault();
-                          }
-                        }}
+                        onClick={handleOpenGithub}
                         className="search-github-icon-link mt-0.5 rounded-full bg-slate-200 p-1 text-slate-600 transition hover:bg-slate-300"
                       >
                         <GitHubIcon className="h-3.5 w-3.5" />
@@ -173,6 +174,7 @@ export const SearchPanel = ({
                     href={`https://github.com/${group.workspace.github_slug}`}
                     target="_blank"
                     rel="noreferrer"
+                    onClick={handleOpenGithub}
                     className="search-github-link mt-2 items-center gap-2 text-xs font-medium text-teal-700 hover:text-teal-800"
                   >
                     Open on GitHub

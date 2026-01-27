@@ -97,7 +97,7 @@ const splitLinkUrlSegments = (text: string) => {
   let lastIndex = 0;
   let i = 0;
   while (i < text.length) {
-    if (text[i] === '\\\\') {
+    if (text[i] === '\\') {
       i += 2;
       continue;
     }
@@ -111,7 +111,7 @@ const splitLinkUrlSegments = (text: string) => {
     let j = labelStart;
     let labelFound = false;
     while (j < text.length) {
-      if (text[j] === '\\\\') {
+      if (text[j] === '\\') {
         j += 2;
         continue;
       }
@@ -129,7 +129,7 @@ const splitLinkUrlSegments = (text: string) => {
     let depth = 1;
     let k = urlStart;
     while (k < text.length) {
-      if (text[k] === '\\\\') {
+      if (text[k] === '\\') {
         k += 2;
         continue;
       }
