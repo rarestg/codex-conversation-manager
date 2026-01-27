@@ -21,6 +21,26 @@ How to extend this index
 Entries
 =======
 
+- Plan: 2026-01-27-2pm_search-min-token-length-plan.txt
+  Context: 2026-01-27-2pm_search-min-token-length-plan-context.txt
+  Why: Single-letter searches were noisy and expensive; we wanted a softer minimum length without breaking non-Latin queries.
+  Outcome:
+  - Added script-aware “searchable token” rules (Latin >= 3, numeric >= 2, non-Latin >= 1) in normalizeFtsQuery.
+  - Mirrored the same rules and token cap in useSearch to keep client/server behavior aligned.
+  - Added a “Type at least 3 characters to search” hint and suppressed the empty state when queries are too short.
+  Notes:
+  - Latin short tokens like “AI”/“Go” are intentionally blocked unless paired with a longer token.
+
+- Plan: 2026-01-27-12pm_search-sorting-controls-plan.txt
+  Context: 2026-01-27-2pm_search-sorting-controls-context.txt
+  Why: Make result/workspace ordering explicit so users can choose relevance vs match count vs recency without confusion.
+  Outcome:
+  - Added resultSort/groupSort params end-to-end (types, UI controls, and server ordering).
+  - Implemented mobile sort disclosure + container-query layout adjustments.
+  - Search loading now uses a results-area skeleton; group last_seen fallback uses the latest session timestamp.
+  Notes:
+  - Defaults preserved; server applies relevance + last_seen when params are absent.
+
 - Plan: 2026-01-27-2am_search-result-dedupe-and-metadata-plan.txt
   Context: 2026-01-27-12am_search-roadmap-context.txt
   Why: Proposed de-duplicating search rows by session UUID and adding per-session pills.

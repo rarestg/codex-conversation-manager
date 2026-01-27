@@ -1,5 +1,7 @@
 export type ParsedItemType = 'user' | 'assistant' | 'thought' | 'tool_call' | 'tool_output' | 'meta' | 'token_count';
 export type SearchStatus = 'idle' | 'debouncing' | 'loading' | 'success' | 'error';
+export type SearchResultSort = 'relevance' | 'matches' | 'recent';
+export type SearchGroupSort = 'last_seen' | 'matches';
 
 export interface ParsedItem {
   id: string;

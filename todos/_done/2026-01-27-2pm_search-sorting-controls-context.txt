@@ -1,0 +1,39 @@
+Search Sorting Controls (Completed)
+
+Context
+We added explicit sort controls for search results and workspace groups so users can pick relevance vs match count vs recency, and choose how workspaces are ordered. The server now honors sort params for ordering, and the UI exposes them while keeping the default behavior unchanged.
+
+What Was Implemented
+Server (apiPlugin.ts)
+- /api/search now accepts resultSort (relevance|matches|recent) and groupSort (last_seen|matches) query params.
+- Result ordering is applied in SQL via an explicit ORDER BY, with the default unchanged.
+- Workspace groups are sorted by last_seen (default) or match_count, with stable tie-breakers.
+- last_seen fallback now uses the max session_timestamp across group results so it’s accurate regardless of result ordering.
+- Search debug logs include resultSort/groupSort and the resolved orderBy clause.
+
+Client (search + UI)
+- Types added for SearchResultSort and SearchGroupSort.
+- useSearch owns sort state and re-runs search when sort changes.
+- SearchPanel renders sort controls on desktop, and a compact mobile disclosure row (summary + expandable selects) using container queries.
+- Search loading state now shows a lightweight skeleton in the results area to avoid header layout shifts.
+
+Key Files
+- server/apiPlugin.ts
+- src/features/conversation/types.ts
+- src/features/conversation/api.ts
+- src/features/conversation/hooks/useSearch.ts
+- src/features/conversation/components/SearchPanel.tsx
+- src/features/conversation/ConversationViewer.tsx
+- src/features/conversation/components/Sidebar.tsx
+- src/index.css
+
+Verification Checklist (Current State)
+- Default search ordering unchanged when no params are supplied.
+- Switching result sort updates order within a workspace (relevance, matches, recent).
+- Switching workspace sort updates group order (last active, most matches).
+- Mobile/narrow layouts show a single Sort disclosure row with summary text.
+- “Searching” skeleton appears below mobile sort and where results will render.
+
+Notes
+- Sorting remains server-side to avoid client re-ordering fights.
+- Older clients are safe: server applies defaults when params are absent.

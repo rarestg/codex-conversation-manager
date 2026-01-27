@@ -1,0 +1,92 @@
+Soft-Min Search Token Length (Script-Aware) Plan
+
+Context
+Search currently accepts single-letter queries (e.g., "e"), which are almost always noise and can be expensive (large match sets, long queries). The goal is to reduce noisy/expensive searches without breaking valid short queries, especially for non-Latin scripts and short numeric tokens. We also need to keep client and server logic aligned so the UI doesn’t say “no matches” while the server silently short-circuits.
+
+Relevant codebase areas
+- server/apiPlugin.ts
+  normalizeFtsQuery constructs the FTS MATCH string and returns tokens used for highlight. The earliest and safest place to enforce a minimum token length is here.
+- src/features/conversation/hooks/useSearch.ts
+  This hook owns the search lifecycle and can short-circuit client requests to avoid unnecessary API calls. It should mirror the server’s “searchable token” logic.
+- src/features/conversation/components/SearchPanel.tsx
+  This component renders the search empty state and status messaging. We’ll add a “type at least 3 characters” hint when the query is too short.
+- src/features/conversation/components/Sidebar.tsx and src/features/conversation/ConversationViewer.tsx
+  These pass search props down; they must forward any new `searchTooShort` state.
+
+How the parts connect
+useSearch drives the debounce and determines whether to call /api/search. SearchPanel renders the results, errors, and empty state based on the status and groups. normalizeFtsQuery decides whether the server even runs a query. If client/server criteria differ, the UI can show “No matches” for a query the server rejects (or vice‑versa). The plan’s emphasis is alignment and script-aware thresholds.
+
+The Plan
+Step 1 — Define a script-aware minimum token rule on the server
+What to do:
+- In server/apiPlugin.ts, introduce token classification helpers:
+  - Latin tokens require length >= 3.
+  - Numeric tokens require length >= 2.
+  - Non-Latin tokens require length >= 1.
+- Update normalizeFtsQuery to compute `hasSearchableToken` using these rules on the same token list that will be used for the query (after MAX_FTS_TOKENS truncation).
+- If no searchable tokens exist, return `{ normalized: null, tokens: [] }` early so /api/search returns an empty response without touching SQLite.
+
+Why:
+This reduces noisy 1‑character Latin searches while preserving valid short queries (e.g., CJK, short numeric codes). It keeps the “soft min length” intent without breaking Unicode behavior.
+
+Dependencies:
+None (contained to normalizeFtsQuery).
+
+Step 2 — Mirror the exact same logic in the client
+What to do:
+- In src/features/conversation/hooks/useSearch.ts, add the same token regex, token cap, and script-aware length rules.
+- Introduce `getSearchTokens` that truncates to MAX_FTS_TOKENS, then apply the same searchable-token check.
+- Use this to derive `searchTooShort` and to short-circuit the debounce effect before sending requests.
+
+Why:
+Keeping server and client in lockstep prevents mismatched UI states for long or token-heavy queries.
+
+Dependencies:
+Requires Step 1’s rules to be finalized first so the client matches it precisely.
+
+Step 3 — Add a “too short” hint in the UI
+What to do:
+- Add a `searchTooShort` prop to SearchPanel and render a hint when true, e.g. “Type at least 3 characters to search.”
+- Ensure this hint suppresses the empty state ("No matches") so the UI communicates the real reason for no results.
+- Forward the prop through ConversationViewer and Sidebar.
+
+Why:
+Avoids user confusion when short queries are intentionally suppressed. Keeps the UX helpful and explicit.
+
+Dependencies:
+Requires Step 2 to expose `searchTooShort` from useSearch.
+
+Step 4 — Logging and verification alignment
+What to do:
+- Keep logSearch events consistent; include “too-short” as a clear reason when clearing state.
+- Verify that the same rule is applied to paste-UUID paths (UUIDs bypass min length because they match UUID regex).
+
+Why:
+Search debugging relies on logs to correlate UI and server behavior. “Too-short” should be clearly visible and not look like a silent failure.
+
+Decisions & Tradeoffs
+- Soft min length over hard min length:
+  We block “all tokens are too short,” but allow short tokens if there is at least one searchable token. This keeps short context tokens (e.g., “sharp ui”) while rejecting noisy “e”.
+- Script-aware thresholds:
+  Latin tokens use length >= 3 to suppress noisy matches, but non‑Latin tokens remain length >= 1 so CJK and other scripts aren’t penalized. Numeric tokens use >= 2 to reduce matching of single digits.
+- Client/server symmetry:
+  We mirror the MAX_FTS_TOKENS cap before checking token length. This avoids the edge case where the client allows a query but the server’s capped token list has no searchable terms.
+
+Landmines
+- If client and server rules drift, the UI will show “No matches” instead of “Type at least 3 characters.”
+- Changes to FTS_TOKEN_REGEX or token caps must be applied in both places or results can diverge.
+- Avoid blocking UUID searches: UUIDs are handled by resolveSession; don’t apply the min‑length rule to the UUID fast path.
+- Keep the “too short” hint mutually exclusive with error and empty states to avoid mixed messaging.
+
+Verification
+Manual checks:
+- Search for “e” → no API search request; UI shows “Type at least 3 characters to search.”
+- Search for “sharp ui” → request runs; results show normally.
+- Search for a CJK 2‑character query → should run and return results if present.
+- Search for “AI” or “Go” → should be blocked (Latin min length 3) and show the hint.
+- Search for numeric “12” → should run; numeric “1” should be blocked.
+- Very long query with many short tokens and one long token: ensure client/server behavior matches and still runs (long token within the first 32 tokens).
+
+Automated checks:
+- npm run typecheck
+- npm run check

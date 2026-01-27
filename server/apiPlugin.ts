@@ -15,6 +15,9 @@ const DB_PATH = path.join(CONFIG_DIR, 'codex_index.db');
 const MAX_PREVIEW_CHARS = 1000;
 const MAX_PREVIEW_LINES = 50;
 const MAX_FTS_TOKENS = 32;
+const MIN_LATIN_TOKEN_LENGTH = 3;
+const MIN_NON_LATIN_TOKEN_LENGTH = 1;
+const MIN_NUMERIC_TOKEN_LENGTH = 2;
 
 interface ConfigFile {
   sessionsRoot?: string;
@@ -385,6 +388,19 @@ const truncatePreview = (value?: string | null) => {
 const SESSION_ID_REGEX = /\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/;
 const SESSION_ID_PREFIX_REGEX = /\b(?:sess(?:ion)?[_-])[a-zA-Z0-9_-]{6,}\b/;
 const FTS_TOKEN_REGEX = /[\p{L}\p{N}\p{M}]+/gu;
+const LATIN_SCRIPT_REGEX = /\p{Script=Latin}/u;
+const NUMERIC_TOKEN_REGEX = /^\p{N}+$/u;
+
+const isSearchableToken = (token: string) => {
+  if (!token) return false;
+  if (LATIN_SCRIPT_REGEX.test(token)) {
+    return token.length >= MIN_LATIN_TOKEN_LENGTH;
+  }
+  if (NUMERIC_TOKEN_REGEX.test(token)) {
+    return token.length >= MIN_NUMERIC_TOKEN_LENGTH;
+  }
+  return token.length >= MIN_NON_LATIN_TOKEN_LENGTH;
+};
 
 const normalizeSessionId = (value: string) => {
   const trimmed = value.trim();
@@ -406,9 +422,13 @@ const normalizeFtsQuery = (raw: string) => {
   }
   const truncated = tokens.length > MAX_FTS_TOKENS;
   const limitedTokens = tokens.slice(0, MAX_FTS_TOKENS);
-  const escapedTokens = limitedTokens.map((token) => token.replace(/"/g, '""'));
+  const searchableTokens = limitedTokens.filter(isSearchableToken);
+  if (searchableTokens.length === 0) {
+    return { normalized: null as string | null, tokens: [] as string[], truncated: false };
+  }
+  const escapedTokens = searchableTokens.map((token) => token.replace(/"/g, '""'));
   const normalized = escapedTokens.map((token) => `"${token}"`).join(' AND ');
-  return { normalized, tokens: limitedTokens, truncated };
+  return { normalized, tokens: searchableTokens, truncated };
 };
 
 const extractSessionIdFromObject = (value: unknown, depth = 0): string | null => {
@@ -1469,9 +1489,14 @@ export const apiPlugin = (): Plugin => {
             const limit = Number(url.searchParams.get('limit') || '20');
             const workspace = url.searchParams.get('workspace')?.trim() || null;
             const requestId = url.searchParams.get('requestId')?.trim() || null;
+            const resultSortParam = url.searchParams.get('resultSort')?.trim();
+            const groupSortParam = url.searchParams.get('groupSort')?.trim();
+            const resultSort =
+              resultSortParam === 'matches' ? 'matches' : resultSortParam === 'recent' ? 'recent' : 'relevance';
+            const groupSort = groupSortParam === 'matches' ? 'matches' : 'last_seen';
             if (q === null) return sendJson(res, 400, { error: 'q is required.' });
             const searchStartedAt = performance.now();
-            logSearchDebug('search:request', { requestId, q, limit, workspace });
+            logSearchDebug('search:request', { requestId, q, limit, workspace, resultSort, groupSort });
             const normalized = normalizeFtsQuery(q);
             if (!normalized.normalized) {
               logSearchDebug('search:normalized:empty', {
@@ -1479,6 +1504,8 @@ export const apiPlugin = (): Plugin => {
                 q,
                 tokens: normalized.tokens,
                 truncated: normalized.truncated,
+                resultSort,
+                groupSort,
               });
               return sendJson(res, 200, { groups: [], tokens: normalized.tokens });
             }
@@ -1488,6 +1515,8 @@ export const apiPlugin = (): Plugin => {
               normalized: normalized.normalized,
               tokens: normalized.tokens,
               truncated: normalized.truncated,
+              resultSort,
+              groupSort,
             });
             const database = ensureDb();
             const params: Array<string | number> = [normalized.normalized];
@@ -1496,6 +1525,12 @@ export const apiPlugin = (): Plugin => {
               params.push(workspace);
             }
             params.push(Number.isFinite(limit) ? limit : 20);
+            const orderBy =
+              resultSort === 'matches'
+                ? 'aggregated.match_message_count DESC, aggregated.match_turn_count DESC, sessions.timestamp DESC'
+                : resultSort === 'recent'
+                  ? 'sessions.timestamp DESC, aggregated.best_score ASC'
+                  : 'aggregated.best_score ASC, sessions.timestamp DESC';
             type SearchResultRow = {
               session_path: string;
               session_id: string | null;
@@ -1570,7 +1605,7 @@ export const apiPlugin = (): Plugin => {
                 FROM aggregated
                 JOIN sessions ON sessions.id = aggregated.session_id
                 ${workspaceClause}
-                ORDER BY aggregated.best_score ASC, sessions.timestamp DESC
+                ORDER BY ${orderBy}
                 LIMIT ?
               `);
               const results = stmt.all(...params) as SearchResultRow[];
@@ -1614,20 +1649,31 @@ export const apiPlugin = (): Plugin => {
                 };
                 group.results.push(result);
                 group.match_count += result.match_message_count || 0;
+                if (result.session_timestamp) {
+                  const currentLastSeen = group.workspace.last_seen;
+                  if (!currentLastSeen || result.session_timestamp > currentLastSeen) {
+                    group.workspace.last_seen = result.session_timestamp;
+                  }
+                }
                 groupsMap.set(workspaceKey, group);
               }
 
               const groups = Array.from(groupsMap.values())
                 .map((group) => {
-                  if (!group.workspace.last_seen) {
-                    group.workspace.last_seen = group.results[0]?.session_timestamp ?? null;
-                  }
                   if (!group.match_count) {
                     group.match_count = group.results.length;
                   }
                   return group;
                 })
                 .sort((a, b) => {
+                  if (groupSort === 'matches') {
+                    if (b.match_count !== a.match_count) {
+                      return b.match_count - a.match_count;
+                    }
+                    const lastSeenCompare = (b.workspace.last_seen ?? '').localeCompare(a.workspace.last_seen ?? '');
+                    if (lastSeenCompare !== 0) return lastSeenCompare;
+                    return a.workspace.cwd.localeCompare(b.workspace.cwd);
+                  }
                   const lastSeenCompare = (b.workspace.last_seen ?? '').localeCompare(a.workspace.last_seen ?? '');
                   if (lastSeenCompare !== 0) return lastSeenCompare;
                   if (b.workspace.session_count !== a.workspace.session_count) {
@@ -1643,7 +1689,10 @@ export const apiPlugin = (): Plugin => {
                 tokens: normalized.tokens,
                 workspace,
                 limit,
+                resultSort,
+                groupSort,
                 workspaceClause,
+                orderBy,
                 params,
                 resultCount: results.length,
                 groupCount: groups.length,
@@ -1661,7 +1710,10 @@ export const apiPlugin = (): Plugin => {
                 tokens: normalized.tokens,
                 workspace,
                 limit,
+                resultSort,
+                groupSort,
                 workspaceClause,
+                orderBy,
                 params,
                 error,
               });

@@ -1,0 +1,20 @@
+Title: Session view floating controls + shortcuts + search UX cleanup
+
+Why
+- Toggles and search match controls are pinned at the top; they fall out of view during long sessions.
+- Navigating to top/bottom or home is frequent and currently requires manual scrolling.
+- Sidebar search stays populated when entering a session from search, which can feel noisy.
+- Search clear “x” icon styling feels inconsistent with the rest of the lucide-based UI.
+
+Scope / intent
+- Floating controls: make session toggles available while scrolling (sticky/float panel), and consider floating search-match controls (Prev/Next) when `?q=` is active.
+- Search matches bar: add a close (x) action that removes the `q` param and clears in-session highlight state.
+- Toggle defaults: switch defaults to “all off” (thoughts/tools/meta/token counts/full content), so users opt-in as needed.
+- Shortcuts: add keyboard shortcuts for top/bottom/home navigation (e.g., Cmd/Ctrl+S = top, Cmd/Ctrl+E = bottom, Cmd/Ctrl+H = home) alongside existing Cmd/Ctrl+K.
+- Sidebar search-on-entry: if session opened from search, either (a) collapse or constrain results to a scrollable area, or (b) clear the sidebar search query on entry.
+- Search clear icon: replace the blue gradient “x” with a lucide icon styled consistently with other controls.
+
+Notes
+- Floating controls should not obscure message content; respect safe area and mobile layouts.
+- For shortcuts, confirm no conflict with browser/system defaults; allow opt-out if needed.
+- Decide whether search-on-entry behavior differs for direct session loads vs search-driven navigation.

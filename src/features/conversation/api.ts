@@ -1,4 +1,12 @@
-import type { IndexSummary, SearchResponse, SessionMatchesResponse, SessionTree, WorkspaceSummary } from './types';
+import type {
+  IndexSummary,
+  SearchGroupSort,
+  SearchResponse,
+  SearchResultSort,
+  SessionMatchesResponse,
+  SessionTree,
+  WorkspaceSummary,
+} from './types';
 
 const parseError = async (res: Response, fallback: string): Promise<never> => {
   let message = fallback;
@@ -43,6 +51,8 @@ export const searchSessions = async (
   limit = 40,
   workspace?: string | null,
   requestId?: string | null,
+  resultSort: SearchResultSort = 'relevance',
+  groupSort: SearchGroupSort = 'last_seen',
 ): Promise<SearchResponse> => {
   const params = new URLSearchParams({ q: query, limit: String(limit) });
   if (workspace) {
@@ -51,6 +61,8 @@ export const searchSessions = async (
   if (requestId) {
     params.set('requestId', requestId);
   }
+  params.set('resultSort', resultSort);
+  params.set('groupSort', groupSort);
   const res = await fetch(`/api/search?${params.toString()}`);
   if (!res.ok) {
     await parseError(res, 'Search failed.');
