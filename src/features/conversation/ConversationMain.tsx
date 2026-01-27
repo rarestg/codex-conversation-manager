@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { fetchSessionMatches } from './api';
 import { SessionHeaderVariantB } from './components/SessionHeaderVariantB';
 import { SessionOverview } from './components/SessionOverview';
 import { TurnJumpModal } from './components/TurnJumpModal';
@@ -17,6 +18,7 @@ interface ConversationMainProps {
   sessionDetails: SessionDetails;
   sessionsRoot: string;
   loadingSession: boolean;
+  activeSearchQuery?: string | null;
   jumpToTurn: (turnId: number | null, options?: JumpToTurnOptions) => void;
 }
 
@@ -33,6 +35,7 @@ export const ConversationMain = ({
   sessionDetails,
   sessionsRoot,
   loadingSession,
+  activeSearchQuery,
   jumpToTurn,
 }: ConversationMainProps) => {
   const mainRef = useRef<HTMLElement | null>(null);
@@ -53,6 +56,11 @@ export const ConversationMain = ({
     visibleItemCount,
     stats,
   } = useSessionOverview(turns);
+  const [matchTurnIds, setMatchTurnIds] = useState<number[]>([]);
+  const [matchTokens, setMatchTokens] = useState<string[]>([]);
+  const [matchesLoading, setMatchesLoading] = useState(false);
+  const [matchesError, setMatchesError] = useState<string | null>(null);
+  const matchRequestId = useRef(0);
 
   const navigableTurnIds = useMemo(
     () => filteredTurns.filter((turn) => !turn.isPreamble).map((turn) => turn.id),
@@ -68,6 +76,39 @@ export const ConversationMain = ({
     topSentinelRef,
     sessionKey: activeSession?.id ?? null,
   });
+
+  useEffect(() => {
+    if (!activeSession || !activeSearchQuery) {
+      setMatchTurnIds([]);
+      setMatchTokens([]);
+      setMatchesError(null);
+      setMatchesLoading(false);
+      return;
+    }
+    matchRequestId.current += 1;
+    const requestId = matchRequestId.current;
+    const requestKey = `matches-${Date.now().toString(36)}-${requestId}`;
+    setMatchesLoading(true);
+    setMatchTurnIds([]);
+    setMatchTokens([]);
+    setMatchesError(null);
+    fetchSessionMatches(activeSession.id, activeSearchQuery, requestKey)
+      .then((data) => {
+        if (requestId !== matchRequestId.current) return;
+        setMatchTurnIds(data.turn_ids);
+        setMatchTokens(data.tokens);
+      })
+      .catch((error: any) => {
+        if (requestId !== matchRequestId.current) return;
+        setMatchesError(error?.message || 'Unable to load matches.');
+        setMatchTurnIds([]);
+        setMatchTokens([]);
+      })
+      .finally(() => {
+        if (requestId !== matchRequestId.current) return;
+        setMatchesLoading(false);
+      });
+  }, [activeSearchQuery, activeSession]);
 
   useEffect(() => {
     if (!activeSession || loadingSession) {
@@ -115,6 +156,7 @@ export const ConversationMain = ({
   useRenderDebug('ConversationMain', {
     activeSessionId: activeSession?.id ?? null,
     loadingSession,
+    activeSearchQuery: activeSearchQuery ?? null,
     showThoughts,
     showTools,
     showMeta,
@@ -127,6 +169,28 @@ export const ConversationMain = ({
     activeTurnIndex,
     totalTurns,
   });
+
+  const matchCount = matchTurnIds.length;
+  const currentMatchIndex = activeTurnId ? matchTurnIds.indexOf(activeTurnId) : -1;
+  const matchPosition = currentMatchIndex >= 0 ? currentMatchIndex + 1 : 0;
+
+  const handlePrevMatch = useCallback(() => {
+    if (!matchCount) return;
+    const index = currentMatchIndex >= 0 ? currentMatchIndex - 1 : matchCount - 1;
+    const targetIndex = index < 0 ? matchCount - 1 : index;
+    const targetId = matchTurnIds[targetIndex];
+    if (typeof targetId !== 'number') return;
+    jumpToTurn(targetId, { historyMode: 'replace', scroll: true });
+  }, [currentMatchIndex, jumpToTurn, matchCount, matchTurnIds]);
+
+  const handleNextMatch = useCallback(() => {
+    if (!matchCount) return;
+    const index = currentMatchIndex >= 0 ? currentMatchIndex + 1 : 0;
+    const targetIndex = index >= matchCount ? 0 : index;
+    const targetId = matchTurnIds[targetIndex];
+    if (typeof targetId !== 'number') return;
+    jumpToTurn(targetId, { historyMode: 'replace', scroll: true });
+  }, [currentMatchIndex, jumpToTurn, matchCount, matchTurnIds]);
 
   return (
     <main
@@ -164,12 +228,56 @@ export const ConversationMain = ({
           onShowFullContentChange={setShowFullContent}
         />
 
+        {activeSearchQuery && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/70 px-4 py-3 text-xs text-slate-600 shadow-sm">
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-500">
+                Search matches
+              </span>
+              <span className="text-sm text-slate-800">{activeSearchQuery}</span>
+            </div>
+            {matchesLoading ? (
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">Finding matches…</span>
+            ) : matchesError ? (
+              <span className="rounded-full bg-rose-50 px-3 py-1 text-xs text-rose-700">{matchesError}</span>
+            ) : matchCount === 0 ? (
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">
+                No matches in this session
+              </span>
+            ) : (
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-slate-500">
+                  Match {matchPosition} of {matchCount}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handlePrevMatch}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
+                  >
+                    Prev
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleNextMatch}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <TurnList
           filteredTurns={filteredTurns}
           loadingSession={loadingSession}
           activeSession={activeSession}
           parseErrors={parseErrors}
           showFullContent={showFullContent}
+          highlightTokens={activeSearchQuery ? matchTokens : undefined}
+          matchTurnIds={matchTurnIds}
         />
       </div>
 

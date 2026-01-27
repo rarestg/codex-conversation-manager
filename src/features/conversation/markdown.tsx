@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { solarizedlight } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
 import remarkParse from 'remark-parse';
@@ -11,10 +12,12 @@ const prismStyle: Record<string, CSSProperties> = solarizedlight as unknown as R
 
 const markdownSchema = {
   ...defaultSchema,
+  tagNames: [...(defaultSchema.tagNames || []), 'mark'],
   attributes: {
     ...defaultSchema.attributes,
     code: [...(defaultSchema.attributes?.code || []), ['className']],
     pre: [...(defaultSchema.attributes?.pre || []), ['className']],
+    mark: [...(defaultSchema.attributes?.mark || []), ['className']],
   },
 };
 
@@ -33,6 +36,33 @@ const escapeHtmlTagLines = (markdown: string) => {
     if (/^\s*<\/?[A-Za-z][A-Za-z0-9_-]*(\s+[^>]+)?>\s*$/.test(line)) {
       lines[i] = line.replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
+  }
+  return lines.join('\n');
+};
+
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const highlightMarkdown = (markdown: string, tokens: string[]) => {
+  const uniqueTokens = Array.from(new Set(tokens.filter(Boolean)));
+  if (uniqueTokens.length === 0) return markdown;
+  uniqueTokens.sort((a, b) => b.length - a.length);
+  const pattern = uniqueTokens.map(escapeRegex).join('|');
+  if (!pattern) return markdown;
+  const regex = new RegExp(`(${pattern})`, 'gi');
+  const lines = markdown.split('\n');
+  let inFence = false;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    lines[i] = line.replace(
+      regex,
+      '<mark class="match-highlight rounded bg-amber-200/70 px-1 text-slate-900">$1</mark>',
+    );
   }
   return lines.join('\n');
 };
@@ -116,12 +146,14 @@ export const renderSnippet = (snippet?: string | null) => {
   return nodes;
 };
 
-export const MarkdownBlock = ({ content }: { content: string }) => {
+export const MarkdownBlock = ({ content, highlightTokens }: { content: string; highlightTokens?: string[] }) => {
   const normalized = escapeHtmlTagLines(content);
+  const highlighted =
+    highlightTokens && highlightTokens.length > 0 ? highlightMarkdown(normalized, highlightTokens) : normalized;
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
-      rehypePlugins={[[rehypeSanitize, markdownSchema]]}
+      rehypePlugins={[rehypeRaw, [rehypeSanitize, markdownSchema]]}
       components={{
         code({ className, children, ...props }) {
           const match = /language-(\w+)/.exec(className || '');
@@ -168,7 +200,7 @@ export const MarkdownBlock = ({ content }: { content: string }) => {
         },
       }}
     >
-      {normalized}
+      {highlighted}
     </ReactMarkdown>
   );
 };

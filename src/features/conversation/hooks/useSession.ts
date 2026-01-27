@@ -30,6 +30,7 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [activeSearchQuery, setActiveSearchQuery] = useState<string | null>(null);
   const [parsedMeta, setParsedMeta] = useState<ParsedMeta | null>(null);
   const [sessionDetails, setSessionDetails] = useState<SessionDetails>({});
   const [loadingSession, setLoadingSession] = useState(false);
@@ -83,6 +84,7 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
 
   const clearSession = useCallback(() => {
     setActiveSessionId(null);
+    setActiveSearchQuery(null);
     setParsedMeta(null);
     setTurns([]);
     setParseErrors([]);
@@ -110,7 +112,9 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
   const loadSession = useCallback(
     async (sessionId: string, turnId?: number, options?: LoadSessionOptions) => {
       const historyMode = options?.historyMode ?? 'push';
-      updateSessionUrl(sessionId, turnId ?? null, historyMode);
+      const searchQuery = options?.searchQuery ?? null;
+      updateSessionUrl(sessionId, turnId ?? null, historyMode, searchQuery);
+      setActiveSearchQuery(searchQuery);
       try {
         setLoadingSession(true);
         onError?.(null);
@@ -152,12 +156,12 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
         historyMode,
         scroll: options?.scroll !== false,
       });
-      updateSessionUrl(activeSessionId, turnId ?? null, historyMode);
+      updateSessionUrl(activeSessionId, turnId ?? null, historyMode, activeSearchQuery);
       if (typeof turnId === 'number' && Number.isFinite(turnId) && options?.scroll !== false) {
         setScrollToTurnId(turnId);
       }
     },
-    [activeSessionId],
+    [activeSearchQuery, activeSessionId],
   );
 
   const activeSession = useMemo<SessionFileEntry | null>(() => {
@@ -221,6 +225,7 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
     parseErrors,
     activeSession,
     sessionDetails,
+    activeSearchQuery,
     loadingSession,
     loadSession,
     clearSession,

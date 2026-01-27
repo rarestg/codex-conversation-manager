@@ -14,6 +14,7 @@ const DEFAULT_SESSIONS_ROOT = path.join(os.homedir(), '.codex', 'sessions');
 const DB_PATH = path.join(CONFIG_DIR, 'codex_index.db');
 const MAX_PREVIEW_CHARS = 1000;
 const MAX_PREVIEW_LINES = 50;
+const MAX_FTS_TOKENS = 32;
 
 interface ConfigFile {
   sessionsRoot?: string;
@@ -383,6 +384,7 @@ const truncatePreview = (value?: string | null) => {
 
 const SESSION_ID_REGEX = /\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/;
 const SESSION_ID_PREFIX_REGEX = /\b(?:sess(?:ion)?[_-])[a-zA-Z0-9_-]{6,}\b/;
+const FTS_TOKEN_REGEX = /[\p{L}\p{N}\p{M}]+/gu;
 
 const normalizeSessionId = (value: string) => {
   const trimmed = value.trim();
@@ -391,6 +393,22 @@ const normalizeSessionId = (value: string) => {
   const prefixMatch = trimmed.match(SESSION_ID_PREFIX_REGEX);
   if (prefixMatch) return prefixMatch[0];
   return trimmed;
+};
+
+const normalizeFtsQuery = (raw: string) => {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { normalized: null as string | null, tokens: [] as string[], truncated: false };
+  }
+  const tokens = (trimmed.match(FTS_TOKEN_REGEX) ?? []).filter(Boolean);
+  if (tokens.length === 0) {
+    return { normalized: null as string | null, tokens: [] as string[], truncated: false };
+  }
+  const truncated = tokens.length > MAX_FTS_TOKENS;
+  const limitedTokens = tokens.slice(0, MAX_FTS_TOKENS);
+  const escapedTokens = limitedTokens.map((token) => token.replace(/"/g, '""'));
+  const normalized = escapedTokens.map((token) => `"${token}"`).join(' AND ');
+  return { normalized, tokens: limitedTokens, truncated };
 };
 
 const extractSessionIdFromObject = (value: unknown, depth = 0): string | null => {
@@ -1373,7 +1391,8 @@ export const apiPlugin = (): Plugin => {
             const escaped = id.replace(/[\\%_]/g, '\\$&');
             const likePattern = `%${escaped}%`;
             const params: Array<string> = [id, id, likePattern];
-            let whereClause = "session_id = ? OR path = ? OR path LIKE ? ESCAPE '\\\\'";
+            // ESCAPE must be a single character; JS string literal yields a single backslash in SQL.
+            let whereClause = "session_id = ? OR path = ? OR path LIKE ? ESCAPE '\\'";
             if (workspace) {
               whereClause = `(${whereClause}) AND cwd = ?`;
               params.push(workspace);
@@ -1423,51 +1442,99 @@ export const apiPlugin = (): Plugin => {
             const limit = Number(url.searchParams.get('limit') || '20');
             const workspace = url.searchParams.get('workspace')?.trim() || null;
             const requestId = url.searchParams.get('requestId')?.trim() || null;
-            if (!q) return sendJson(res, 400, { error: 'q is required.' });
+            if (q === null) return sendJson(res, 400, { error: 'q is required.' });
             const searchStartedAt = performance.now();
             logSearchDebug('search:request', { requestId, q, limit, workspace });
+            const normalized = normalizeFtsQuery(q);
+            if (!normalized.normalized) {
+              logSearchDebug('search:normalized:empty', {
+                requestId,
+                q,
+                tokens: normalized.tokens,
+                truncated: normalized.truncated,
+              });
+              return sendJson(res, 200, { groups: [], tokens: normalized.tokens });
+            }
+            logSearchDebug('search:normalized', {
+              requestId,
+              q,
+              normalized: normalized.normalized,
+              tokens: normalized.tokens,
+              truncated: normalized.truncated,
+            });
             const database = ensureDb();
-            const params: Array<string | number> = [q];
-            let whereClause = 'messages_fts MATCH ?';
+            const params: Array<string | number> = [normalized.normalized];
+            const workspaceClause = workspace ? 'WHERE sessions.cwd = ?' : '';
             if (workspace) {
-              whereClause += ' AND sessions.cwd = ?';
               params.push(workspace);
             }
             params.push(Number.isFinite(limit) ? limit : 20);
             type SearchResultRow = {
-              id: number;
-              content: string;
-              session_id: string;
-              turn_id: number;
-              role: string;
-              timestamp?: string | null;
+              session_path: string;
+              session_id: string | null;
+              first_user_message?: string | null;
               session_timestamp?: string | null;
               cwd?: string | null;
               git_branch?: string | null;
               git_repo?: string | null;
               git_commit_hash?: string | null;
+              match_message_count: number;
+              match_turn_count: number;
+              first_match_turn_id: number | null;
               snippet?: string | null;
             };
             try {
               const stmt = database.prepare(`
+                WITH matches AS (
+                  SELECT
+                    messages_fts.session_id AS session_id,
+                    messages_fts.turn_id AS turn_id,
+                    bm25(messages_fts) AS score,
+                    snippet(messages_fts, 0, '[[', ']]', '…', 18) AS snippet
+                  FROM messages_fts
+                  JOIN messages ON messages_fts.rowid = messages.id
+                  WHERE messages_fts MATCH ?
+                ),
+                ranked AS (
+                  SELECT
+                    session_id,
+                    turn_id,
+                    score,
+                    snippet,
+                    ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY score ASC) AS rn
+                  FROM matches
+                ),
+                aggregated AS (
+                  SELECT
+                    session_id,
+                    COUNT(*) AS match_message_count,
+                    COUNT(DISTINCT CASE WHEN turn_id > 0 THEN turn_id END) AS match_turn_count,
+                    COALESCE(
+                      MIN(CASE WHEN rn = 1 AND turn_id > 0 THEN turn_id END),
+                      MIN(CASE WHEN turn_id > 0 THEN turn_id END)
+                    ) AS first_match_turn_id,
+                    MIN(CASE WHEN rn = 1 THEN snippet END) AS snippet,
+                    MIN(score) AS best_score
+                  FROM ranked
+                  GROUP BY session_id
+                )
                 SELECT
-                  messages_fts.rowid AS id,
-                  messages_fts.content AS content,
-                  messages_fts.session_id AS session_id,
-                  messages_fts.turn_id AS turn_id,
-                  messages_fts.role AS role,
-                  messages.timestamp AS timestamp,
+                  sessions.id AS session_path,
+                  sessions.session_id AS session_id,
+                  sessions.first_user_message AS first_user_message,
                   sessions.timestamp AS session_timestamp,
                   sessions.cwd AS cwd,
                   sessions.git_branch AS git_branch,
                   sessions.git_repo AS git_repo,
                   sessions.git_commit_hash AS git_commit_hash,
-                  snippet(messages_fts, 0, '[[', ']]', '…', 18) AS snippet
-                FROM messages_fts
-                JOIN messages ON messages_fts.rowid = messages.id
-                JOIN sessions ON sessions.id = messages_fts.session_id
-                WHERE ${whereClause}
-                ORDER BY bm25(messages_fts)
+                  aggregated.match_message_count AS match_message_count,
+                  aggregated.match_turn_count AS match_turn_count,
+                  aggregated.first_match_turn_id AS first_match_turn_id,
+                  aggregated.snippet AS snippet
+                FROM aggregated
+                JOIN sessions ON sessions.id = aggregated.session_id
+                ${workspaceClause}
+                ORDER BY aggregated.best_score ASC, sessions.timestamp DESC
                 LIMIT ?
               `);
               const results = stmt.all(...params) as SearchResultRow[];
@@ -1510,7 +1577,7 @@ export const apiPlugin = (): Plugin => {
                   results: [] as SearchResultRow[],
                 };
                 group.results.push(result);
-                group.match_count += 1;
+                group.match_count += result.match_message_count || 0;
                 groupsMap.set(workspaceKey, group);
               }
 
@@ -1536,9 +1603,11 @@ export const apiPlugin = (): Plugin => {
               logSearchDebug('search:results', {
                 requestId,
                 q,
+                normalized: normalized.normalized,
+                tokens: normalized.tokens,
                 workspace,
                 limit,
-                whereClause,
+                workspaceClause,
                 params,
                 resultCount: results.length,
                 groupCount: groups.length,
@@ -1547,9 +1616,74 @@ export const apiPlugin = (): Plugin => {
                 durationMs: Number((performance.now() - searchStartedAt).toFixed(2)),
               });
 
-              return sendJson(res, 200, { groups });
+              return sendJson(res, 200, { groups, tokens: normalized.tokens });
             } catch (error) {
-              logSearchDebug('search:error', { requestId, q, workspace, limit, whereClause, params, error });
+              logSearchDebug('search:error', {
+                requestId,
+                q,
+                normalized: normalized.normalized,
+                tokens: normalized.tokens,
+                workspace,
+                limit,
+                workspaceClause,
+                params,
+                error,
+              });
+              throw error;
+            }
+          }
+
+          if (pathname === '/api/session-matches' && req.method === 'GET') {
+            const session = url.searchParams.get('session')?.trim();
+            const q = url.searchParams.get('q');
+            const requestId = url.searchParams.get('requestId')?.trim() || null;
+            if (!session) return sendJson(res, 400, { error: 'session is required.' });
+            if (q === null) return sendJson(res, 400, { error: 'q is required.' });
+            const normalized = normalizeFtsQuery(q);
+            logSearchDebug('session-matches:request', {
+              requestId,
+              session,
+              q,
+              normalized: normalized.normalized,
+              tokens: normalized.tokens,
+              truncated: normalized.truncated,
+            });
+            if (!normalized.normalized) {
+              return sendJson(res, 200, { session, tokens: normalized.tokens, turn_ids: [] });
+            }
+            const database = ensureDb();
+            try {
+              const rows = database
+                .prepare(
+                  `
+                    SELECT DISTINCT turn_id AS turn_id
+                    FROM messages_fts
+                    WHERE messages_fts MATCH ? AND session_id = ? AND turn_id > 0
+                    ORDER BY turn_id ASC
+                  `,
+                )
+                .all(normalized.normalized, session) as Array<{ turn_id: number | null }>;
+              const turnIds = rows
+                .map((row) => row.turn_id)
+                .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+              logSearchDebug('session-matches:results', {
+                requestId,
+                session,
+                q,
+                normalized: normalized.normalized,
+                tokens: normalized.tokens,
+                turnCount: turnIds.length,
+              });
+              return sendJson(res, 200, { session, tokens: normalized.tokens, turn_ids: turnIds });
+            } catch (error) {
+              logSearchDebug('session-matches:error', {
+                requestId,
+                session,
+                q,
+                normalized: normalized.normalized,
+                tokens: normalized.tokens,
+                error,
+              });
               throw error;
             }
           }

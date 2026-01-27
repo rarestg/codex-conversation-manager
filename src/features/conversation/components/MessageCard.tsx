@@ -10,9 +10,10 @@ interface MessageCardProps {
   item: ParsedItem;
   itemIndex: number;
   showFullContent: boolean;
+  highlightTokens?: string[];
 }
 
-export const MessageCard = ({ item, itemIndex, showFullContent }: MessageCardProps) => {
+export const MessageCard = ({ item, itemIndex, showFullContent, highlightTokens }: MessageCardProps) => {
   if (isRenderDebugEnabled && itemIndex === 0) {
     console.debug('[render] MessageCard', { id: item.id, type: item.type });
   }
@@ -103,7 +104,7 @@ export const MessageCard = ({ item, itemIndex, showFullContent }: MessageCardPro
 
       <div className={`mt-3 message-body ${isMarkdownItem ? 'message-body-mono markdown-body' : ''}`}>
         {isMarkdownItem ? (
-          <MarkdownBlock content={truncated} />
+          <MarkdownBlock content={truncated} highlightTokens={highlightTokens} />
         ) : (
           <pre className="whitespace-pre-wrap break-words rounded-xl bg-white/70 p-3 text-xs text-slate-800">
             {truncated || '—'}

@@ -11,6 +11,8 @@ interface TurnListProps {
   activeSession: SessionFileEntry | null;
   parseErrors: string[];
   showFullContent: boolean;
+  highlightTokens?: string[];
+  matchTurnIds?: number[];
 }
 
 const TurnListComponent = ({
@@ -19,6 +21,8 @@ const TurnListComponent = ({
   activeSession,
   parseErrors,
   showFullContent,
+  highlightTokens,
+  matchTurnIds,
 }: TurnListProps) => {
   const renderStart = isRenderDebugEnabled ? performance.now() : 0;
   useRenderDebug('TurnList', {
@@ -78,7 +82,13 @@ const TurnListComponent = ({
       )}
 
       {filteredTurns.map((turn) => (
-        <TurnCard key={`turn-${turn.id}`} turn={turn} showFullContent={showFullContent} />
+        <TurnCard
+          key={`turn-${turn.id}`}
+          turn={turn}
+          showFullContent={showFullContent}
+          highlightTokens={highlightTokens}
+          isMatch={Boolean(matchTurnIds?.includes(turn.id))}
+        />
       ))}
     </div>
   );

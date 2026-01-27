@@ -1,17 +1,19 @@
-import { type KeyboardEvent, useEffect, useRef } from 'react';
+import { type ClipboardEvent, type KeyboardEvent, useEffect, useRef } from 'react';
 import { logSearch } from '../debug';
 import { formatDate, formatTime, formatWorkspacePath } from '../format';
 import { renderSnippet } from '../markdown';
-import type { WorkspaceSearchGroup } from '../types';
+import type { LoadSessionOptions, SearchStatus, WorkspaceSearchGroup } from '../types';
 import { GitHubIcon } from './GitHubIcon';
 
 interface SearchPanelProps {
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
   onSearchKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
+  onSearchPasteUuid?: (event: ClipboardEvent<HTMLInputElement>) => void;
   searchGroups: WorkspaceSearchGroup[];
-  searchLoading: boolean;
-  onLoadSession: (sessionId: string, turnId?: number) => void;
+  searchStatus: SearchStatus;
+  searchError?: string | null;
+  onLoadSession: (sessionId: string, turnId?: number, options?: LoadSessionOptions) => void;
   className?: string;
 }
 
@@ -29,15 +31,20 @@ export const SearchPanel = ({
   searchQuery,
   onSearchQueryChange,
   onSearchKeyDown,
+  onSearchPasteUuid,
   searchGroups,
-  searchLoading,
+  searchStatus,
+  searchError,
   onLoadSession,
   className,
 }: SearchPanelProps) => {
   const resultCount = searchGroups.reduce((total, group) => total + group.results.length, 0);
-  const showEmptyState = Boolean(searchQuery) && !searchLoading && searchGroups.length === 0;
+  const isSearching = searchStatus === 'debouncing' || searchStatus === 'loading';
+  const showEmptyState = Boolean(searchQuery) && searchStatus === 'success' && searchGroups.length === 0;
+  const showErrorState = searchStatus === 'error';
   const lastStateRef = useRef({
-    loading: searchLoading,
+    status: searchStatus,
+    isSearching,
     groupCount: searchGroups.length,
     resultCount,
     showEmptyState,
@@ -46,11 +53,19 @@ export const SearchPanel = ({
   useEffect(() => {
     const now = performance.now();
     const last = lastStateRef.current;
-    if (last.loading !== searchLoading) {
-      logSearch('ui:loading:change', {
+    if (last.status !== searchStatus) {
+      logSearch('ui:status:change', {
         query: searchQuery,
-        from: last.loading,
-        to: searchLoading,
+        from: last.status,
+        to: searchStatus,
+        deltaMs: Number((now - last.renderedAt).toFixed(2)),
+      });
+    }
+    if (last.isSearching !== isSearching) {
+      logSearch('ui:searching:change', {
+        query: searchQuery,
+        from: last.isSearching,
+        to: isSearching,
         deltaMs: Number((now - last.renderedAt).toFixed(2)),
       });
     }
@@ -71,16 +86,18 @@ export const SearchPanel = ({
       });
     }
     lastStateRef.current = {
-      loading: searchLoading,
+      status: searchStatus,
+      isSearching,
       groupCount: searchGroups.length,
       resultCount,
       showEmptyState,
       renderedAt: now,
     };
-  }, [resultCount, searchGroups.length, searchLoading, searchQuery, showEmptyState]);
+  }, [isSearching, resultCount, searchGroups.length, searchQuery, searchStatus, showEmptyState]);
   logSearch('ui:render', {
     query: searchQuery,
-    loading: searchLoading,
+    status: searchStatus,
+    isSearching,
     groupCount: searchGroups.length,
     resultCount,
     showEmptyState,
@@ -93,7 +110,7 @@ export const SearchPanel = ({
             <h2 className="text-lg text-slate-900">Search sessions</h2>
             <p className="text-xs text-slate-500">Full-text search across user and assistant messages.</p>
           </div>
-          {searchLoading && (
+          {isSearching && (
             <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-500">Searching…</span>
           )}
         </div>
@@ -102,6 +119,7 @@ export const SearchPanel = ({
           value={searchQuery}
           onChange={(event) => onSearchQueryChange(event.target.value)}
           onKeyDown={onSearchKeyDown}
+          onPaste={onSearchPasteUuid}
           placeholder="Search messages"
           aria-label="Search sessions"
           className="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-200"
@@ -157,15 +175,24 @@ export const SearchPanel = ({
                   {group.results.map((result) => (
                     <button
                       type="button"
-                      key={result.id}
-                      onClick={() => onLoadSession(result.session_id, result.turn_id)}
+                      key={result.session_path}
+                      onClick={() =>
+                        onLoadSession(result.session_path, result.first_match_turn_id ?? undefined, {
+                          searchQuery: searchQuery.trim() || null,
+                        })
+                      }
                       className="w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left text-sm text-slate-700 transition hover:border-teal-200 hover:bg-white"
                     >
                       <div className="flex items-center justify-between text-xs text-slate-500">
-                        <span>{result.session_id}</span>
-                        <span>Turn {result.turn_id}</span>
+                        <span>{result.session_id || result.session_path}</span>
+                        <span>
+                          {result.match_message_count} matches · {result.match_turn_count} turns
+                        </span>
                       </div>
-                      <div className="mt-2 text-sm text-slate-700">{renderSnippet(result.snippet)}</div>
+                      <div className="mt-2 text-sm font-medium text-slate-800">
+                        {result.first_user_message || result.session_path}
+                      </div>
+                      <div className="mt-1 text-sm text-slate-700">{renderSnippet(result.snippet)}</div>
                     </button>
                   ))}
                 </div>
@@ -173,7 +200,12 @@ export const SearchPanel = ({
             ))}
           </div>
         )}
-        {searchQuery && !searchLoading && searchGroups.length === 0 && (
+        {showErrorState && (
+          <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {searchError || 'Search failed. Try again or reindex.'}
+          </div>
+        )}
+        {showEmptyState && (
           <div className="mt-4 rounded-2xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-500">
             No matches yet. Try another query or reindex.
           </div>

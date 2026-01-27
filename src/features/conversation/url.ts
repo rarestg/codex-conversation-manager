@@ -22,10 +22,13 @@ const safeDecode = (value: string) => {
 
 export const getSessionParamsFromLocation = () => {
   const search = window.location.search;
-  if (!search || search.length <= 1) return { sessionId: null as string | null, turnId: null as number | null };
+  if (!search || search.length <= 1) {
+    return { sessionId: null as string | null, turnId: null as number | null, searchQuery: null as string | null };
+  }
   const pairs = search.slice(1).split('&');
   let sessionId: string | null = null;
   let turnId: number | null = null;
+  let searchQuery: string | null = null;
   for (const pair of pairs) {
     if (!pair) continue;
     const eqIndex = pair.indexOf('=');
@@ -39,24 +42,34 @@ export const getSessionParamsFromLocation = () => {
       if (Number.isFinite(numeric)) {
         turnId = numeric;
       }
+    } else if (rawKey === 'q') {
+      searchQuery = safeDecode(rawValue);
     }
   }
-  return { sessionId, turnId };
+  return { sessionId, turnId, searchQuery };
 };
 
-export const buildSessionUrl = (sessionId: string, turnId?: number | null) => {
+export const buildSessionUrl = (sessionId: string, turnId?: number | null, searchQuery?: string | null) => {
   const encodedSession = encodeURIComponent(sessionId);
   const queryParts = [`session=${encodedSession}`];
   if (typeof turnId === 'number' && Number.isFinite(turnId)) {
     queryParts.push(`turn=${encodeURIComponent(String(turnId))}`);
+  }
+  if (searchQuery) {
+    queryParts.push(`q=${encodeURIComponent(searchQuery)}`);
   }
   const query = queryParts.length ? `?${queryParts.join('&')}` : '';
   const hash = window.location.hash || '';
   return `${window.location.pathname}${query}${hash}`;
 };
 
-export const updateSessionUrl = (sessionId: string, turnId?: number | null, mode: HistoryMode = 'push') => {
-  const nextUrl = buildSessionUrl(sessionId, turnId);
+export const updateSessionUrl = (
+  sessionId: string,
+  turnId?: number | null,
+  mode: HistoryMode = 'push',
+  searchQuery?: string | null,
+) => {
+  const nextUrl = buildSessionUrl(sessionId, turnId, searchQuery);
   const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash || ''}`;
   if (nextUrl === currentUrl && mode === 'push') {
     window.history.replaceState(null, '', nextUrl);

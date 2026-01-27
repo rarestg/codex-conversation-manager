@@ -35,13 +35,30 @@ export default function ConversationViewer() {
     indexSummary,
   } = useSessions({ onError: setApiError, workspace: activeWorkspace });
 
-  const { turns, parseErrors, activeSession, sessionDetails, loadingSession, loadSession, clearSession, jumpToTurn } =
-    useSession({
-      sessionsTree,
-      onError: setApiError,
-    });
+  const {
+    turns,
+    parseErrors,
+    activeSession,
+    sessionDetails,
+    activeSearchQuery,
+    loadingSession,
+    loadSession,
+    clearSession,
+    jumpToTurn,
+  } = useSession({
+    sessionsTree,
+    onError: setApiError,
+  });
 
-  const { searchQuery, setSearchQuery, searchGroups, searchLoading, handleSearchKeyDown } = useSearch({
+  const {
+    searchQuery,
+    setSearchQuery,
+    searchGroups,
+    searchStatus,
+    searchError,
+    handleSearchKeyDown,
+    handleSearchPasteUuid,
+  } = useSearch({
     onError: setApiError,
     onLoadSession: loadSession,
     workspace: activeWorkspace,
@@ -202,8 +219,10 @@ export default function ConversationViewer() {
               searchQuery={searchQuery}
               onSearchQueryChange={setSearchQuery}
               onSearchKeyDown={handleSearchKeyDown}
+              onSearchPasteUuid={handleSearchPasteUuid}
               searchGroups={searchGroups}
-              searchLoading={searchLoading}
+              searchStatus={searchStatus}
+              searchError={searchError}
               onLoadSession={loadSession}
             />
             <div className="grid gap-6 lg:grid-cols-2">
@@ -237,8 +256,10 @@ export default function ConversationViewer() {
               searchQuery={searchQuery}
               onSearchQueryChange={setSearchQuery}
               onSearchKeyDown={handleSearchKeyDown}
+              onSearchPasteUuid={handleSearchPasteUuid}
               searchGroups={searchGroups}
-              searchLoading={searchLoading}
+              searchStatus={searchStatus}
+              searchError={searchError}
               onLoadSession={loadSession}
               activeSession={activeSession}
               onRefreshSessions={loadSessions}
@@ -253,6 +274,7 @@ export default function ConversationViewer() {
               sessionDetails={sessionDetails}
               sessionsRoot={sessionsTree?.root || sessionsRoot}
               loadingSession={loadingSession}
+              activeSearchQuery={activeSearchQuery}
               jumpToTurn={jumpToTurn}
             />
           </div>
