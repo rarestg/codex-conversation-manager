@@ -12,14 +12,6 @@ import { logDebug, logSearchDebug } from '../logging';
 import type { WorkspaceSummary } from '../workspaces';
 import { normalizeFtsQuery } from './normalize';
 
-export type {
-  SearchGroupSort,
-  SearchResponse,
-  SearchResultSort,
-  SessionMatchesResponse,
-  SessionSearchResult,
-  WorkspaceSearchGroup,
-};
 type SearchResultRow = SessionSearchResult;
 
 export type SearchTimings = {
@@ -94,10 +86,10 @@ export const searchSessions = (database: Database.Database, options: SearchSessi
   params.push(Number.isFinite(limit) ? limit : 20);
   const orderBy =
     resultSort === 'matches'
-      ? 'aggregated.match_message_count DESC, aggregated.match_turn_count DESC, sessions.timestamp DESC'
+      ? 'aggregated.match_message_count DESC, aggregated.match_turn_count DESC, sessions.timestamp DESC, sessions.id ASC'
       : resultSort === 'recent'
-        ? 'sessions.timestamp DESC, aggregated.best_score ASC'
-        : 'aggregated.best_score ASC, sessions.timestamp DESC';
+        ? 'sessions.timestamp DESC, aggregated.best_score ASC, sessions.id ASC'
+        : 'aggregated.best_score ASC, sessions.timestamp DESC, sessions.id ASC';
   try {
     const stmt = database.prepare(`
       WITH matches AS (

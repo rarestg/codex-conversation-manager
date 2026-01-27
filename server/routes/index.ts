@@ -2,19 +2,14 @@ import fsp from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
+import type { SearchGroupSort, SearchResultSort } from '../../shared/apiTypes';
 import { ensurePathSafe, ensureRootExists, resolveSessionsRoot, setSessionsRoot } from '../config';
 import { getDb, resetDb } from '../db';
 import { readJsonBody, sendJson } from '../http';
 import { indexSessions } from '../indexing';
 import { buildSessionsTree, getSessionsForTree } from '../indexing/tree';
 import { DEBUG_ENABLED, logDebug } from '../logging';
-import {
-  resolveSession,
-  type SearchGroupSort,
-  type SearchResultSort,
-  searchSessions,
-  sessionMatches,
-} from '../search/queries';
+import { resolveSession, searchSessions, sessionMatches } from '../search/queries';
 import { getWorkspaceSummaries } from '../workspaces';
 
 type ApiHandler = (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<void>;
