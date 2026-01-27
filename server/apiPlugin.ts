@@ -422,13 +422,13 @@ const normalizeFtsQuery = (raw: string) => {
   }
   const truncated = tokens.length > MAX_FTS_TOKENS;
   const limitedTokens = tokens.slice(0, MAX_FTS_TOKENS);
-  const hasSearchableToken = limitedTokens.some(isSearchableToken);
-  if (!hasSearchableToken) {
+  const searchableTokens = limitedTokens.filter(isSearchableToken);
+  if (searchableTokens.length === 0) {
     return { normalized: null as string | null, tokens: [] as string[], truncated: false };
   }
-  const escapedTokens = limitedTokens.map((token) => token.replace(/"/g, '""'));
+  const escapedTokens = searchableTokens.map((token) => token.replace(/"/g, '""'));
   const normalized = escapedTokens.map((token) => `"${token}"`).join(' AND ');
-  return { normalized, tokens: limitedTokens, truncated };
+  return { normalized, tokens: searchableTokens, truncated };
 };
 
 const extractSessionIdFromObject = (value: unknown, depth = 0): string | null => {

@@ -405,7 +405,7 @@ export const SearchPanel = ({
         )}
         {showTooShortState && (
           <div className="mt-4 rounded-2xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-500">
-            Type at least 3 characters to search.
+            Type a longer query to search.
           </div>
         )}
         {showEmptyState && (
