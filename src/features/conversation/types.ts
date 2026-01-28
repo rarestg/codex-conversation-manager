@@ -26,6 +26,7 @@ export interface Turn {
   id: number;
   startedAt?: string;
   items: ParsedItem[];
+  activeDurationMs?: number | null;
   isPreamble?: boolean;
 }
 

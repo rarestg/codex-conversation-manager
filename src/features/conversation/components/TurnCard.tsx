@@ -1,4 +1,5 @@
-import { formatTimestamp } from '../format';
+import { Hourglass } from 'lucide-react';
+import { formatDurationMsWithSeconds, formatTimestamp } from '../format';
 import type { Turn } from '../types';
 import { MessageCard } from './MessageCard';
 
@@ -10,6 +11,7 @@ interface TurnCardProps {
 }
 
 export const TurnCard = ({ turn, showFullContent, highlightTokens, isMatch }: TurnCardProps) => {
+  const durationLabel = formatDurationMsWithSeconds(turn.activeDurationMs);
   return (
     <section
       id={`turn-${turn.id}`}
@@ -23,7 +25,15 @@ export const TurnCard = ({ turn, showFullContent, highlightTokens, isMatch }: Tu
           </p>
           {turn.startedAt && <p className="text-xs text-slate-500">{formatTimestamp(turn.startedAt)}</p>}
         </div>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">{turn.items.length} items</span>
+        <div className="flex items-center gap-2">
+          {durationLabel ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">
+              <Hourglass className="h-3 w-3" />
+              {durationLabel}
+            </span>
+          ) : null}
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">{turn.items.length} items</span>
+        </div>
       </div>
 
       <div className="mt-4 space-y-4">

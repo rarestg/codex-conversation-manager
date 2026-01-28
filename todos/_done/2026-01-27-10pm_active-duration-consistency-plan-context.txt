@@ -1,0 +1,60 @@
+Active Duration Consistency Plan — Execution Context
+====================================================
+
+Status
+------
+Complete. Session-level active duration semantics are now shared across server indexing and client parsing, including tool-heavy turns. The client fallback uses the same metrics as indexing, the definition is documented, and per-turn active duration is computed in the parse pass for UI display.
+
+What changed (implementation summary)
+------------------------------------
+- Added a shared, pure metrics accumulator in shared/sessionMetrics.ts to compute started/ended timestamps, counts, first user message preview, and active duration.
+- Server indexing now uses the shared accumulator in server/indexing/index.ts, replacing the old agent_message-only active duration logic.
+- Client parsing now uses the shared accumulator in src/features/conversation/parsing.ts and returns metrics alongside turns.
+- useSession no longer rescans turns for fallback metadata; it uses parseJsonl’s returned metrics in src/features/conversation/hooks/useSession.ts.
+- Updated IMPLEMENTATION_GUIDE.md to redefine active_duration_ms as user message → last assistant activity (assistant message, reasoning, tool call/output) and note the shared helper + reindex requirement.
+- Turn cards now display per-turn active duration, computed during the same parse pass and rendered as a pill in the header.
+- Duration pills show seconds for sub-minute spans and include seconds for sub-hour spans (e.g., “39m 12s”).
+
+Key behavior changes
+--------------------
+- Active duration now includes assistant reasoning and tool calls/outputs (function_call, custom_tool_call, web_search_call and their outputs), not just agent_message.
+- Tool outputs include web_search_call_output in both server indexing and client parsing.
+- Unindexed sessions now display the same active duration as indexed sessions for the same file (after reindex) because the client uses the same shared logic.
+- Turn-level active duration is computed without a second pass and displayed alongside the item count pill.
+
+Files touched
+-------------
+- shared/sessionMetrics.ts
+  - Added createSessionMetrics (shared accumulator) and createTurnDurationTracker for per-turn helpers.
+  - Centralized timestamp parsing and assistant-activity semantics.
+- server/indexing/index.ts
+  - Replaced ad-hoc counters and active-duration logic with createSessionMetrics.
+  - Included web_search_call_output as tool output activity.
+- src/features/conversation/parsing.ts
+  - Uses createSessionMetrics in the parsing pass and returns metrics.
+  - Counts tool outputs including web_search_call_output.
+  - Tracks per-turn active duration and closes turns on user message / EOF.
+- src/features/conversation/hooks/useSession.ts
+  - Uses parseJsonl’s metrics for preview/startedAt/endedAt/turnCount/activeDurationMs.
+- IMPLEMENTATION_GUIDE.md
+  - Updated active_duration_ms definition and noted the shared helper + reindex requirement.
+- src/features/conversation/types.ts
+  - Added Turn.activeDurationMs.
+- src/features/conversation/components/TurnCard.tsx
+  - Rendered a duration pill with hourglass icon and matching style.
+- src/features/conversation/format.ts
+  - Added formatDurationMsWithSeconds for turn-level pill formatting.
+
+Outcomes vs plan
+----------------
+- Step 1 (shared helper): Implemented via shared/sessionMetrics.ts.
+- Step 2 (server indexing): Implemented in server/indexing/index.ts.
+- Step 3 (client fallback): Implemented by returning metrics from parseJsonl and consuming in useSession.
+- Step 4 (docs): Implemented in IMPLEMENTATION_GUIDE.md.
+- Step 5 (reindex): Not automatic; user must run Reindex/Clear & Rebuild to apply to existing DB rows.
+
+Notes / follow-ups
+------------------
+- Reindex is required to update sessions.active_duration_ms for existing indexed sessions.
+- Quality checks run: npm run check and npm run typecheck (clean).
+- The per-turn duration tracker was added for later UI work; it does not change session-level semantics.

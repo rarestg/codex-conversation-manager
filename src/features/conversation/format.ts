@@ -123,6 +123,20 @@ export const formatDurationMs = (durationMs?: number | null) => {
   return `${hours}h ${minutes}m`;
 };
 
+export const formatDurationMsWithSeconds = (durationMs?: number | null) => {
+  if (durationMs === null || durationMs === undefined) return '';
+  if (!Number.isFinite(durationMs) || durationMs < 0) return '';
+  const totalSeconds = Math.round(durationMs / 1000);
+  if (totalSeconds < 60) return `${Math.max(0, totalSeconds)}s`;
+  const totalMinutes = Math.round(totalSeconds / 60);
+  if (totalMinutes < 60) {
+    const seconds = totalSeconds % 60;
+    if (seconds === 0) return `${totalMinutes}m`;
+    return `${totalMinutes}m ${seconds}s`;
+  }
+  return formatDurationMs(durationMs);
+};
+
 export const isSameDay = (value: string, compareTo: Date) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return false;

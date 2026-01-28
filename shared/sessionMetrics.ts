@@ -11,6 +11,12 @@ export type SessionMetrics = {
   firstUserMessage: string | null;
 };
 
+export type TurnDurationTracker = {
+  startTurn: (timestamp?: string | null) => void;
+  recordAssistantActivity: (timestamp?: string | null) => void;
+  closeTurn: () => number | null;
+};
+
 export type SessionMetricsOptions = {
   previewMaxChars?: number;
   previewMaxLines?: number;
@@ -28,6 +34,45 @@ export type SessionMetricsAccumulator = {
   recordTokenCount: (timestamp?: string | null) => void;
   closeTurn: () => void;
   finalize: () => SessionMetrics;
+};
+
+const parseTimestampMs = (value?: string | null) => {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+export const createTurnDurationTracker = (): TurnDurationTracker => {
+  let inTurn = false;
+  let currentTurnStartMs: number | null = null;
+  let lastAssistantActivityMs: number | null = null;
+
+  return {
+    startTurn: (timestamp) => {
+      inTurn = true;
+      currentTurnStartMs = parseTimestampMs(timestamp);
+      lastAssistantActivityMs = null;
+    },
+    recordAssistantActivity: (timestamp) => {
+      if (!inTurn) return;
+      const parsed = parseTimestampMs(timestamp);
+      if (parsed !== null) lastAssistantActivityMs = parsed;
+    },
+    closeTurn: () => {
+      if (!inTurn) return null;
+      let duration: number | null = null;
+      if (currentTurnStartMs !== null && lastAssistantActivityMs !== null) {
+        const diff = lastAssistantActivityMs - currentTurnStartMs;
+        if (Number.isFinite(diff) && diff >= 0) {
+          duration = diff;
+        }
+      }
+      inTurn = false;
+      currentTurnStartMs = null;
+      lastAssistantActivityMs = null;
+      return duration;
+    },
+  };
 };
 
 export const createSessionMetrics = (options: SessionMetricsOptions = {}): SessionMetricsAccumulator => {
@@ -52,15 +97,9 @@ export const createSessionMetrics = (options: SessionMetricsOptions = {}): Sessi
   let activeDurationMs = 0;
   let activeDurationPairs = 0;
 
-  const parseTimestamp = (value?: string | null) => {
-    if (!value) return null;
-    const parsed = Date.parse(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  };
-
   const updateBounds = (value?: string | null) => {
     if (!value) return;
-    const parsed = parseTimestamp(value);
+    const parsed = parseTimestampMs(value);
     if (parsed === null) return;
     if (startedAtMs === null || parsed < startedAtMs) {
       startedAtMs = parsed;
@@ -98,7 +137,7 @@ export const createSessionMetrics = (options: SessionMetricsOptions = {}): Sessi
   const recordAssistantActivity = (timestamp?: string | null) => {
     updateBounds(timestamp);
     if (!inTurn) return;
-    const parsed = parseTimestamp(timestamp ?? undefined);
+    const parsed = parseTimestampMs(timestamp ?? undefined);
     if (parsed !== null) lastAssistantActivityMs = parsed;
   };
 
@@ -108,7 +147,7 @@ export const createSessionMetrics = (options: SessionMetricsOptions = {}): Sessi
     recordUserMessage: (timestamp, content) => {
       closeTurn();
       inTurn = true;
-      currentTurnStartMs = parseTimestamp(timestamp ?? undefined);
+      currentTurnStartMs = parseTimestampMs(timestamp ?? undefined);
       lastAssistantActivityMs = null;
       turnCount += 1;
       messageCount += 1;
