@@ -1,4 +1,4 @@
-import { createSessionMetrics } from '../../../shared/sessionMetrics';
+import { createSessionMetrics, createTurnDurationTracker } from '../../../shared/sessionMetrics';
 import { formatJsonValue, MAX_PREVIEW_CHARS, MAX_PREVIEW_LINES } from './format';
 import type { ParsedItem, SessionDetails, Turn } from './types';
 import { normalizeSessionId, SESSION_ID_PREFIX_REGEX, SESSION_ID_REGEX } from './url';
@@ -105,7 +105,9 @@ export const parseJsonl = (raw: string) => {
     previewMaxChars: MAX_PREVIEW_CHARS,
     previewMaxLines: MAX_PREVIEW_LINES,
   });
+  const turnDuration = createTurnDurationTracker();
   let currentTurn = 0;
+  let currentTurnRef: Turn | null = null;
   let seq = 0;
   const sessionInfo: SessionDetails = {};
   let sessionIdRank = 0;
@@ -140,6 +142,12 @@ export const parseJsonl = (raw: string) => {
     turn.items.push(item);
   };
 
+  const closeCurrentTurn = () => {
+    if (!currentTurnRef) return;
+    const duration = turnDuration.closeTurn();
+    currentTurnRef.activeDurationMs = duration;
+  };
+
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
     if (!line.trim()) continue;
@@ -150,8 +158,11 @@ export const parseJsonl = (raw: string) => {
       if (entry.type === 'event_msg') {
         const payload = entry.payload ?? {};
         if (payload.type === 'user_message') {
+          closeCurrentTurn();
           currentTurn += 1;
           const turn = ensureTurn(currentTurn, entry.timestamp);
+          currentTurnRef = turn;
+          turnDuration.startTurn(entry.timestamp);
           const content = formatJsonValue(payload.message ?? '');
           metrics.recordUserMessage(entry.timestamp, content);
           turn.items.push({
@@ -164,6 +175,7 @@ export const parseJsonl = (raw: string) => {
           });
         } else if (payload.type === 'agent_message') {
           metrics.recordAssistantMessage(entry.timestamp);
+          turnDuration.recordAssistantActivity(entry.timestamp);
           addItem({
             id: `item-${seq}`,
             type: 'assistant',
@@ -174,6 +186,7 @@ export const parseJsonl = (raw: string) => {
           });
         } else if (payload.type === 'agent_reasoning' && payload.text) {
           metrics.recordThought(entry.timestamp);
+          turnDuration.recordAssistantActivity(entry.timestamp);
           addItem({
             id: `item-${seq}`,
             type: 'thought',
@@ -219,6 +232,7 @@ export const parseJsonl = (raw: string) => {
       if (['function_call', 'custom_tool_call', 'web_search_call'].includes(itemType)) {
         const formatted = formatToolCall(item);
         metrics.recordToolCall(entry.timestamp);
+        turnDuration.recordAssistantActivity(entry.timestamp);
         addItem({
           id: `item-${seq}`,
           type: 'tool_call',
@@ -235,6 +249,7 @@ export const parseJsonl = (raw: string) => {
       if (['function_call_output', 'custom_tool_call_output', 'web_search_call_output'].includes(itemType)) {
         const formatted = formatToolOutput(item);
         metrics.recordToolOutput(entry.timestamp);
+        turnDuration.recordAssistantActivity(entry.timestamp);
         addItem({
           id: `item-${seq}`,
           type: 'tool_output',
@@ -249,6 +264,8 @@ export const parseJsonl = (raw: string) => {
       errors.push(`Line ${i + 1}: ${error?.message || 'Parse error'}`);
     }
   }
+
+  closeCurrentTurn();
 
   const output: Turn[] = [];
   if (preambleItems.length > 0) {

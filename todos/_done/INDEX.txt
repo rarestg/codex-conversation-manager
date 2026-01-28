@@ -22,6 +22,16 @@ How to extend this index
 Entries
 =======
 
+- Plan: 2026-01-27-10pm_active-duration-consistency-plan.txt
+  Context: 2026-01-27-10pm_active-duration-consistency-plan-context.txt
+  Why: Active duration undercounted tool-heavy turns and differed between indexed vs unindexed sessions.
+  Outcome:
+  - Shared active-duration definition across server indexing + client parsing with a shared accumulator.
+  - Included assistant reasoning and tool calls/outputs (including web search outputs) as activity.
+  - Added per-turn active duration in the parse pass and surfaced it as a turn-level pill with seconds for sub-hour spans.
+  Notes:
+  - Reindex is required to backfill session-level active_duration_ms in SQLite.
+
 - Plan: 2026-01-27-2pm_search-min-token-length-plan.txt
   Context: 2026-01-27-2pm_search-min-token-length-plan-context.txt
   Why: Single-letter searches were noisy and expensive; we wanted a softer minimum length without breaking non-Latin queries.
