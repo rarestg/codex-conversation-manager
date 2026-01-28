@@ -128,7 +128,7 @@ export const formatDurationMsWithSeconds = (durationMs?: number | null) => {
   if (!Number.isFinite(durationMs) || durationMs < 0) return '';
   const totalSeconds = Math.round(durationMs / 1000);
   if (totalSeconds < 60) return `${Math.max(0, totalSeconds)}s`;
-  const totalMinutes = Math.round(totalSeconds / 60);
+  const totalMinutes = Math.floor(totalSeconds / 60);
   if (totalMinutes < 60) {
     const seconds = totalSeconds % 60;
     if (seconds === 0) return `${totalMinutes}m`;
