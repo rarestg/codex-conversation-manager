@@ -1,7 +1,8 @@
+import { X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchSessionMatches } from './api';
 import { SessionHeaderVariantB } from './components/SessionHeaderVariantB';
-import { SessionOverview } from './components/SessionOverview';
+import { SessionOverview, SessionToggleRow } from './components/SessionOverview';
 import { TurnJumpModal } from './components/TurnJumpModal';
 import { TurnList } from './components/TurnList';
 import { useRenderDebug } from './hooks/useRenderDebug';
@@ -20,6 +21,8 @@ interface ConversationMainProps {
   loadingSession: boolean;
   activeSearchQuery?: string | null;
   jumpToTurn: (turnId: number | null, options?: JumpToTurnOptions) => void;
+  setSessionSearchQuery: (query: string | null) => void;
+  onGoHome: () => void;
 }
 
 const isEditableElement = (target: EventTarget | null) => {
@@ -37,10 +40,14 @@ export const ConversationMain = ({
   loadingSession,
   activeSearchQuery,
   jumpToTurn,
+  setSessionSearchQuery,
+  onGoHome,
 }: ConversationMainProps) => {
   const mainRef = useRef<HTMLElement | null>(null);
+  const overviewRef = useRef<HTMLDivElement | null>(null);
   const topSentinelRef = useRef<HTMLSpanElement | null>(null);
   const [turnJumpOpen, setTurnJumpOpen] = useState(false);
+  const [showStickyControls, setShowStickyControls] = useState(false);
   const {
     showThoughts,
     setShowThoughts,
@@ -76,6 +83,20 @@ export const ConversationMain = ({
     topSentinelRef,
     sessionKey: activeSession?.id ?? null,
   });
+
+  useEffect(() => {
+    if (!activeSession || loadingSession) {
+      setShowStickyControls(false);
+      return;
+    }
+    const target = overviewRef.current;
+    if (!target || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(([entry]) => {
+      setShowStickyControls(!entry.isIntersecting);
+    });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [activeSession, loadingSession]);
 
   useEffect(() => {
     if (!activeSession || !activeSearchQuery) {
@@ -141,6 +162,43 @@ export const ConversationMain = ({
     };
   }, [activeSession, loadingSession, navigableTurnIds.length]);
 
+  useEffect(() => {
+    if (!activeSession || loadingSession) return;
+    if (navigableTurnIds.length === 0) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      if (!event.metaKey && !event.ctrlKey) return;
+      if (isEditableElement(event.target)) return;
+
+      if (mainRef.current) {
+        const activeElement = document.activeElement;
+        const targetNode = event.target instanceof Node ? event.target : null;
+        const containsTarget = targetNode ? mainRef.current.contains(targetNode) : false;
+        const containsActive = activeElement ? mainRef.current.contains(activeElement) : false;
+        if (!containsTarget && !containsActive) return;
+      }
+
+      const isArrowUp = event.key === 'ArrowUp';
+      const isArrowDown = event.key === 'ArrowDown';
+      const isHomeShortcut = event.key.toLowerCase() === 'h' && event.shiftKey;
+      if (!isArrowUp && !isArrowDown && !isHomeShortcut) return;
+
+      event.preventDefault();
+      if (isHomeShortcut) {
+        onGoHome();
+        return;
+      }
+
+      const targetId = isArrowUp ? navigableTurnIds[0] : navigableTurnIds[navigableTurnIds.length - 1];
+      if (typeof targetId !== 'number') return;
+      jumpToTurn(targetId, { historyMode: 'replace', scroll: true });
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeSession, jumpToTurn, loadingSession, navigableTurnIds, onGoHome]);
+
   const handleJump = useCallback(
     (requestedTurn: number) => {
       if (navigableTurnIds.length === 0) return;
@@ -175,6 +233,10 @@ export const ConversationMain = ({
   const currentMatchIndex = activeTurnId ? matchTurnIds.indexOf(activeTurnId) : -1;
   const matchPosition = currentMatchIndex >= 0 ? currentMatchIndex + 1 : 0;
 
+  const handleClearSearchQuery = useCallback(() => {
+    setSessionSearchQuery(null);
+  }, [setSessionSearchQuery]);
+
   const handlePrevMatch = useCallback(() => {
     if (!matchCount) return;
     const index = currentMatchIndex >= 0 ? currentMatchIndex - 1 : matchCount - 1;
@@ -193,6 +255,52 @@ export const ConversationMain = ({
     jumpToTurn(targetId, { historyMode: 'replace', scroll: true });
   }, [currentMatchIndex, jumpToTurn, matchCount, matchTurnIds]);
 
+  const matchStatusContent = matchesLoading ? (
+    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">Finding matches…</span>
+  ) : matchesError ? (
+    <span className="rounded-full bg-rose-50 px-3 py-1 text-xs text-rose-700">{matchesError}</span>
+  ) : matchCount === 0 ? (
+    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">No matches in this session</span>
+  ) : (
+    <div className="flex items-center gap-3">
+      <span className="text-xs text-slate-500">
+        Match {matchPosition} of {matchCount}
+      </span>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={handlePrevMatch}
+          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
+        >
+          Prev
+        </button>
+        <button
+          type="button"
+          onClick={handleNextMatch}
+          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+
+  const matchActionRow = (
+    <div className="flex flex-wrap items-center gap-2">
+      {matchStatusContent}
+      <button
+        type="button"
+        onClick={handleClearSearchQuery}
+        className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
+        aria-label="Clear session search"
+        title="Clear search"
+      >
+        <X className="h-3.5 w-3.5" />
+        <span className="hidden sm:inline">Clear</span>
+      </button>
+    </div>
+  );
+
   return (
     <main
       ref={mainRef}
@@ -207,27 +315,53 @@ export const ConversationMain = ({
     >
       <span ref={topSentinelRef} className="absolute inset-x-0 top-0 h-px" aria-hidden="true" />
       <div className="space-y-6">
-        <SessionOverview
-          HeaderComponent={SessionHeaderVariantB}
-          toggleVariant="compact"
-          showToggleCountsWhenOff
-          activeSession={activeSession}
-          sessionDetails={sessionDetails}
-          sessionsRoot={sessionsRoot}
-          filteredTurns={filteredTurns}
-          visibleItemCount={visibleItemCount}
-          stats={stats}
-          showThoughts={showThoughts}
-          showTools={showTools}
-          showMeta={showMeta}
-          showTokenCounts={showTokenCounts}
-          showFullContent={showFullContent}
-          onShowThoughtsChange={setShowThoughts}
-          onShowToolsChange={setShowTools}
-          onShowMetaChange={setShowMeta}
-          onShowTokenCountsChange={setShowTokenCounts}
-          onShowFullContentChange={setShowFullContent}
-        />
+        {showStickyControls && (
+          <div className="sticky top-[env(safe-area-inset-top)] z-20">
+            <div className="rounded-2xl border border-white/70 bg-white/90 px-4 py-2 shadow-sm backdrop-blur">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <SessionToggleRow
+                  stats={stats}
+                  showThoughts={showThoughts}
+                  showTools={showTools}
+                  showMeta={showMeta}
+                  showTokenCounts={showTokenCounts}
+                  showFullContent={showFullContent}
+                  onShowThoughtsChange={setShowThoughts}
+                  onShowToolsChange={setShowTools}
+                  onShowMetaChange={setShowMeta}
+                  onShowTokenCountsChange={setShowTokenCounts}
+                  onShowFullContentChange={setShowFullContent}
+                  variant="compact"
+                  showToggleCountsWhenOff
+                />
+                {activeSearchQuery && matchActionRow}
+              </div>
+            </div>
+          </div>
+        )}
+        <div ref={overviewRef}>
+          <SessionOverview
+            HeaderComponent={SessionHeaderVariantB}
+            toggleVariant="compact"
+            showToggleCountsWhenOff
+            activeSession={activeSession}
+            sessionDetails={sessionDetails}
+            sessionsRoot={sessionsRoot}
+            filteredTurns={filteredTurns}
+            visibleItemCount={visibleItemCount}
+            stats={stats}
+            showThoughts={showThoughts}
+            showTools={showTools}
+            showMeta={showMeta}
+            showTokenCounts={showTokenCounts}
+            showFullContent={showFullContent}
+            onShowThoughtsChange={setShowThoughts}
+            onShowToolsChange={setShowTools}
+            onShowMetaChange={setShowMeta}
+            onShowTokenCountsChange={setShowTokenCounts}
+            onShowFullContentChange={setShowFullContent}
+          />
+        </div>
 
         {activeSearchQuery && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/70 px-4 py-3 text-xs text-slate-600 shadow-sm">
@@ -237,37 +371,7 @@ export const ConversationMain = ({
               </span>
               <span className="text-sm text-slate-800">{activeSearchQuery}</span>
             </div>
-            {matchesLoading ? (
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">Finding matches…</span>
-            ) : matchesError ? (
-              <span className="rounded-full bg-rose-50 px-3 py-1 text-xs text-rose-700">{matchesError}</span>
-            ) : matchCount === 0 ? (
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">
-                No matches in this session
-              </span>
-            ) : (
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-slate-500">
-                  Match {matchPosition} of {matchCount}
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handlePrevMatch}
-                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
-                  >
-                    Prev
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleNextMatch}
-                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
+            {matchActionRow}
           </div>
         )}
 

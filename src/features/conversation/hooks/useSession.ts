@@ -11,7 +11,7 @@ import type {
   SessionTree,
   Turn,
 } from '../types';
-import { updateSessionUrl } from '../url';
+import { getSessionParamsFromLocation, updateSessionUrl } from '../url';
 
 interface UseSessionOptions {
   sessionsTree: SessionTree | null;
@@ -131,6 +131,16 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
     [activeSearchQuery, activeSessionId],
   );
 
+  const setSessionSearchQuery = useCallback(
+    (searchQuery: string | null, historyMode: JumpToTurnOptions['historyMode'] = 'replace') => {
+      if (!activeSessionId) return;
+      const { turnId } = getSessionParamsFromLocation();
+      updateSessionUrl(activeSessionId, turnId ?? null, historyMode, searchQuery);
+      setActiveSearchQuery(searchQuery);
+    },
+    [activeSessionId],
+  );
+
   const activeSession = useMemo<SessionFileEntry | null>(() => {
     if (!activeSessionId) return null;
     const indexed = findSessionById(activeSessionId);
@@ -197,5 +207,6 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
     loadSession,
     clearSession,
     jumpToTurn,
+    setSessionSearchQuery,
   };
 };

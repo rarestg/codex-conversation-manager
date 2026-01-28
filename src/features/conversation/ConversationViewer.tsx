@@ -45,6 +45,7 @@ export default function ConversationViewer() {
     loadSession,
     clearSession,
     jumpToTurn,
+    setSessionSearchQuery,
   } = useSession({
     sessionsTree,
     onError: setApiError,
@@ -53,6 +54,7 @@ export default function ConversationViewer() {
   const {
     searchQuery,
     setSearchQuery,
+    clearSearch,
     searchGroups,
     searchStatus,
     searchError,
@@ -225,6 +227,7 @@ export default function ConversationViewer() {
             <SearchPanel
               searchQuery={searchQuery}
               onSearchQueryChange={setSearchQuery}
+              onClearSearch={clearSearch}
               onSearchKeyDown={handleSearchKeyDown}
               onSearchPasteUuid={handleSearchPasteUuid}
               searchGroups={searchGroups}
@@ -267,6 +270,7 @@ export default function ConversationViewer() {
               sessionsLoading={loadingSessions}
               searchQuery={searchQuery}
               onSearchQueryChange={setSearchQuery}
+              onClearSearch={clearSearch}
               onSearchKeyDown={handleSearchKeyDown}
               onSearchPasteUuid={handleSearchPasteUuid}
               searchGroups={searchGroups}
@@ -293,6 +297,8 @@ export default function ConversationViewer() {
               loadingSession={loadingSession}
               activeSearchQuery={activeSearchQuery}
               jumpToTurn={jumpToTurn}
+              setSessionSearchQuery={setSessionSearchQuery}
+              onGoHome={handleGoHome}
             />
           </div>
         )}

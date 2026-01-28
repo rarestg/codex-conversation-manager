@@ -65,6 +65,24 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
     setSearchStatus(next);
   }, []);
 
+  const clearSearch = useCallback(
+    (reason = 'manual') => {
+      if (searchTimeout.current) {
+        window.clearTimeout(searchTimeout.current);
+      }
+      latestRequestId.current += 1;
+      latestQuery.current = '';
+      pendingPasteRequestId.current = null;
+      skipNextSearchRef.current = null;
+      setSearchQuery('');
+      setSearchGroups([]);
+      setSearchError(null);
+      updateStatus('idle', { reason });
+      logSearch('clear', { reason });
+    },
+    [updateStatus],
+  );
+
   const nextRequestId = useCallback((prefix: string) => {
     requestCounter.current += 1;
     return `${prefix}-${Date.now().toString(36)}-${requestCounter.current.toString(36)}`;
@@ -228,9 +246,8 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
         const resolved = await resolveSession(query, workspace, resolveRequestId);
         if (!resolved) return;
         logSearch('resolve:found', { resolveRequestId, query, resolved, workspace });
+        clearSearch('session-loaded');
         await onLoadSession(resolved);
-        setSearchQuery('');
-        setSearchGroups([]);
         logSearch('resolve:clear', { resolveRequestId, reason: 'session-loaded' });
       } catch (error: any) {
         logSearch('resolve:error', {
@@ -243,7 +260,7 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
         onError?.(error?.message || 'Unable to resolve session.');
       }
     },
-    [nextRequestId, onError, onLoadSession, searchQuery, workspace],
+    [clearSearch, nextRequestId, onError, onLoadSession, searchQuery, workspace],
   );
 
   const handleSearchPasteUuid = useCallback(
@@ -279,10 +296,8 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
         }
         if (resolved) {
           logSearch('resolve:found', { resolveRequestId, query: pasted, resolved, workspace, source: 'paste' });
+          clearSearch('session-loaded');
           await onLoadSession(resolved);
-          setSearchQuery('');
-          setSearchGroups([]);
-          setSearchError(null);
           logSearch('resolve:clear', { resolveRequestId, reason: 'session-loaded', source: 'paste' });
           return;
         }
@@ -334,12 +349,13 @@ export const useSearch = ({ onError, onLoadSession, workspace }: UseSearchOption
         onError?.(message);
       }
     },
-    [executeSearch, nextRequestId, onError, onLoadSession, updateStatus, workspace],
+    [clearSearch, executeSearch, nextRequestId, onError, onLoadSession, updateStatus, workspace],
   );
 
   return {
     searchQuery,
     setSearchQuery,
+    clearSearch,
     searchTooShort,
     searchGroups,
     searchStatus,

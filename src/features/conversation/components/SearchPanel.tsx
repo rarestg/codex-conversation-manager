@@ -1,4 +1,4 @@
-import { ArrowDownWideNarrow, CalendarClock, GitBranch, Hourglass, Repeat2 } from 'lucide-react';
+import { ArrowDownWideNarrow, CalendarClock, GitBranch, Hourglass, Repeat2, X } from 'lucide-react';
 import { type ClipboardEvent, type KeyboardEvent, type MouseEvent, useEffect, useRef } from 'react';
 import { logSearch } from '../debug';
 import { formatDate, formatDuration, formatDurationMs, formatTime, formatWorkspacePath } from '../format';
@@ -15,6 +15,7 @@ import { GitHubIcon } from './GitHubIcon';
 interface SearchPanelProps {
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
+  onClearSearch?: () => void;
   onSearchKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
   onSearchPasteUuid?: (event: ClipboardEvent<HTMLInputElement>) => void;
   searchGroups: WorkspaceSearchGroup[];
@@ -53,6 +54,7 @@ const GROUP_SORT_LABELS: Record<SearchGroupSort, string> = {
 export const SearchPanel = ({
   searchQuery,
   onSearchQueryChange,
+  onClearSearch,
   onSearchKeyDown,
   onSearchPasteUuid,
   searchGroups,
@@ -71,9 +73,17 @@ export const SearchPanel = ({
   const resultCount = searchGroups.reduce((total, group) => total + group.results.length, 0);
   const isSearching = searchStatus === 'debouncing' || searchStatus === 'loading';
   const showTooShortState = Boolean(searchQuery) && Boolean(searchTooShort);
+  const showClearButton = Boolean(searchQuery);
   const showEmptyState =
     Boolean(searchQuery) && !showTooShortState && searchStatus === 'success' && searchGroups.length === 0;
   const showErrorState = searchStatus === 'error';
+  const handleClearSearch = () => {
+    if (onClearSearch) {
+      onClearSearch();
+      return;
+    }
+    onSearchQueryChange('');
+  };
   const handleOpenGithub = (event: MouseEvent<HTMLAnchorElement>) => {
     if (!window.confirm('Open this repository on GitHub in a new tab?')) {
       event.preventDefault();
@@ -194,16 +204,29 @@ export const SearchPanel = ({
             </div>
           </div>
         </div>
-        <input
-          type="search"
-          value={searchQuery}
-          onChange={(event) => onSearchQueryChange(event.target.value)}
-          onKeyDown={onSearchKeyDown}
-          onPaste={onSearchPasteUuid}
-          placeholder="Search messages"
-          aria-label="Search sessions"
-          className="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-200"
-        />
+        <div className="relative mt-4">
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => onSearchQueryChange(event.target.value)}
+            onKeyDown={onSearchKeyDown}
+            onPaste={onSearchPasteUuid}
+            placeholder="Search messages"
+            aria-label="Search sessions"
+            className="search-input w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 pr-10 text-sm text-slate-700 shadow-sm focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-200"
+          />
+          {showClearButton && (
+            <button
+              type="button"
+              onClick={handleClearSearch}
+              aria-label="Clear search"
+              title="Clear search"
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
         <div className="search-sort-mobile mt-3">
           <details className="search-sort-disclosure rounded-2xl border border-slate-200 bg-white shadow-sm">
             <summary className="search-sort-summary flex items-center justify-between px-3 py-2">
@@ -334,11 +357,13 @@ export const SearchPanel = ({
                       <button
                         type="button"
                         key={result.session_path}
-                        onClick={() =>
+                        onClick={() => {
+                          const trimmedQuery = searchQuery.trim();
+                          handleClearSearch();
                           onLoadSession(result.session_path, result.first_match_turn_id ?? undefined, {
-                            searchQuery: searchQuery.trim() || null,
-                          })
-                        }
+                            searchQuery: trimmedQuery || null,
+                          });
+                        }}
                         className="w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left text-sm text-slate-700 transition hover:border-teal-200 hover:bg-white"
                       >
                         <div className="flex items-center justify-between gap-2 text-xs text-slate-500">

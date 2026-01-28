@@ -20,6 +20,7 @@ interface SidebarProps {
   sessionsLoading: boolean;
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
+  onClearSearch?: () => void;
   onSearchKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
   onSearchPasteUuid?: (event: ClipboardEvent<HTMLInputElement>) => void;
   searchGroups: WorkspaceSearchGroup[];
@@ -43,6 +44,7 @@ const SidebarComponent = ({
   sessionsLoading,
   searchQuery,
   onSearchQueryChange,
+  onClearSearch,
   onSearchKeyDown,
   onSearchPasteUuid,
   searchGroups,
@@ -86,6 +88,7 @@ const SidebarComponent = ({
       activeSession,
       activeWorkspace,
       onSearchQueryChange,
+      onClearSearch,
       onSearchKeyDown,
       onResultSortChange,
       onGroupSortChange,
@@ -109,6 +112,7 @@ const SidebarComponent = ({
       <SearchPanel
         searchQuery={searchQuery}
         onSearchQueryChange={onSearchQueryChange}
+        onClearSearch={onClearSearch}
         onSearchKeyDown={onSearchKeyDown}
         onSearchPasteUuid={onSearchPasteUuid}
         searchGroups={searchGroups}
