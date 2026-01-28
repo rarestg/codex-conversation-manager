@@ -1,0 +1,127 @@
+# Effective Highlight Tokens for In-Session Search (Plan)
+
+## 1) Problem & Motivation
+Problem
+- Searching for a term like "visualization" returns matches via FTS5 stemming (e.g., visual/visually/visualize), but the in-session highlighter uses the raw query tokens.
+- Result: match counts/turn navigation indicate hits, yet no text is highlighted in the session view.
+
+Why now
+- This is confusing in real usage ("match 12 of 13" with zero highlights).
+- The backend already knows which tokens matched; we should expose those for accurate highlighting.
+
+Success criteria
+- In-session highlighting reflects actual FTS matches, even when stemming changes the matched surface form.
+- URL query `q=...` remains unchanged for intent and deep-link stability.
+- No schema changes or reindex required.
+
+## 2) System Context
+Relevant files/modules
+- Backend search + session matches:
+  - `server/search/queries.ts` (FTS query + `/api/session-matches` logic)
+  - `server/routes/index.ts` (API wiring for `/api/session-matches`)
+  - `server/search/normalize.ts` (tokenization rules; returns normalized query + tokens)
+- Shared API types:
+  - `shared/apiTypes.ts` (SessionMatchesResponse shape)
+- Frontend match highlighting flow:
+  - `src/features/conversation/api.ts` (fetchSessionMatches)
+  - `src/features/conversation/ConversationMain.tsx` (stores matchTurnIds + highlight tokens)
+  - `src/features/conversation/components/TurnList.tsx`
+  - `src/features/conversation/components/TurnCard.tsx`
+  - `src/features/conversation/components/MessageCard.tsx`
+  - `src/features/conversation/markdown.tsx` (highlightMarkdown)
+
+How it connects
+- `/api/search` already uses FTS5 bm25 and returns snippets with `[[...]]` markers.
+- `/api/session-matches` currently returns only `turn_ids` plus normalized `tokens`, which are derived from the raw query (not stemmed forms).
+- The UI uses those tokens for highlighting, which fails when stemming changes the matched terms.
+
+## 3) Implementation Plan (ordered)
+
+Step 1 — Extend API response type
+- File: `shared/apiTypes.ts`
+- Add a new field to `SessionMatchesResponse`, e.g. `match_terms: string[]`.
+- Keep existing `tokens` (from normalize) for debugging and query display, but treat `match_terms` as highlight tokens.
+- Why: preserves current contracts while adding correct highlighting data.
+
+Step 2 — Derive effective match terms on the server
+- File: `server/search/queries.ts` in `sessionMatches(...)`.
+- Add snippet extraction for matched rows:
+  - Query matched rows with `snippet(messages_fts, 0, '[[', ']]', '…', 18)` (or a slightly larger snippet size if desired).
+  - Parse all `[[term]]` segments from snippets and accumulate into a unique set.
+  - Normalize (e.g., lowercase) and filter empty/whitespace-only tokens.
+- Continue collecting `turn_ids` exactly as now (preamble excluded).
+- Return `match_terms` alongside `tokens` and `turn_ids`.
+- Why: the snippet uses FTS5 match highlighting, which reflects stemming, so these terms correspond to actual hits.
+
+Step 3 — Wire response in the route handler
+- File: `server/routes/index.ts`
+- Ensure the JSON response from `/api/session-matches` includes `match_terms`.
+- No change to routing logic; just forward the new field.
+
+Step 4 — Consume `match_terms` on the frontend
+- File: `src/features/conversation/api.ts`
+  - Update `fetchSessionMatches` return type to include `match_terms`.
+- File: `src/features/conversation/ConversationMain.tsx`
+  - Prefer `match_terms` for `highlightTokens` when present and non-empty.
+  - Fallback to `tokens` only if `match_terms` is empty/missing.
+  - Keep the UI display text for the query as `activeSearchQuery` (do NOT rewrite `q`).
+- No changes needed in `TurnList`, `TurnCard`, `MessageCard`, or `markdown.tsx` beyond the new token source.
+
+Step 5 — Update debug logging (optional)
+- File: `server/search/queries.ts`
+- Log the count of `match_terms` in `session-matches:results` to aid debugging.
+
+Dependencies
+- Step 1 before Steps 2–4 (shared type change cascades).
+- Step 2 before Step 4 (client depends on response data).
+
+## 4) Key Decisions & Tradeoffs
+Decision
+- Do not rewrite the URL query or UI query text (keep `q` as the user typed).
+- Provide effective highlight tokens derived from FTS5 match snippets.
+
+Why this approach
+- Preserves user intent + deep-link stability.
+- Matches the actual FTS stemming behavior.
+- Much lighter than returning per-message highlights or full FTS highlight payloads.
+
+Alternatives considered
+- Return `highlight(messages_fts, ...)` for full surface text highlight.
+  - Rejected for now: heavier payloads and more CPU per request.
+- Rewrite `q` to a stemmed token.
+  - Rejected: lossy, surprises users, and breaks intent/deep-link consistency.
+
+Accepted tradeoffs
+- Snippet-based token extraction may miss rare matches if a term never appears inside the snippet window.
+- Still better than zero highlights and avoids large payloads.
+
+## 5) Risks & Landmines
+- Snippet term extraction is heuristic: FTS5 snippet size can omit some terms; choose a reasonable window to reduce misses.
+- Tokens may include punctuation or partial words (depending on snippet behavior); normalize and filter carefully.
+- Ensure `turn_id > 0` exclusion stays intact to keep navigation aligned with search results.
+- Do not change the query normalization (token cap/min lengths) unless you intend to reindex/verify behavior.
+
+## 6) Verification & Validation
+Manual checks
+1) Search for "visualization" in the UI.
+2) Click a result whose snippet highlights `[[visual]]` (or similar stems).
+3) Verify:
+   - Match navigation count is unchanged.
+   - Highlights now appear in-session on the stemmed words.
+   - The query display remains `visualization` in the sticky search bar.
+
+API verification
+- Call `/api/session-matches?session=...&q=visualization` and confirm:
+  - `turn_ids` unchanged.
+  - `match_terms` includes `visual`/`visualize`/`visually` as applicable.
+
+Tests
+- No automated tests currently; rely on the manual checks above.
+
+Rollback plan
+- If highlighting causes regressions, revert to the previous response shape and use `tokens` for highlighting.
+- No DB changes, so rollback is code-only.
+
+## 7) Open Questions / Follow-ups
+- Should snippet token extraction increase the snippet window size (e.g., 32–64) to reduce missed terms?
+- Should the client display a subtle indicator when highlights are stemmed (e.g., “matches stemmed terms”) or keep it implicit?
