@@ -68,6 +68,11 @@ export const ConversationMain = ({
   const [matchesLoading, setMatchesLoading] = useState(false);
   const [matchesError, setMatchesError] = useState<string | null>(null);
   const matchRequestId = useRef(0);
+  const activeSearchQueryRef = useRef<string | null>(activeSearchQuery ?? null);
+
+  useEffect(() => {
+    activeSearchQueryRef.current = activeSearchQuery ?? null;
+  }, [activeSearchQuery]);
 
   const navigableTurnIds = useMemo(
     () => filteredTurns.filter((turn) => !turn.isPreamble).map((turn) => turn.id),
@@ -109,6 +114,7 @@ export const ConversationMain = ({
     }
     matchRequestId.current += 1;
     const requestId = matchRequestId.current;
+    const requestQuery = activeSearchQuery;
     const requestKey = `matches-${Date.now().toString(36)}-${requestId}`;
     setMatchesLoading(true);
     setMatchTurnIds([]);
@@ -118,17 +124,20 @@ export const ConversationMain = ({
     fetchSessionMatches(activeSession.id, activeSearchQuery, requestKey)
       .then((data) => {
         if (requestId !== matchRequestId.current) return;
+        if (activeSearchQueryRef.current !== requestQuery) return;
         setMatchTurnIds(data.turn_ids);
         setMatchTokens(data.tokens);
       })
       .catch((error: any) => {
         if (requestId !== matchRequestId.current) return;
+        if (activeSearchQueryRef.current !== requestQuery) return;
         setMatchesError(error?.message || 'Unable to load matches.');
         setMatchTurnIds([]);
         setMatchTokens([]);
       })
       .finally(() => {
         if (requestId !== matchRequestId.current) return;
+        if (activeSearchQueryRef.current !== requestQuery) return;
         setMatchesLoading(false);
       });
   }, [activeSearchQuery, activeSession]);
@@ -335,12 +344,14 @@ export const ConversationMain = ({
                   variant="compact"
                   showToggleCountsWhenOff
                 />
-                <div className="ml-auto flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                  <span>Top Cmd/Ctrl+Up</span>
-                  <span>Bottom Cmd/Ctrl+Down</span>
-                  <span>Home Cmd/Ctrl+Shift+H</span>
+                <div className="ml-auto flex flex-wrap items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                    <span>Top Cmd/Ctrl+Up</span>
+                    <span>Bottom Cmd/Ctrl+Down</span>
+                    <span>Home Cmd/Ctrl+Shift+H</span>
+                  </div>
+                  {activeSearchQuery && matchActionRow}
                 </div>
-                {activeSearchQuery && matchActionRow}
               </div>
             </div>
           </div>
