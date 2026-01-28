@@ -1,0 +1,130 @@
+Title: Session view floating controls + shortcuts + search UX cleanup — Implementation Addendum
+
+1) Problem & Motivation
+- Problem: Session toggles and match controls scroll out of view in long sessions, navigation to top/bottom/home is slow, sidebar search remains noisy after opening a session from results, and the search clear icon style is inconsistent with the Lucide UI.
+- Why now: The session view now has heavy navigation and search workflows; keeping controls accessible and reducing sidebar noise improves usability for deep session review.
+- Success criteria:
+  - Sticky session controls appear while scrolling (after header leaves view) and do not obscure content.
+  - Match navigation is only shown when a `q` search is active and includes a clear/close action that removes `q` and clears highlight state without reloading the session.
+  - Toggles default to all-off everywhere (including Canvas).
+  - New shortcuts move to first/last turn and home, without global key conflicts; they only activate when the session pane is focused.
+  - Opening a session from search clears the sidebar search query/results immediately.
+  - Search input clear icon uses Lucide styling (no blue gradient).
+
+2) System Context
+- Session view rendering + match bar: `src/features/conversation/ConversationMain.tsx`
+  - Holds match state, renders `SessionOverview` and match controls, uses `useTurnNavigation`.
+- Toggle state: `src/features/conversation/hooks/useSessionOverview.ts`
+  - Defaults and filtering logic.
+- Header + toggles UI: `src/features/conversation/components/SessionOverview.tsx`
+  - Renders header + toggle row (compact variant used in session view).
+- Sidebar search: `src/features/conversation/components/SearchPanel.tsx`
+  - Search input, results; currently no custom clear button.
+- Search state + load hooks: `src/features/conversation/hooks/useSearch.ts`
+  - `setSearchQuery`, `searchGroups`, `searchStatus` lifecycle.
+- Session load & URL sync: `src/features/conversation/hooks/useSession.ts`, `src/features/conversation/url.ts`, `src/features/conversation/hooks/useUrlSync.ts`
+  - `activeSearchQuery` is stored in state; URL `q` param is managed here.
+- Session layout & sidebar: `src/features/conversation/ConversationViewer.tsx`
+  - Creates `loadSession` handler, passes to SearchPanel/Sidebar, controls Home/Session layouts.
+- Turn navigation: `src/features/conversation/hooks/useTurnNavigation.ts`
+  - Arrow key navigation and turn observation; already gated to active session container.
+
+3) Implementation Plan (ordered)
+Step 1: Update toggle defaults to all-off
+- File: `src/features/conversation/hooks/useSessionOverview.ts`
+- Change `useState` defaults so `showThoughts`, `showTools`, `showMeta`, `showTokenCounts`, `showFullContent` all initialize to `false`.
+- Rationale: global default change; Canvas uses same hook and should follow the same defaults.
+- Dependency: none.
+
+Step 2: Introduce sticky session controls that appear when header scrolls out
+- Files: `src/features/conversation/ConversationMain.tsx`, `src/features/conversation/components/SessionOverview.tsx` (possible extraction)
+- Add an IntersectionObserver tied to the session header container (wrap `SessionOverview` in a `ref`) to track when it is out of view.
+- Render a sticky top bar when the header is not intersecting. Sticky bar includes:
+  - The compact toggles row (always present).
+  - Match navigation controls only when `activeSearchQuery` is truthy.
+- Avoid double-toggles by only showing the sticky bar when the header is offscreen; keep header toggles as-is.
+- Ensure sticky bar has safe-area padding and does not obscure content (use `position: sticky; top: ...;` and a z-index above content but below modal).
+- Dependency: Step 1 (toggle state already in use); use same toggle handlers.
+
+Step 3: Add match bar close action to clear `q`
+- Files: `src/features/conversation/ConversationMain.tsx`, `src/features/conversation/hooks/useSession.ts`, `src/features/conversation/url.ts`, `src/features/conversation/types.ts`
+- Add a clear action (Lucide X) to match controls; behavior:
+  - Remove `q` from URL (`updateSessionUrl` with `searchQuery = null`).
+  - Clear `activeSearchQuery` state in `useSession` without reloading session data.
+- Implementation approach:
+  - Extend `jumpToTurn` or add a new setter in `useSession` to update `activeSearchQuery` and URL independently of `loadSession`.
+  - Prefer a dedicated `setSessionSearchQuery(null)` exported by `useSession` to avoid re-fetch.
+- Dependency: Step 2 (match controls are in sticky bar; add close control there and in the inline match bar if both render).
+
+Step 4: Add new keyboard shortcuts (focus-gated)
+- Files: `src/features/conversation/ConversationMain.tsx` (or a helper), `src/features/conversation/hooks/useTurnNavigation.ts` (if shared key handling is desired)
+- Shortcuts (only when session pane focused):
+  - Top: `Cmd/Ctrl + ↑` → jump to first navigable turn ID.
+  - Bottom: `Cmd/Ctrl + ↓` → jump to last navigable turn ID.
+  - Home: `Cmd/Ctrl + Shift + H` → trigger existing Home behavior (clear session and return to home view).
+- Gate key handling to session container focus, similar to Arrow navigation (use `containerRef` presence checks).
+- Add non-intrusive tooltip hints on sticky controls or header actions (e.g., “Top (⌘↑)”, “Bottom (⌘↓)”, “Home (⌘⇧H)”, “Go to turn (⌘K)”).
+- Dependency: Step 2 (sticky bar controls can surface tooltip hints).
+
+Step 5: Clear sidebar search on search-driven session open
+- Files: `src/features/conversation/ConversationViewer.tsx`, `src/features/conversation/hooks/useSearch.ts`
+- Wrap `loadSession` when invoked from search results to:
+  - Call `setSearchQuery('')`, `setSearchGroups([])`, `setSearchError(null)`, and set status to `idle` (or reuse existing clear logic).
+  - Keep `activeSearchQuery` in session view intact (this is separate from sidebar search query).
+- Best location: pass a handler to `SearchPanel`/`Sidebar` that clears sidebar search state after `loadSession`.
+- Dependency: none.
+
+Step 6: Replace search clear icon with Lucide
+- Files: `src/features/conversation/components/SearchPanel.tsx`, `src/index.css`
+- Add a custom clear button (Lucide X) inside the search input area (positioned with absolute or flex wrapper).
+- Hide native search input clear icons via CSS (`::-webkit-search-cancel-button { display: none; }` etc.).
+- On click: `setSearchQuery('')` and clear results/status (reuse helper from Step 5 if shared).
+- On click: `setSearchQuery('')` plus `setSearchGroups([])`, `setSearchError(null)`, and status `idle` (reuse helper from Step 5 if shared).
+- Dependency: Step 5 if a shared “clear search” handler is extracted.
+
+4) Key Decisions & Tradeoffs
+- Sticky top bar vs floating bottom pill: chose sticky top for dev-tool feel and to avoid obscuring content.
+- Show sticky controls only after header scrolls out: avoids duplicate controls in the initial view and keeps header intact.
+- Match nav only when `q` present: reduces noise, keeps bar focused.
+- Shortcut keys: `Cmd/Ctrl + ↑/↓` for top/bottom, `Cmd/Ctrl + Shift + H` for home.
+  - Chosen to avoid OS/browser conflicts (avoid Cmd+S and Cmd+H).
+  - Gated to focused session pane to minimize global conflicts (implicit opt‑out).
+- Toggle defaults all-off globally, including Canvas: avoids special-case divergence.
+- Toggle defaults are not persisted (no localStorage/config); defaults apply on each load.
+- Clear sidebar search on session open (from search results): reduces noise in the sidebar.
+
+5) Risks & Landmines
+- URL `q` clearing: must update both URL and `activeSearchQuery` state without reloading session data.
+  - Avoid calling `loadSession` just to clear `q` (would re-fetch/parsing). Add a dedicated setter.
+- Sticky bar overlap: ensure `position: sticky` doesn’t cover turn content; add padding/margin so the bar doesn’t occlude the top turn.
+- IntersectionObserver threshold: avoid flicker where header is partially visible and sticky bar appears. Use a generous threshold or rootMargin to reduce double visibility.
+- Shortcut conflicts: ensure keys only fire when focus is in session pane and target is not editable (inputs, textarea, contenteditable).
+- Search query clearing: don’t clear session `activeSearchQuery` when clearing sidebar search (they are distinct).
+- CSS: native search clear icon may still appear in some browsers if not explicitly disabled.
+
+6) Verification & Validation
+- Manual checks (dev server):
+  - Open a session, scroll; sticky controls appear after header leaves view.
+  - Match nav appears only when `q` exists; close button removes `q` and highlights disappear without reloading.
+  - Toggles default off after refresh (including Canvas route).
+  - Shortcuts:
+    - `Cmd/Ctrl + ↑` jumps to first turn.
+    - `Cmd/Ctrl + ↓` jumps to last turn.
+    - `Cmd/Ctrl + Shift + H` returns Home.
+    - Shortcuts do nothing when focus is outside session pane or inside inputs.
+  - Open a session from search results: sidebar search query clears and results disappear.
+  - Search input clear button uses Lucide X and clears query/results.
+- Suggested commands:
+  - `npm run typecheck`
+  - `npm run check`
+- Rollback plan:
+  - If sticky bar causes occlusion or flicker, disable sticky bar render and revert to inline controls.
+  - If shortcut conflicts occur, remove new key handlers while keeping other changes.
+
+7) Open Questions / Follow-ups
+- None. All prior decisions are resolved and incorporated.
+
+Assumptions
+- The sticky controls will be built using existing toggle UI to avoid new design patterns.
+- `useSession` can be extended with a light setter for `activeSearchQuery` without impacting other flows.
+- Sidebar search clearing should only happen when a session is opened from search results, not when loading via URL or session tree.

@@ -3,8 +3,8 @@ import { hasTokenCountUsage } from '../tokenCounts';
 import type { Turn } from '../types';
 
 export const useSessionOverview = (turns: Turn[]) => {
-  const [showThoughts, setShowThoughts] = useState(true);
-  const [showTools, setShowTools] = useState(true);
+  const [showThoughts, setShowThoughts] = useState(false);
+  const [showTools, setShowTools] = useState(false);
   const [showMeta, setShowMeta] = useState(false);
   const [showTokenCounts, setShowTokenCounts] = useState(false);
   const [showFullContent, setShowFullContent] = useState(false);

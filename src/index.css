@@ -197,6 +197,17 @@
     container-name: search-panel;
   }
 
+  .search-input::-webkit-search-cancel-button,
+  .search-input::-webkit-search-decoration,
+  .search-input::-webkit-search-results-button,
+  .search-input::-webkit-search-results-decoration {
+    display: none;
+  }
+
+  .search-input::-ms-clear {
+    display: none;
+  }
+
   .search-result-title {
     display: -webkit-box;
     -webkit-box-orient: vertical;

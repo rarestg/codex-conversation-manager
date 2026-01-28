@@ -53,6 +53,104 @@ const CompactToggle = ({ label, checked, count, onChange }: CompactToggleProps) 
   </label>
 );
 
+interface SessionToggleRowProps {
+  stats: SessionStats;
+  showThoughts: boolean;
+  showTools: boolean;
+  showMeta: boolean;
+  showTokenCounts: boolean;
+  showFullContent: boolean;
+  onShowThoughtsChange: (value: boolean) => void;
+  onShowToolsChange: (value: boolean) => void;
+  onShowMetaChange: (value: boolean) => void;
+  onShowTokenCountsChange: (value: boolean) => void;
+  onShowFullContentChange: (value: boolean) => void;
+  variant?: 'default' | 'compact';
+  showToggleCountsWhenOff?: boolean;
+  className?: string;
+}
+
+export const SessionToggleRow = ({
+  stats,
+  showThoughts,
+  showTools,
+  showMeta,
+  showTokenCounts,
+  showFullContent,
+  onShowThoughtsChange,
+  onShowToolsChange,
+  onShowMetaChange,
+  onShowTokenCountsChange,
+  onShowFullContentChange,
+  variant = 'default',
+  showToggleCountsWhenOff = false,
+  className,
+}: SessionToggleRowProps) => {
+  const isCompactToggleLayout = variant === 'compact';
+  const toggleGridClassNameMerged = [
+    isCompactToggleLayout ? 'flex flex-wrap items-center gap-2' : 'grid gap-3 md:grid-cols-2 xl:grid-cols-5',
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const thoughtCount = showToggleCountsWhenOff ? stats.thoughtCount : undefined;
+  const toolCount = showToggleCountsWhenOff ? stats.toolCallCount : undefined;
+  const metaCount = showToggleCountsWhenOff ? stats.metaCount : undefined;
+  const tokenCount = showToggleCountsWhenOff ? formatCompactCount(stats.tokenCount) : undefined;
+
+  return (
+    <div className={toggleGridClassNameMerged}>
+      {isCompactToggleLayout ? (
+        <>
+          <CompactToggle label="Thoughts" checked={showThoughts} count={thoughtCount} onChange={onShowThoughtsChange} />
+          <CompactToggle label="Tools" checked={showTools} count={toolCount} onChange={onShowToolsChange} />
+          <CompactToggle
+            label="Token counts"
+            checked={showTokenCounts}
+            count={tokenCount}
+            onChange={onShowTokenCountsChange}
+          />
+          <CompactToggle label="Metadata" checked={showMeta} count={metaCount} onChange={onShowMetaChange} />
+          <CompactToggle label="Full content" checked={showFullContent} onChange={onShowFullContentChange} />
+        </>
+      ) : (
+        <>
+          <Toggle
+            label="Thoughts"
+            description="Include agent reasoning inline."
+            checked={showThoughts}
+            onChange={onShowThoughtsChange}
+          />
+          <Toggle
+            label="Tools"
+            description="Tool calls and outputs inline."
+            checked={showTools}
+            onChange={onShowToolsChange}
+          />
+          <Toggle
+            label="Token counts"
+            description="token_count telemetry entries."
+            checked={showTokenCounts}
+            onChange={onShowTokenCountsChange}
+          />
+          <Toggle
+            label="Metadata"
+            description="turn_context and session_meta."
+            checked={showMeta}
+            onChange={onShowMetaChange}
+          />
+          <Toggle
+            label="Full content"
+            description="Disable truncation for long messages."
+            checked={showFullContent}
+            onChange={onShowFullContentChange}
+          />
+        </>
+      )}
+    </div>
+  );
+};
+
 export interface SessionOverviewProps {
   activeSession: SessionFileEntry | null;
   sessionDetails: SessionDetails;
@@ -70,6 +168,7 @@ export interface SessionOverviewProps {
   onShowMetaChange: (value: boolean) => void;
   onShowTokenCountsChange: (value: boolean) => void;
   onShowFullContentChange: (value: boolean) => void;
+  showToggles?: boolean;
   variantLabel?: string;
   variantHint?: string;
   HeaderComponent?: SessionHeaderComponent;
@@ -101,6 +200,7 @@ export const SessionOverview = ({
   onShowMetaChange,
   onShowTokenCountsChange,
   onShowFullContentChange,
+  showToggles = true,
   variantLabel,
   variantHint,
   HeaderComponent = SessionHeader,
@@ -120,18 +220,6 @@ export const SessionOverview = ({
   ]
     .filter(Boolean)
     .join(' ');
-  const isCompactToggleLayout = toggleVariant === 'compact';
-  const toggleGridClassNameMerged = [
-    isCompactToggleLayout ? 'flex flex-wrap items-center gap-2' : 'grid gap-3 md:grid-cols-2 xl:grid-cols-5',
-    toggleGridClassName,
-  ]
-    .filter(Boolean)
-    .join(' ');
-  const thoughtCount = showToggleCountsWhenOff ? stats.thoughtCount : undefined;
-  const toolCount = showToggleCountsWhenOff ? stats.toolCallCount : undefined;
-  const metaCount = showToggleCountsWhenOff ? stats.metaCount : undefined;
-  const tokenCount = showToggleCountsWhenOff ? formatCompactCount(stats.tokenCount) : undefined;
-
   const hasVariantHeader = Boolean(variantLabel || variantHint);
 
   return (
@@ -161,60 +249,24 @@ export const SessionOverview = ({
           actionsClassName={actionsClassName}
         />
 
-        <div className={toggleGridClassNameMerged}>
-          {isCompactToggleLayout ? (
-            <>
-              <CompactToggle
-                label="Thoughts"
-                checked={showThoughts}
-                count={thoughtCount}
-                onChange={onShowThoughtsChange}
-              />
-              <CompactToggle label="Tools" checked={showTools} count={toolCount} onChange={onShowToolsChange} />
-              <CompactToggle
-                label="Token counts"
-                checked={showTokenCounts}
-                count={tokenCount}
-                onChange={onShowTokenCountsChange}
-              />
-              <CompactToggle label="Metadata" checked={showMeta} count={metaCount} onChange={onShowMetaChange} />
-              <CompactToggle label="Full content" checked={showFullContent} onChange={onShowFullContentChange} />
-            </>
-          ) : (
-            <>
-              <Toggle
-                label="Thoughts"
-                description="Include agent reasoning inline."
-                checked={showThoughts}
-                onChange={onShowThoughtsChange}
-              />
-              <Toggle
-                label="Tools"
-                description="Tool calls and outputs inline."
-                checked={showTools}
-                onChange={onShowToolsChange}
-              />
-              <Toggle
-                label="Token counts"
-                description="token_count telemetry entries."
-                checked={showTokenCounts}
-                onChange={onShowTokenCountsChange}
-              />
-              <Toggle
-                label="Metadata"
-                description="turn_context and session_meta."
-                checked={showMeta}
-                onChange={onShowMetaChange}
-              />
-              <Toggle
-                label="Full content"
-                description="Disable truncation for long messages."
-                checked={showFullContent}
-                onChange={onShowFullContentChange}
-              />
-            </>
-          )}
-        </div>
+        {showToggles && (
+          <SessionToggleRow
+            stats={stats}
+            showThoughts={showThoughts}
+            showTools={showTools}
+            showMeta={showMeta}
+            showTokenCounts={showTokenCounts}
+            showFullContent={showFullContent}
+            onShowThoughtsChange={onShowThoughtsChange}
+            onShowToolsChange={onShowToolsChange}
+            onShowMetaChange={onShowMetaChange}
+            onShowTokenCountsChange={onShowTokenCountsChange}
+            onShowFullContentChange={onShowFullContentChange}
+            variant={toggleVariant}
+            showToggleCountsWhenOff={showToggleCountsWhenOff}
+            className={toggleGridClassName}
+          />
+        )}
       </div>
     </section>
   );
