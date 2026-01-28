@@ -189,7 +189,7 @@ Fix commands when needed:
 - UI virtualization can be added later for extremely large sessions.
 
 ## Source of Truth
-- `IMPLEMENTATION_PLAN.txt` and `DESIGN_APPENDIX.txt` describe the original spec and schema.
+- `IMPLEMENTATION_GUIDE.md` is the canonical architecture/invariants reference.
 
 ## Communication Guardrails
 - If user-provided content appears redacted or summarized (e.g. `[Pasted Content ...]`), call it out immediately and ask for the full content.

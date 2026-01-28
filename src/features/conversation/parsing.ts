@@ -1,4 +1,5 @@
-import { formatJsonValue } from './format';
+import { createSessionMetrics } from '../../../shared/sessionMetrics';
+import { formatJsonValue, MAX_PREVIEW_CHARS, MAX_PREVIEW_LINES } from './format';
 import type { ParsedItem, SessionDetails, Turn } from './types';
 import { normalizeSessionId, SESSION_ID_PREFIX_REGEX, SESSION_ID_REGEX } from './url';
 
@@ -100,6 +101,10 @@ export const parseJsonl = (raw: string) => {
   const turns: Turn[] = [];
   const preambleItems: ParsedItem[] = [];
   const turnMap = new Map<number, Turn>();
+  const metrics = createSessionMetrics({
+    previewMaxChars: MAX_PREVIEW_CHARS,
+    previewMaxLines: MAX_PREVIEW_LINES,
+  });
   let currentTurn = 0;
   let seq = 0;
   const sessionInfo: SessionDetails = {};
@@ -141,12 +146,14 @@ export const parseJsonl = (raw: string) => {
     seq += 1;
     try {
       const entry = JSON.parse(line);
+      metrics.recordTimestamp(entry.timestamp);
       if (entry.type === 'event_msg') {
         const payload = entry.payload ?? {};
         if (payload.type === 'user_message') {
           currentTurn += 1;
           const turn = ensureTurn(currentTurn, entry.timestamp);
           const content = formatJsonValue(payload.message ?? '');
+          metrics.recordUserMessage(entry.timestamp, content);
           turn.items.push({
             id: `item-${seq}`,
             type: 'user',
@@ -156,6 +163,7 @@ export const parseJsonl = (raw: string) => {
             raw: entry,
           });
         } else if (payload.type === 'agent_message') {
+          metrics.recordAssistantMessage(entry.timestamp);
           addItem({
             id: `item-${seq}`,
             type: 'assistant',
@@ -165,6 +173,7 @@ export const parseJsonl = (raw: string) => {
             raw: entry,
           });
         } else if (payload.type === 'agent_reasoning' && payload.text) {
+          metrics.recordThought(entry.timestamp);
           addItem({
             id: `item-${seq}`,
             type: 'thought',
@@ -174,6 +183,7 @@ export const parseJsonl = (raw: string) => {
             raw: entry,
           });
         } else if (payload.type === 'token_count') {
+          metrics.recordTokenCount(entry.timestamp);
           addItem({
             id: `item-${seq}`,
             type: 'token_count',
@@ -190,6 +200,7 @@ export const parseJsonl = (raw: string) => {
         const details = extractSessionDetails(entry);
         const rank = entry.type === 'session_meta' ? 3 : 2;
         updateSessionInfo(details, rank);
+        metrics.recordMeta(entry.timestamp);
         addItem({
           id: `item-${seq}`,
           type: 'meta',
@@ -207,6 +218,7 @@ export const parseJsonl = (raw: string) => {
 
       if (['function_call', 'custom_tool_call', 'web_search_call'].includes(itemType)) {
         const formatted = formatToolCall(item);
+        metrics.recordToolCall(entry.timestamp);
         addItem({
           id: `item-${seq}`,
           type: 'tool_call',
@@ -220,8 +232,9 @@ export const parseJsonl = (raw: string) => {
         continue;
       }
 
-      if (['function_call_output', 'custom_tool_call_output'].includes(itemType)) {
+      if (['function_call_output', 'custom_tool_call_output', 'web_search_call_output'].includes(itemType)) {
         const formatted = formatToolOutput(item);
+        metrics.recordToolOutput(entry.timestamp);
         addItem({
           id: `item-${seq}`,
           type: 'tool_output',
@@ -243,5 +256,5 @@ export const parseJsonl = (raw: string) => {
   }
   output.push(...turns);
 
-  return { turns: output, errors, sessionInfo };
+  return { turns: output, errors, sessionInfo, metrics: metrics.finalize() };
 };

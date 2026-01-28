@@ -262,11 +262,15 @@ Workflow:
    - Build messages list
    - Extract metadata (cwd, git info, timestamps)
    - Count items (turns, thoughts, tools, meta, token_count)
-   - Compute `active_duration_ms` based on user->assistant spans
+   - Compute `active_duration_ms` per turn from user message → last assistant activity
+     (assistant message, agent_reasoning, tool calls, tool outputs)
 6) Insert/update sessions and messages in a transaction.
 7) Remove DB rows for deleted files.
 
 Important: filename session ID wins; session_meta is fallback only.
+Active duration and related metrics are computed by the shared accumulator in
+`shared/sessionMetrics.ts` (used by server indexing and client fallback), so
+reindex to apply definition changes to existing sessions.
 
 ---
 
