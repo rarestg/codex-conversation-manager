@@ -50,6 +50,7 @@ Backend (Vite dev server middleware):
 - `src/features/conversation/ConversationViewer.tsx` controls layout and data hooks.
 - `src/features/conversation/ConversationMain.tsx` renders active session view.
 - `src/features/conversation/components/Sidebar.tsx` renders search + session browser.
+- `src/features/conversation/StickyTest.tsx` is a dev-only route for validating sticky behavior.
 
 ### Backend (Vite API middleware)
 - `server/apiPlugin.ts` is a thin adapter (routes all `/api/*`).
@@ -325,6 +326,7 @@ Unknown workspace behavior:
   - Show Metadata
   - Show Token Counts
   - Show Full Content
+- Sticky controls bar with focus-gated shortcuts (first/last, prev/next, go to turn).
 - Turn grouping is preserved; preamble shown separately.
 - Match navigation (Prev/Next) for active search query.
 

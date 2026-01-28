@@ -22,6 +22,17 @@ How to extend this index
 Entries
 =======
 
+- Plan: 2026-01-28-1pm_session-view-floating-controls-and-shortcuts.txt
+  Context: 2026-01-28-1pm_session-view-floating-controls-and-shortcuts-context.txt
+  Why: Session controls, shortcuts, and search clearing were easy to lose in long sessions and needed clearer, sticky access.
+  Outcome:
+  - Added a single sticky toggle/shortcut bar with a focus scope indicator and clickable keycap hints.
+  - Implemented focus-gated navigation (Cmd/Ctrl+↑/↓, Cmd/Ctrl+K, ArrowLeft/Right) and removed duplicate match panels.
+  - Refined search UX: Lucide clear buttons, session q clear without reload, sidebar search reset on session open, active query shown in the sticky bar.
+  - Retained /stickytest as a dev/QA route and left-aligned the header subtitle row.
+  Notes:
+  - Addendum completed: 2026-01-28-1pm_session-view-floating-controls-and-shortcuts-addendum.txt
+
 - Plan: 2026-01-27-10pm_active-duration-consistency-plan.txt
   Context: 2026-01-27-10pm_active-duration-consistency-plan-context.txt
   Why: Active duration undercounted tool-heavy turns and differed between indexed vs unindexed sessions.

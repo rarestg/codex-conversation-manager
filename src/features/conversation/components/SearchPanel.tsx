@@ -1,4 +1,4 @@
-import { ArrowDownWideNarrow, CalendarClock, GitBranch, Hourglass, Repeat2, X } from 'lucide-react';
+import { ArrowDownWideNarrow, CalendarClock, GitBranch, Hourglass, Repeat2, Search, X } from 'lucide-react';
 import { type ClipboardEvent, type KeyboardEvent, type MouseEvent, useEffect, useRef } from 'react';
 import { logSearch } from '../debug';
 import { formatDate, formatDuration, formatDurationMs, formatTime, formatWorkspacePath } from '../format';
@@ -205,6 +205,10 @@ export const SearchPanel = ({
           </div>
         </div>
         <div className="relative mt-4">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+            aria-hidden="true"
+          />
           <input
             type="search"
             value={searchQuery}
@@ -213,7 +217,7 @@ export const SearchPanel = ({
             onPaste={onSearchPasteUuid}
             placeholder="Search messages"
             aria-label="Search sessions"
-            className="search-input w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 pr-10 text-sm text-slate-700 shadow-sm focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-200"
+            className="search-input w-full rounded-2xl border border-slate-200 bg-white py-2 pl-10 pr-10 text-sm text-slate-700 shadow-sm focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-200"
           />
           {showClearButton && (
             <button

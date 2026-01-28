@@ -23,6 +23,8 @@ Run these frequently while working on changes:
 - `npm run mdlint` (run when adding or editing Markdown files)
 Note: use `python3` for local scripts (not `python`).
 
+Markdown note: if you want sequential ordered list numbers (1., 2., 3., …), make sure any nested bullets are indented so the list remains a single continuous list; otherwise markdownlint will treat each item as a new list that must start at 1.
+
 Fix commands when needed:
 - `npm run check:write` (autofix lint + formatting)
 - `npm run lint:fix` (lint autofix only)
@@ -35,6 +37,7 @@ Fix commands when needed:
 - `src/main.tsx` - React entry.
 - `src/features/conversation/ConversationViewer.tsx` - page layout + top-level hooks.
 - `src/features/conversation/ConversationMain.tsx` - active session view (header + filters + turns).
+- `src/features/conversation/StickyTest.tsx` - dev-only sticky behavior sandbox (/stickytest route).
 - `src/features/conversation/components/` - UI building blocks:
   - `Sidebar.tsx` (search + sessions tree)
   - `SearchPanel.tsx` (FTS search + results)
@@ -162,6 +165,7 @@ Fix commands when needed:
 - Main viewer:
   - Conversation grouped by turn, with "Session Preamble" for pre-user entries.
   - Toggles: Show Thoughts, Show Tools, Show Metadata, Show Full Content.
+  - Sticky controls bar with focus-gated shortcuts (first/last, prev/next, go to turn).
   - Session header displays session ID + cwd chips with copy actions.
   - Search matches are highlighted and navigable with Next/Prev when `?q=` is present.
 - Settings modal:

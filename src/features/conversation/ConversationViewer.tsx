@@ -123,6 +123,7 @@ export default function ConversationViewer() {
 
   const locationPath = window.location.pathname.replace(/\/+$/, '') || '/';
   const isCanvas = locationPath === '/canvas' || locationPath === '/layouts';
+  // Dev/QA route: keep /stickytest available for sticky behavior sanity checks.
   const isStickyTest = locationPath === '/stickytest';
 
   const handleGoHome = useCallback(() => {

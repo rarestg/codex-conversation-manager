@@ -78,7 +78,6 @@ Step 6: Replace search clear icon with Lucide
 - Files: `src/features/conversation/components/SearchPanel.tsx`, `src/index.css`
 - Add a custom clear button (Lucide X) inside the search input area (positioned with absolute or flex wrapper).
 - Hide native search input clear icons via CSS (`::-webkit-search-cancel-button { display: none; }` etc.).
-- On click: `setSearchQuery('')` and clear results/status (reuse helper from Step 5 if shared).
 - On click: `setSearchQuery('')` plus `setSearchGroups([])`, `setSearchError(null)`, and status `idle` (reuse helper from Step 5 if shared).
 - Dependency: Step 5 if a shared “clear search” handler is extracted.
 

@@ -32,7 +32,8 @@ def parse_plan_timestamp(filename: str) -> tuple[int, int, int, int] | None:
 
     return (year, month, day, hour)
 
-lines = INDEX_PATH.read_text().splitlines()
+original_text = INDEX_PATH.read_text()
+lines = original_text.splitlines()
 
 # Find the "Entries" heading.
 entries_index = None
@@ -72,11 +73,23 @@ if current:
     blocks.append(current)
 
 plan_entries: list[tuple[tuple[int, int, int, int] | None, int, str]] = []
+invalid_plans: list[str] = []
+original_blocks = [('\n'.join(block).rstrip()) for block in blocks]
 for index, block in enumerate(blocks):
     first_line = block[0]
     plan = first_line.split(':', 1)[1].strip()
     timestamp = parse_plan_timestamp(plan)
+    if timestamp is None:
+        invalid_plans.append(plan)
     plan_entries.append((timestamp, index, '\n'.join(block).rstrip()))
+
+if invalid_plans:
+    formatted = '\n'.join(f'- {plan}' for plan in invalid_plans)
+    raise SystemExit(
+        'Invalid plan filename(s) in todos/_done/INDEX.txt. Expected format '
+        '`YYYY-MM-DD-<h>am|pm_<name>` (e.g., `2026-01-28-1pm_example.txt`).\n'
+        f'{formatted}'
+    )
 
 plan_entries.sort(
     key=lambda entry: (
@@ -92,3 +105,10 @@ ordered_blocks = [entry[2] for entry in plan_entries]
 header_text = '\n'.join(header_lines).rstrip()
 new_text = header_text + '\n\n' + '\n\n'.join(ordered_blocks) + '\n'
 INDEX_PATH.write_text(new_text)
+
+original_entries = [block[2] for block in plan_entries]
+if original_text == new_text:
+    print('Reorder index: no changes (entries already in order).')
+else:
+    moved = sum(1 for index, block in enumerate(original_blocks) if ordered_blocks[index] != block)
+    print(f'Reorder index: updated order. Sections moved: {moved}.')

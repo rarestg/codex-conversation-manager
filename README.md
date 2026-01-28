@@ -15,6 +15,7 @@ For a comprehensive, up-to-date overview of the current architecture and invaria
 - Full-text search across user and assistant messages via SQLite FTS5.
 - Session-level search results with match counts, snippets, and per-session metadata pills.
 - Match highlighting in-session with Next/Prev match navigation and `?q=` deep links.
+- Sticky session controls with focus-gated keyboard shortcuts for fast turn navigation.
 - Markdown rendering with sanitized output and code highlighting.
 - Per-message and conversation-wide copy actions with inline feedback.
 - Session settings modal (set root, reindex, clear/rebuild index).
@@ -62,6 +63,7 @@ pre-commit run --all-files
   - `TurnList.tsx` / `TurnCard.tsx` / `MessageCard.tsx` (conversation rendering)
   - `SettingsModal.tsx` (session root + indexing actions)
   - `Toggle.tsx` (feature toggles)
+  - `StickyTest.tsx` (dev route for validating sticky behavior)
 - `src/features/conversation/hooks/` manages data flow:
   - `useSessions.ts` (config, sessions tree, reindex)
   - `useSession.ts` (load/parse a session)
@@ -69,6 +71,7 @@ pre-commit run --all-files
   - `useUrlSync.ts` (deep-link sync)
   - `useWorkspaces.ts` (workspace summaries)
   - `useCopyFeedback.ts` (clipboard feedback state + status)
+  - `useTurnNavigation.ts` (turn-level keyboard navigation + URL sync)
 - `src/features/conversation/parsing.ts` implements JSONL parsing rules and turn grouping.
 - `src/features/conversation/markdown.tsx` handles sanitized markdown + snippet highlighting.
 - `src/features/conversation/api.ts` wraps API fetches; `copy.ts` formats exports; `url.ts` handles deep links.

@@ -1,4 +1,4 @@
-import { Keyboard, X } from 'lucide-react';
+import { Keyboard, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchSessionMatches } from './api';
 import { SessionHeaderVariantB } from './components/SessionHeaderVariantB';
@@ -328,6 +328,20 @@ export const ConversationMain = ({
 
   const matchActionRow = (
     <div className="flex flex-wrap items-center gap-2">
+      <div className="relative">
+        <Search
+          className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400"
+          aria-hidden="true"
+        />
+        <input
+          type="text"
+          value={activeSearchQuery ?? ''}
+          readOnly
+          aria-label="Active search term"
+          title={activeSearchQuery ?? ''}
+          className="h-7 w-56 max-w-full rounded-full border border-slate-200 bg-white pl-7 pr-3 text-xs text-slate-700 shadow-sm"
+        />
+      </div>
       {matchStatusContent}
       <button
         type="button"
@@ -348,7 +362,7 @@ export const ConversationMain = ({
         .filter(Boolean)
         .join(' ')}
     >
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-col gap-3">
         <SessionToggleRow
           stats={stats}
           showThoughts={showThoughts}
@@ -392,33 +406,33 @@ export const ConversationMain = ({
               className="inline-flex items-center gap-2 rounded-md px-1 py-0.5 text-[11px] text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-200 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white/70 px-2 py-0.5 text-[11px] text-slate-600 shadow-sm">
-                ⌘↑ / Ctrl↑
+                ⌘↑
               </span>
               <span>First</span>
             </button>
             <button
               type="button"
               onClick={handleJumpPrev}
-              title="Jump to previous message (⌘← / Ctrl←)"
-              aria-label="Jump to previous message (⌘← / Ctrl←)"
+              title="Jump to previous message (←)"
+              aria-label="Jump to previous message (←)"
               disabled={!canJumpPrev}
               className="inline-flex items-center gap-2 rounded-md px-1 py-0.5 text-[11px] text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-200 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white/70 px-2 py-0.5 text-[11px] text-slate-600 shadow-sm">
-                ⌘← / Ctrl←
+                ←
               </span>
               <span>Prev</span>
             </button>
             <button
               type="button"
               onClick={handleJumpNext}
-              title="Jump to next message (⌘→ / Ctrl→)"
-              aria-label="Jump to next message (⌘→ / Ctrl→)"
+              title="Jump to next message (→)"
+              aria-label="Jump to next message (→)"
               disabled={!canJumpNext}
               className="inline-flex items-center gap-2 rounded-md px-1 py-0.5 text-[11px] text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-200 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white/70 px-2 py-0.5 text-[11px] text-slate-600 shadow-sm">
-                ⌘→ / Ctrl→
+                →
               </span>
               <span>Next</span>
             </button>
@@ -431,7 +445,7 @@ export const ConversationMain = ({
               className="inline-flex items-center gap-2 rounded-md px-1 py-0.5 text-[11px] text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-200 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white/70 px-2 py-0.5 text-[11px] text-slate-600 shadow-sm">
-                ⌘↓ / Ctrl↓
+                ⌘↓
               </span>
               <span>Last</span>
             </button>
@@ -444,13 +458,13 @@ export const ConversationMain = ({
               className="inline-flex items-center gap-2 rounded-md px-1 py-0.5 text-[11px] text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-200 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white/70 px-2 py-0.5 text-[11px] text-slate-600 shadow-sm">
-                ⌘K / Ctrl+K
+                ⌘K
               </span>
               <span>Go to turn…</span>
             </button>
           </div>
         </div>
-        {activeSearchQuery && <div className="ml-auto">{matchActionRow}</div>}
+        {activeSearchQuery && <div className="flex w-full justify-end">{matchActionRow}</div>}
       </div>
     </div>
   );
@@ -494,18 +508,6 @@ export const ConversationMain = ({
           showToggles={false}
         />
         <div className="sticky top-[calc(env(safe-area-inset-top)+0.75rem)] z-20">{renderToggleBar()}</div>
-
-        {activeSearchQuery && (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/70 px-4 py-3 text-xs text-slate-600 shadow-sm">
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-500">
-                Search matches
-              </span>
-              <span className="text-sm text-slate-800">{activeSearchQuery}</span>
-            </div>
-            {matchActionRow}
-          </div>
-        )}
 
         <TurnList
           filteredTurns={filteredTurns}
