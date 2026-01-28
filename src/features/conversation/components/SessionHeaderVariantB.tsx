@@ -205,18 +205,10 @@ export const SessionHeaderVariantB = ({
           <h2 className={titleClassNameMerged} title={title}>
             {title}
           </h2>
-          <div className="flex w-full items-center text-xs text-slate-500">
-            <div className="flex-1" />
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
             <div className="min-w-0">{timeNode}</div>
-            <div className="flex justify-center px-2 text-slate-300" style={{ flex: '2 1 0%' }}>
-              •
-            </div>
             <div className="min-w-0">{repoNode}</div>
-            <div className="flex justify-center px-2 text-slate-300" style={{ flex: '2 1 0%' }}>
-              •
-            </div>
             <div className="min-w-0">{branchNode}</div>
-            <div className="flex-1" />
           </div>
         </div>
       </div>

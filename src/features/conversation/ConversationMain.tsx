@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { Keyboard, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchSessionMatches } from './api';
 import { SessionHeaderVariantB } from './components/SessionHeaderVariantB';
@@ -44,10 +44,9 @@ export const ConversationMain = ({
   onGoHome,
 }: ConversationMainProps) => {
   const mainRef = useRef<HTMLElement | null>(null);
-  const overviewRef = useRef<HTMLDivElement | null>(null);
   const topSentinelRef = useRef<HTMLSpanElement | null>(null);
   const [turnJumpOpen, setTurnJumpOpen] = useState(false);
-  const [showStickyControls, setShowStickyControls] = useState(false);
+  const [isMessagesFocused, setIsMessagesFocused] = useState(false);
   const {
     showThoughts,
     setShowThoughts,
@@ -89,19 +88,20 @@ export const ConversationMain = ({
     sessionKey: activeSession?.id ?? null,
   });
 
-  useEffect(() => {
-    if (!activeSession || loadingSession) {
-      setShowStickyControls(false);
-      return;
-    }
-    const target = overviewRef.current;
-    if (!target || typeof IntersectionObserver === 'undefined') return;
-    const observer = new IntersectionObserver(([entry]) => {
-      setShowStickyControls(!entry.isIntersecting);
-    });
-    observer.observe(target);
-    return () => observer.disconnect();
-  }, [activeSession, loadingSession]);
+  const openTurnJump = useCallback(() => {
+    if (navigableTurnIds.length === 0) return;
+    setTurnJumpOpen(true);
+  }, [navigableTurnIds.length]);
+
+  const handleFocusCapture = useCallback(() => {
+    setIsMessagesFocused(true);
+  }, []);
+
+  const handleBlurCapture = useCallback((event: React.FocusEvent<HTMLElement>) => {
+    const next = event.relatedTarget as HTMLElement | null;
+    if (next && mainRef.current?.contains(next)) return;
+    setIsMessagesFocused(false);
+  }, []);
 
   useEffect(() => {
     if (!activeSession || !activeSearchQuery) {
@@ -150,27 +150,22 @@ export const ConversationMain = ({
 
   useEffect(() => {
     if (!activeSession || loadingSession) return;
-    const handleRequestJump = () => {
-      if (navigableTurnIds.length === 0) return;
-      setTurnJumpOpen(true);
-    };
-
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
       const isShortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k';
       if (!isShortcut) return;
       if (isEditableElement(event.target)) return;
       event.preventDefault();
-      handleRequestJump();
+      openTurnJump();
     };
-    const handleCustomEvent = () => handleRequestJump();
+    const handleCustomEvent = () => openTurnJump();
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener(TURN_JUMP_EVENT, handleCustomEvent);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener(TURN_JUMP_EVENT, handleCustomEvent);
     };
-  }, [activeSession, loadingSession, navigableTurnIds.length]);
+  }, [activeSession, loadingSession, openTurnJump]);
 
   useEffect(() => {
     if (!activeSession || loadingSession) return;
@@ -247,6 +242,42 @@ export const ConversationMain = ({
     setSessionSearchQuery(null);
   }, [setSessionSearchQuery]);
 
+  const handleJumpFirst = useCallback(() => {
+    if (navigableTurnIds.length === 0) return;
+    const targetId = navigableTurnIds[0];
+    if (typeof targetId !== 'number') return;
+    jumpToTurn(targetId, { historyMode: 'replace', scroll: true });
+  }, [jumpToTurn, navigableTurnIds]);
+
+  const handleJumpPrev = useCallback(() => {
+    if (navigableTurnIds.length === 0) return;
+    const currentIndex = activeTurnIndex >= 0 ? activeTurnIndex : 0;
+    const targetIndex = Math.max(currentIndex - 1, 0);
+    const targetId = navigableTurnIds[targetIndex];
+    if (typeof targetId !== 'number') return;
+    jumpToTurn(targetId, { historyMode: 'replace', scroll: true });
+  }, [activeTurnIndex, jumpToTurn, navigableTurnIds]);
+
+  const handleJumpNext = useCallback(() => {
+    if (navigableTurnIds.length === 0) return;
+    const currentIndex = activeTurnIndex >= 0 ? activeTurnIndex : 0;
+    const targetIndex = Math.min(currentIndex + 1, navigableTurnIds.length - 1);
+    const targetId = navigableTurnIds[targetIndex];
+    if (typeof targetId !== 'number') return;
+    jumpToTurn(targetId, { historyMode: 'replace', scroll: true });
+  }, [activeTurnIndex, jumpToTurn, navigableTurnIds]);
+
+  const handleJumpLast = useCallback(() => {
+    if (navigableTurnIds.length === 0) return;
+    const targetId = navigableTurnIds[navigableTurnIds.length - 1];
+    if (typeof targetId !== 'number') return;
+    jumpToTurn(targetId, { historyMode: 'replace', scroll: true });
+  }, [jumpToTurn, navigableTurnIds]);
+
+  const canNavigateTurns = navigableTurnIds.length > 0;
+  const canJumpPrev = canNavigateTurns && activeTurnIndex > 0;
+  const canJumpNext = canNavigateTurns && activeTurnIndex >= 0 && activeTurnIndex < navigableTurnIds.length - 1;
+
   const handlePrevMatch = useCallback(() => {
     if (!matchCount) return;
     const index = currentMatchIndex >= 0 ? currentMatchIndex - 1 : matchCount - 1;
@@ -311,10 +342,125 @@ export const ConversationMain = ({
     </div>
   );
 
+  const renderToggleBar = (className?: string) => (
+    <div
+      className={['rounded-2xl border border-white/70 bg-white/90 px-4 py-2 shadow-sm backdrop-blur', className]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      <div className="flex flex-wrap items-center gap-3">
+        <SessionToggleRow
+          stats={stats}
+          showThoughts={showThoughts}
+          showTools={showTools}
+          showMeta={showMeta}
+          showTokenCounts={showTokenCounts}
+          showFullContent={showFullContent}
+          onShowThoughtsChange={setShowThoughts}
+          onShowToolsChange={setShowTools}
+          onShowMetaChange={setShowMeta}
+          onShowTokenCountsChange={setShowTokenCounts}
+          onShowFullContentChange={setShowFullContent}
+          variant="compact"
+          showToggleCountsWhenOff
+        />
+        <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500">
+          <span
+            title={isMessagesFocused ? 'Shortcuts active' : 'Click Messages pane to enable'}
+            className={[
+              'inline-flex items-center gap-2 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.2em] shadow-sm transition',
+              isMessagesFocused
+                ? 'border-slate-200 bg-white text-slate-600'
+                : 'border-slate-200 bg-white/80 text-slate-400',
+            ].join(' ')}
+          >
+            <Keyboard className="h-3.5 w-3.5" />
+            Shortcuts
+            <span
+              className={['h-1.5 w-1.5 rounded-full', isMessagesFocused ? 'bg-emerald-500' : 'bg-slate-300'].join(' ')}
+              aria-hidden="true"
+            />
+            <span className="sr-only">{isMessagesFocused ? 'Shortcuts active' : 'Click Messages pane to enable'}</span>
+          </span>
+          <div className={['flex flex-wrap items-center gap-2', isMessagesFocused ? '' : 'opacity-50'].join(' ')}>
+            <button
+              type="button"
+              onClick={handleJumpFirst}
+              title="Jump to first message (⌘↑ / Ctrl↑)"
+              aria-label="Jump to first message (⌘↑ / Ctrl↑)"
+              disabled={!canNavigateTurns}
+              className="inline-flex items-center gap-2 rounded-md px-1 py-0.5 text-[11px] text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-200 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white/70 px-2 py-0.5 text-[11px] text-slate-600 shadow-sm">
+                ⌘↑ / Ctrl↑
+              </span>
+              <span>First</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleJumpPrev}
+              title="Jump to previous message (⌘← / Ctrl←)"
+              aria-label="Jump to previous message (⌘← / Ctrl←)"
+              disabled={!canJumpPrev}
+              className="inline-flex items-center gap-2 rounded-md px-1 py-0.5 text-[11px] text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-200 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white/70 px-2 py-0.5 text-[11px] text-slate-600 shadow-sm">
+                ⌘← / Ctrl←
+              </span>
+              <span>Prev</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleJumpNext}
+              title="Jump to next message (⌘→ / Ctrl→)"
+              aria-label="Jump to next message (⌘→ / Ctrl→)"
+              disabled={!canJumpNext}
+              className="inline-flex items-center gap-2 rounded-md px-1 py-0.5 text-[11px] text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-200 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white/70 px-2 py-0.5 text-[11px] text-slate-600 shadow-sm">
+                ⌘→ / Ctrl→
+              </span>
+              <span>Next</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleJumpLast}
+              title="Jump to last message (⌘↓ / Ctrl↓)"
+              aria-label="Jump to last message (⌘↓ / Ctrl↓)"
+              disabled={!canNavigateTurns}
+              className="inline-flex items-center gap-2 rounded-md px-1 py-0.5 text-[11px] text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-200 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white/70 px-2 py-0.5 text-[11px] text-slate-600 shadow-sm">
+                ⌘↓ / Ctrl↓
+              </span>
+              <span>Last</span>
+            </button>
+            <button
+              type="button"
+              onClick={openTurnJump}
+              title="Go to turn… (⌘K / Ctrl+K)"
+              aria-label="Go to turn… (⌘K / Ctrl+K)"
+              disabled={!canNavigateTurns}
+              className="inline-flex items-center gap-2 rounded-md px-1 py-0.5 text-[11px] text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-200 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white/70 px-2 py-0.5 text-[11px] text-slate-600 shadow-sm">
+                ⌘K / Ctrl+K
+              </span>
+              <span>Go to turn…</span>
+            </button>
+          </div>
+        </div>
+        {activeSearchQuery && <div className="ml-auto">{matchActionRow}</div>}
+      </div>
+    </div>
+  );
+
   return (
     <main
       ref={mainRef}
       tabIndex={-1}
+      onFocusCapture={handleFocusCapture}
+      onBlurCapture={handleBlurCapture}
       onPointerDown={(event) => {
         const target = event.target as HTMLElement | null;
         if (!target) return;
@@ -325,60 +471,29 @@ export const ConversationMain = ({
     >
       <span ref={topSentinelRef} className="absolute inset-x-0 top-0 h-px" aria-hidden="true" />
       <div className="space-y-6">
-        {showStickyControls && (
-          <div className="sticky top-[env(safe-area-inset-top)] z-20">
-            <div className="rounded-2xl border border-white/70 bg-white/90 px-4 py-2 shadow-sm backdrop-blur">
-              <div className="flex flex-wrap items-center gap-3">
-                <SessionToggleRow
-                  stats={stats}
-                  showThoughts={showThoughts}
-                  showTools={showTools}
-                  showMeta={showMeta}
-                  showTokenCounts={showTokenCounts}
-                  showFullContent={showFullContent}
-                  onShowThoughtsChange={setShowThoughts}
-                  onShowToolsChange={setShowTools}
-                  onShowMetaChange={setShowMeta}
-                  onShowTokenCountsChange={setShowTokenCounts}
-                  onShowFullContentChange={setShowFullContent}
-                  variant="compact"
-                  showToggleCountsWhenOff
-                />
-                <div className="ml-auto flex flex-wrap items-center gap-3">
-                  <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                    <span>Top Cmd/Ctrl+Up</span>
-                    <span>Bottom Cmd/Ctrl+Down</span>
-                    <span>Home Cmd/Ctrl+Shift+H</span>
-                  </div>
-                  {activeSearchQuery && matchActionRow}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-        <div ref={overviewRef}>
-          <SessionOverview
-            HeaderComponent={SessionHeaderVariantB}
-            toggleVariant="compact"
-            showToggleCountsWhenOff
-            activeSession={activeSession}
-            sessionDetails={sessionDetails}
-            sessionsRoot={sessionsRoot}
-            filteredTurns={filteredTurns}
-            visibleItemCount={visibleItemCount}
-            stats={stats}
-            showThoughts={showThoughts}
-            showTools={showTools}
-            showMeta={showMeta}
-            showTokenCounts={showTokenCounts}
-            showFullContent={showFullContent}
-            onShowThoughtsChange={setShowThoughts}
-            onShowToolsChange={setShowTools}
-            onShowMetaChange={setShowMeta}
-            onShowTokenCountsChange={setShowTokenCounts}
-            onShowFullContentChange={setShowFullContent}
-          />
-        </div>
+        <SessionOverview
+          HeaderComponent={SessionHeaderVariantB}
+          toggleVariant="compact"
+          showToggleCountsWhenOff
+          activeSession={activeSession}
+          sessionDetails={sessionDetails}
+          sessionsRoot={sessionsRoot}
+          filteredTurns={filteredTurns}
+          visibleItemCount={visibleItemCount}
+          stats={stats}
+          showThoughts={showThoughts}
+          showTools={showTools}
+          showMeta={showMeta}
+          showTokenCounts={showTokenCounts}
+          showFullContent={showFullContent}
+          onShowThoughtsChange={setShowThoughts}
+          onShowToolsChange={setShowTools}
+          onShowMetaChange={setShowMeta}
+          onShowTokenCountsChange={setShowTokenCounts}
+          onShowFullContentChange={setShowFullContent}
+          showToggles={false}
+        />
+        <div className="sticky top-[calc(env(safe-area-inset-top)+0.75rem)] z-20">{renderToggleBar()}</div>
 
         {activeSearchQuery && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/70 px-4 py-3 text-xs text-slate-600 shadow-sm">

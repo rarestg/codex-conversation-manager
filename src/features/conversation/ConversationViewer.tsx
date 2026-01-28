@@ -1,4 +1,4 @@
-import { Home, LocateFixed, Settings } from 'lucide-react';
+import { Home, Settings } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { CanvasView } from './CanvasView';
 import { ConversationMain } from './ConversationMain';
@@ -13,7 +13,7 @@ import { useSession } from './hooks/useSession';
 import { useSessions } from './hooks/useSessions';
 import { useUrlSync } from './hooks/useUrlSync';
 import { useWorkspaces } from './hooks/useWorkspaces';
-import { TURN_JUMP_EVENT } from './turnNavigation';
+import { StickyTest } from './StickyTest';
 
 export default function ConversationViewer() {
   const [apiError, setApiError] = useState<string | null>(null);
@@ -123,6 +123,7 @@ export default function ConversationViewer() {
 
   const locationPath = window.location.pathname.replace(/\/+$/, '') || '/';
   const isCanvas = locationPath === '/canvas' || locationPath === '/layouts';
+  const isStickyTest = locationPath === '/stickytest';
 
   const handleGoHome = useCallback(() => {
     clearSession();
@@ -130,7 +131,7 @@ export default function ConversationViewer() {
     window.history.pushState(null, '', `${targetPath}${window.location.hash || ''}`);
   }, [clearSession, isCanvas, locationPath]);
 
-  const showHome = !activeSession && !loadingSession && !isCanvas;
+  const showHome = !activeSession && !loadingSession && !isCanvas && !isStickyTest;
 
   const headerClassName = showHome
     ? 'flex flex-col gap-3 rounded-3xl border border-white/70 bg-white/70 px-6 py-5 shadow-soft backdrop-blur'
@@ -139,9 +140,6 @@ export default function ConversationViewer() {
   const headerRowClassName = showHome
     ? 'flex flex-wrap items-center justify-between gap-4'
     : 'flex flex-wrap items-center justify-between gap-3';
-
-  const canJump = Boolean(activeSession) && !loadingSession && !isCanvas;
-  const showTurnJump = !showHome && !isCanvas;
 
   return (
     <div className="min-h-screen px-4 py-8 sm:px-8">
@@ -180,21 +178,6 @@ export default function ConversationViewer() {
                   Home
                 </button>
               )}
-              {showTurnJump && (
-                <button
-                  type="button"
-                  onClick={() => window.dispatchEvent(new CustomEvent(TURN_JUMP_EVENT))}
-                  disabled={!canJump}
-                  title="Go to turn (Cmd+K)"
-                  aria-label="Go to turn (Cmd+K)"
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <LocateFixed className="h-4 w-4" />
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
-                    Cmd+K
-                  </span>
-                </button>
-              )}
               <button
                 type="button"
                 onClick={() => setSettingsOpen(true)}
@@ -213,7 +196,9 @@ export default function ConversationViewer() {
           )}
         </header>
 
-        {isCanvas ? (
+        {isStickyTest ? (
+          <StickyTest />
+        ) : isCanvas ? (
           <CanvasView
             sessionsTree={sessionsTree}
             sessionsRoot={sessionsRoot}

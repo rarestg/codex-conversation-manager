@@ -168,6 +168,7 @@ export interface SessionOverviewProps {
   onShowMetaChange: (value: boolean) => void;
   onShowTokenCountsChange: (value: boolean) => void;
   onShowFullContentChange: (value: boolean) => void;
+  showToggles?: boolean;
   variantLabel?: string;
   variantHint?: string;
   HeaderComponent?: SessionHeaderComponent;
@@ -199,6 +200,7 @@ export const SessionOverview = ({
   onShowMetaChange,
   onShowTokenCountsChange,
   onShowFullContentChange,
+  showToggles = true,
   variantLabel,
   variantHint,
   HeaderComponent = SessionHeader,
@@ -247,22 +249,24 @@ export const SessionOverview = ({
           actionsClassName={actionsClassName}
         />
 
-        <SessionToggleRow
-          stats={stats}
-          showThoughts={showThoughts}
-          showTools={showTools}
-          showMeta={showMeta}
-          showTokenCounts={showTokenCounts}
-          showFullContent={showFullContent}
-          onShowThoughtsChange={onShowThoughtsChange}
-          onShowToolsChange={onShowToolsChange}
-          onShowMetaChange={onShowMetaChange}
-          onShowTokenCountsChange={onShowTokenCountsChange}
-          onShowFullContentChange={onShowFullContentChange}
-          variant={toggleVariant}
-          showToggleCountsWhenOff={showToggleCountsWhenOff}
-          className={toggleGridClassName}
-        />
+        {showToggles && (
+          <SessionToggleRow
+            stats={stats}
+            showThoughts={showThoughts}
+            showTools={showTools}
+            showMeta={showMeta}
+            showTokenCounts={showTokenCounts}
+            showFullContent={showFullContent}
+            onShowThoughtsChange={onShowThoughtsChange}
+            onShowToolsChange={onShowToolsChange}
+            onShowMetaChange={onShowMetaChange}
+            onShowTokenCountsChange={onShowTokenCountsChange}
+            onShowFullContentChange={onShowFullContentChange}
+            variant={toggleVariant}
+            showToggleCountsWhenOff={showToggleCountsWhenOff}
+            className={toggleGridClassName}
+          />
+        )}
       </div>
     </section>
   );
