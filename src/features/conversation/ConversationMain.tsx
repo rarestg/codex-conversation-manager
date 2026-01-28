@@ -100,6 +100,7 @@ export const ConversationMain = ({
 
   useEffect(() => {
     if (!activeSession || !activeSearchQuery) {
+      matchRequestId.current += 1;
       setMatchTurnIds([]);
       setMatchTokens([]);
       setMatchesError(null);
@@ -318,7 +319,7 @@ export const ConversationMain = ({
         {showStickyControls && (
           <div className="sticky top-[env(safe-area-inset-top)] z-20">
             <div className="rounded-2xl border border-white/70 bg-white/90 px-4 py-2 shadow-sm backdrop-blur">
-              <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <SessionToggleRow
                   stats={stats}
                   showThoughts={showThoughts}
@@ -334,6 +335,11 @@ export const ConversationMain = ({
                   variant="compact"
                   showToggleCountsWhenOff
                 />
+                <div className="ml-auto flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                  <span>Top Cmd/Ctrl+Up</span>
+                  <span>Bottom Cmd/Ctrl+Down</span>
+                  <span>Home Cmd/Ctrl+Shift+H</span>
+                </div>
                 {activeSearchQuery && matchActionRow}
               </div>
             </div>
