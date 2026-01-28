@@ -124,3 +124,6 @@ After each step, run npm run typecheck and npm run check to ensure TS and Biome 
 6) Reindex and clear-index flows should still work; verify that cached summaries (if introduced) refresh correctly.
 
 When all steps complete, repeat the manual search scenarios above and ensure no behavior changes in the UI. If any endpoint response shape changes, update src/features/conversation/api.ts and SearchPanel rendering to match, and add explicit notes in the shared types file.
+
+Future note (clean third approach if Option A is slow)
+If search latency stays high even with workspace-only summaries, consider a materialized workspace summaries table maintained by the indexer. Concretely: add a workspace_summaries table with cwd, session_count, last_seen, git_branch, git_repo, git_commit_hash, github_slug; update it during reindex/clear-index (or as part of indexSessions) so /api/search can join that table directly instead of aggregating per request. This keeps runtime work minimal and makes summary data consistent, but adds schema/migration work and requires careful invalidation on reindex/clear-index. Keep the “Unknown workspace” bucket behavior intact by handling null/empty cwd entries during grouping or by storing a synthetic row.
