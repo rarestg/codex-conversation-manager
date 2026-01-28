@@ -34,11 +34,22 @@ Other
 - `.code-inline`: sharp inline code (no rounding)
 - `.code-block`: sharp block wrapper (no rounding)
 - `.mark`: sharp snippet highlight (no rounding)
+- `--overlay`: modal backdrop token (opaque modal, dimmed backdrop)
+- `--focus`, `--hover`, `--selected`: state tokens for list/row interactions
 
 Notes
 - Avoid multiple background opacities (`bg-white/70`, `bg-white/80`).
 - Avoid `shadow-*` classes entirely.
 - Avoid `rounded-*` in all native components; any remaining should be documented.
+- Focus visibility is required; use sharp outlines or border bump, not glow-only rings.
+
+## Interaction + Density Contract (Applied Across Mapping)
+- List/row hover: subtle background shift and/or left border accent.
+- Selected: persistent accent border (left bar) + stronger bg.
+- Active/focused row: same as selected, keyed off keyboard focus.
+- Numeric-heavy rows use `tabular-nums`.
+- Favor rows for list content; keep cards for multi-paragraph/narrative content.
+- Modal backdrops use the single approved overlay token; modal itself stays opaque.
 
 ## Component Mapping (by file)
 Below is a targeted mapping of existing classes to the new utilities. Use this
@@ -59,7 +70,7 @@ label/tag usage that should be replaced.
 - Outer container: `rounded-3xl ... shadow-card backdrop-blur` => `.panel`.
 - Inputs/selects: `rounded-2xl ... shadow-sm` => `.input` / `.select`.
 - Search result group container: `rounded-2xl ... bg-slate-50/80` => `.panel-muted`.
-- Result rows: `rounded-2xl ... bg-white` => `.panel` or `.panel-row`.
+- Result rows: `rounded-2xl ... bg-white` => `.panel` or `.panel-row` with row states.
 - Result metrics chips: `.search-result-chip` => `.tag tag-xs` (or size).
 - Empty/error/too-short panels: `rounded-2xl border-dashed` => `.panel-dashed`.
 
@@ -67,9 +78,11 @@ label/tag usage that should be replaced.
 - Card container: `rounded-3xl ... shadow-card` => `.panel`.
 - Turn metadata pills: `rounded-full bg-slate-100` => `.tag tag-xs`.
 - Empty items state: `rounded-2xl border-dashed` => `.panel-dashed`.
+  - Note: keep TurnCard as narrative content blocks; do not grid into table rows.
 
 1. `src/features/conversation/components/TurnList.tsx`
 - Loading, warnings, empty state cards: `rounded-3xl` => `.panel` / `.panel-dashed`.
+  - Note: keep TurnList as narrative content blocks; row layouts apply to list views.
 
 1. `src/features/conversation/components/SessionHeaderVariantB.tsx`
 - Subtitle row chips: `.chip` => `.tag` (sharp).
@@ -84,8 +97,8 @@ label/tag usage that should be replaced.
 - Panel container: `rounded-3xl ... shadow-card` => `.panel`.
 - Filter badges + buttons: `rounded-full` => `.tag` or `.button`.
 - Skeleton cards: `rounded-2xl` => `.panel` (no radius).
-- Year/month/day summaries: `rounded-xl` => `.panel-row`.
-- Session cards: `rounded-2xl` => `.panel`.
+- Year/month/day summaries: `rounded-xl` => `.panel-row` with row states.
+- Session cards: `rounded-2xl` => `.panel` or `.panel-row` with row states.
 - Session metadata chips: `.chip` => `.tag` (no shadow).
 - Copy session id chip: `.chip chip-muted` => `.tag tag-muted`.
 
@@ -93,7 +106,7 @@ label/tag usage that should be replaced.
 - Panel container: `rounded-3xl ... shadow-card` => `.panel`.
 - Loading badge + sort select: `rounded-full` => `.tag` / `.select`.
 - Active workspace pills + clear button: `rounded-full` => `.tag` / `.button`.
-- Workspace cards: `rounded-2xl` => `.panel`.
+- Workspace cards: `rounded-2xl` => `.panel` or `.panel-row` with row states.
 - GitHub badge: `rounded-full` => `.tag` (or simple icon + text without pill).
 - Empty state: `rounded-2xl` => `.panel-dashed`.
 
@@ -179,3 +192,9 @@ These are pattern-level replacements used repeatedly in components:
 - Confirm the minimal set of tag variants (2 vs 3).
 - Toggle redesign: square switch vs checkbox.
 - Typography decision (Sora vs mono-forward).
+
+## Caveats and Pushbacks (Context)
+- TurnList grid/table layouts are rejected for narrative content; apply row layouts to
+  Search/Sessions/Workspaces only.
+- Sticky headers are optional for list-heavy panels; avoid in conversation flows.
+- Zebra striping is optional and should be extremely subtle if used (lists only).

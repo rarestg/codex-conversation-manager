@@ -18,11 +18,13 @@ These choices affect multiple files and should be decided once, centrally:
   while retaining a sans for headings. This better matches the TUI-adjacent
   direction but increases visual density and may feel less friendly.
 - Decision impacts: `index.html` font imports, `src/index.css` base font-family.
+  - Caveat: a system UI + mono-forward shell improves scanability, but if Sora is a\n+    brand anchor we should keep it and achieve sharpness via surfaces instead.
 
 1. Chip vs Tag naming
 - Option A: Keep the name `.chip` but redefine it to a sharp label.
 - Option B: Rename `.chip` to `.tag` and migrate all usage.
 - Decision impacts: `src/index.css`, every component using chip classes.
+  - Caveat: renaming is churn; redefining `.chip` is cheaper and can be revisited later.
 
 1. Tag variants (keep minimal)
 - Recommend: only 2-3 variants total. Example:
@@ -38,6 +40,12 @@ These choices affect multiple files and should be decided once, centrally:
 1. Hierarchy approach
 - Borders + typographic weight only. No shadows, blur, or glass.
 - Focus state: border emphasis (avoid glow/ring if possible).
+  - Must not regress: keyboard focus needs to be obvious (sharp outline or border bump).
+
+1. Primitives strategy
+- Option A: start with CSS utilities + CVA recipes to reduce class drift.
+- Option B: introduce `<Panel/>`, `<Tag/>`, `<Button/>`, `<Input/>` wrappers immediately.
+- Caveat: wrappers are higher churn. Prefer recipes first; promote to components only if\n+  class drift persists after refactor.
 
 ## Design-System Inventory: Pills/Chips (Current)
 Current system is fragmented and should be consolidated.
@@ -87,6 +95,26 @@ Add a minimal set of sharp, reusable surface helpers in `src/index.css`:
 - `.panel-row`: tight header/row treatment for list headers.
 
 These replace repeated Tailwind class strings across components.
+
+## Interaction + Density Rules (Add to Style Guide)
+These are required to keep “sharp” from becoming “harsh,” and to preserve usability.
+
+Focus visibility (must not regress)
+- Use a strong, sharp focus indicator (e.g., `outline: 2px solid var(--accent)` or\n+  border swap to accent + 1px thickness bump).
+- Avoid glow-only focus states; focus must be visible on light backgrounds.
+
+Row/list interaction states
+- Hover: subtle background shift (surface-0 → surface-1) and/or left border accent.
+- Selected: persistent accent border (left bar) + slightly stronger bg.
+- Active/focused row: same as selected, keyed off keyboard focus.
+- Clickable affordance: cursor + hover + state; avoid shadow-only affordance.
+
+Modal overlay exception
+- Allow one controlled overlay token (e.g., `--overlay: rgba(0,0,0,0.6)`), used only\n+  for modal backdrops. Modals remain opaque and bordered.
+
+Density contract (minimum viable guidance)
+- Define standard paddings (e.g., `--panel-pad: 12px`, `--row-pad-x: 10px`, `--row-pad-y: 6px`).\n+- Favor rows for list content; reserve cards for multi-paragraph/narrative content.
+- Use tabular numerals (`tabular-nums`) in numeric-heavy areas.
 
 ## High-Impact Files to Update
 These files must be refactored to remove rounded corners, glass, blur, and
@@ -155,3 +183,25 @@ Search:
   to compensate for removed shadows.
 - The scrollbars are currently rounded (`--os-handle-border-radius: 999px`).
   This should be set to `0` in the sharp theme.
+
+## UX Feedback Notes (Pushback/Exceptions)
+These are proposals raised during UX review that we are not adopting as-is.
+
+- TurnList as grid/table rows: rejected for narrative content. Turns are multi-paragraph,
+  so table columns reduce readability. Keep TurnList as content blocks, but align
+  metadata rows and tags to the row-based system.
+- Sticky headers for turn lists: not necessary for narrative scrolling; better suited for
+  Search/Sessions/Workspaces lists.
+- Zebra striping: optional only for dense lists; avoid in conversation content to reduce
+  distraction. If used, keep it extremely subtle.
+
+## Verification Additions (Objective Done Criteria)
+- No `rounded-*` or `backdrop-blur` in application components (document exceptions if any).
+- No `shadow-*` used for hierarchy (visual separation must be border + type).
+- Focus states are visible on all interactive elements (keyboard navigation).
+- List rows have hover/selected/active states.
+- Modal overlays use the single approved overlay token.
+
+## Guardrails (Post-Cleanup)
+- Add a lint/CI check to flag `rounded-` and `backdrop-blur` usage outside
+  explicitly documented exceptions.
