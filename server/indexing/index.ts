@@ -2,10 +2,10 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import readline from 'node:readline';
+import { createSessionMetrics } from '../../shared/sessionMetrics';
 import { getDb } from '../db';
 import { logDebug } from '../logging';
 import type { FileEntry } from '../types';
-import { truncatePreview } from './tree';
 
 const toPosix = (value: string) => value.split(path.sep).join('/');
 
@@ -132,7 +132,7 @@ const parseJsonlFile = async (filePath: string) => {
     timestamp?: string;
     content: string;
   }> = [];
-  let firstUserMessage = '';
+  const metrics = createSessionMetrics();
   let sessionMeta: {
     cwd?: string;
     git_branch?: string;
@@ -142,57 +142,9 @@ const parseJsonlFile = async (filePath: string) => {
     session_id?: string;
   } = {};
   let currentTurn = 0;
-  let turnCount = 0;
-  let thoughtCount = 0;
-  let toolCallCount = 0;
-  let metaCount = 0;
-  let tokenCountCount = 0;
-  let startedAt: string | null = null;
-  let endedAt: string | null = null;
-  let startedAtMs: number | null = null;
-  let endedAtMs: number | null = null;
-  let inTurn = false;
-  let currentTurnStartMs: number | null = null;
-  let lastAgentMs: number | null = null;
-  let activeDurationMs = 0;
-  let activeDurationPairs = 0;
   let sessionIdRank = 0;
   let sessionMetaSeen = false;
   let malformedLines = 0;
-
-  const parseTimestamp = (value?: string | null) => {
-    if (!value) return null;
-    const parsed = Date.parse(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  };
-
-  const updateTimestampBounds = (value?: string | null) => {
-    if (!value) return;
-    const parsed = parseTimestamp(value);
-    if (parsed === null) return;
-    if (startedAtMs === null || parsed < startedAtMs) {
-      startedAtMs = parsed;
-      startedAt = value;
-    }
-    if (endedAtMs === null || parsed > endedAtMs) {
-      endedAtMs = parsed;
-      endedAt = value;
-    }
-  };
-
-  const closeActiveTurn = () => {
-    if (!inTurn) return;
-    if (currentTurnStartMs !== null && lastAgentMs !== null) {
-      const diff = lastAgentMs - currentTurnStartMs;
-      if (Number.isFinite(diff) && diff >= 0) {
-        activeDurationMs += diff;
-        activeDurationPairs += 1;
-      }
-    }
-    inTurn = false;
-    currentTurnStartMs = null;
-    lastAgentMs = null;
-  };
 
   const updateSessionId = (value: unknown, rank: number) => {
     const extracted = extractSessionIdFromObject(value);
@@ -209,9 +161,9 @@ const parseJsonlFile = async (filePath: string) => {
     if (!line.trim()) continue;
     try {
       const entry = JSON.parse(line);
-      updateTimestampBounds(entry.timestamp);
+      metrics.recordTimestamp(entry.timestamp);
       if (entry.type === 'session_meta') {
-        metaCount += 1;
+        metrics.recordMeta(entry.timestamp);
         const payload = entry.payload ?? entry;
         const gitPayload = payload?.git ?? {};
         // Branch ancestry can append older session_meta entries; keep the first (newest) metadata canonical.
@@ -254,7 +206,7 @@ const parseJsonlFile = async (filePath: string) => {
       }
 
       if (entry.type === 'turn_context') {
-        metaCount += 1;
+        metrics.recordMeta(entry.timestamp);
         const payload = entry.payload ?? entry;
         updateSessionId(payload, 1);
         continue;
@@ -263,17 +215,9 @@ const parseJsonlFile = async (filePath: string) => {
       if (entry.type === 'event_msg') {
         const payload = entry.payload ?? {};
         if (payload.type === 'user_message') {
-          closeActiveTurn();
-          inTurn = true;
-          currentTurnStartMs = parseTimestamp(entry.timestamp);
-          lastAgentMs = null;
           currentTurn += 1;
-          turnCount += 1;
           const content = String(payload.message ?? '');
-          if (!firstUserMessage) {
-            const trimmed = content.trim();
-            if (trimmed) firstUserMessage = truncatePreview(trimmed) ?? '';
-          }
+          metrics.recordUserMessage(entry.timestamp, content);
           messages.push({
             turnId: currentTurn,
             role: 'user',
@@ -281,10 +225,7 @@ const parseJsonlFile = async (filePath: string) => {
             content,
           });
         } else if (payload.type === 'agent_message') {
-          if (inTurn) {
-            const agentMs = parseTimestamp(entry.timestamp);
-            if (agentMs !== null) lastAgentMs = agentMs;
-          }
+          metrics.recordAssistantMessage(entry.timestamp);
           const content = String(payload.message ?? '');
           messages.push({
             turnId: currentTurn,
@@ -293,7 +234,7 @@ const parseJsonlFile = async (filePath: string) => {
             content,
           });
         } else if (payload.type === 'agent_reasoning' && payload.text) {
-          thoughtCount += 1;
+          metrics.recordThought(entry.timestamp);
           messages.push({
             turnId: currentTurn,
             role: 'thought',
@@ -301,7 +242,7 @@ const parseJsonlFile = async (filePath: string) => {
             content: String(payload.text),
           });
         } else if (payload.type === 'token_count') {
-          tokenCountCount += 1;
+          metrics.recordTokenCount(entry.timestamp);
         } else if (payload.type === 'turn_aborted') {
           continue;
         }
@@ -313,7 +254,7 @@ const parseJsonlFile = async (filePath: string) => {
       const itemType = isResponseItem ? item.type : entry.type;
 
       if (['function_call', 'custom_tool_call', 'web_search_call'].includes(itemType)) {
-        toolCallCount += 1;
+        metrics.recordToolCall(entry.timestamp);
         messages.push({
           turnId: currentTurn,
           role: 'tool_call',
@@ -323,7 +264,8 @@ const parseJsonlFile = async (filePath: string) => {
         continue;
       }
 
-      if (['function_call_output', 'custom_tool_call_output'].includes(itemType)) {
+      if (['function_call_output', 'custom_tool_call_output', 'web_search_call_output'].includes(itemType)) {
+        metrics.recordToolOutput(entry.timestamp);
         messages.push({
           turnId: currentTurn,
           role: 'tool_output',
@@ -341,23 +283,13 @@ const parseJsonlFile = async (filePath: string) => {
     }
   }
 
-  closeActiveTurn();
+  const { firstUserMessage, ...metricValues } = metrics.finalize();
 
   return {
     messages,
     firstUserMessage: firstUserMessage || '',
     sessionMeta,
-    metrics: {
-      startedAt,
-      endedAt,
-      turnCount: turnCount > 0 ? turnCount : null,
-      messageCount: messages.length,
-      thoughtCount,
-      toolCallCount,
-      metaCount,
-      tokenCountCount,
-      activeDurationMs: activeDurationPairs > 0 ? activeDurationMs : null,
-    },
+    metrics: metricValues,
   };
 };
 

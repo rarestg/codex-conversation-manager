@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { SessionMetrics } from '../../../../shared/sessionMetrics';
 import { fetchSession } from '../api';
 import { logTurnNav } from '../debug';
-import { MAX_PREVIEW_CHARS, MAX_PREVIEW_LINES } from '../format';
 import { extractSessionIdFromPath, parseJsonl } from '../parsing';
 import type {
   JumpToTurnOptions,
@@ -23,6 +23,7 @@ interface ParsedMeta {
   startedAt?: string;
   endedAt?: string;
   turnCount?: number;
+  activeDurationMs?: number | null;
   filename?: string;
 }
 
@@ -36,48 +37,14 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
   const [loadingSession, setLoadingSession] = useState(false);
   const [scrollToTurnId, setScrollToTurnId] = useState<number | null>(null);
 
-  const buildDerivedMeta = useCallback((sessionId: string, turns: Turn[]) => {
-    // Fallback metadata uses min/max timestamps (total span), not active duration.
-    let preview: string | undefined;
-    let startedAt: string | undefined;
-    let endedAt: string | undefined;
-    let turnCount = 0;
-    let firstTimestamp: number | null = null;
-    let lastTimestamp: number | null = null;
-    const truncatePreview = (value: string) => {
-      let truncated = value.slice(0, MAX_PREVIEW_CHARS);
-      const lines = truncated.split(/\r?\n/);
-      if (lines.length > MAX_PREVIEW_LINES) {
-        truncated = lines.slice(0, MAX_PREVIEW_LINES).join('\n');
-      }
-      return truncated;
-    };
-
-    for (const turn of turns) {
-      if (!turn.isPreamble) turnCount += 1;
-      for (const item of turn.items) {
-        if (!preview && item.type === 'user' && item.content) {
-          const trimmed = item.content.trim();
-          if (trimmed) preview = truncatePreview(trimmed);
-        }
-        if (!item.timestamp) continue;
-        const parsed = Date.parse(item.timestamp);
-        if (!Number.isFinite(parsed)) continue;
-        if (firstTimestamp === null || parsed < firstTimestamp) firstTimestamp = parsed;
-        if (lastTimestamp === null || parsed > lastTimestamp) lastTimestamp = parsed;
-      }
-    }
-
-    if (firstTimestamp !== null) startedAt = new Date(firstTimestamp).toISOString();
-    if (lastTimestamp !== null) endedAt = new Date(lastTimestamp).toISOString();
+  const buildParsedMeta = useCallback((sessionId: string, metrics: SessionMetrics) => {
     const filename = sessionId.split('/').pop() || sessionId;
-    const turnCountValue = turnCount > 0 ? turnCount : undefined;
-
     return {
-      preview,
-      startedAt,
-      endedAt,
-      turnCount: turnCountValue,
+      preview: metrics.firstUserMessage ?? undefined,
+      startedAt: metrics.startedAt ?? undefined,
+      endedAt: metrics.endedAt ?? undefined,
+      turnCount: metrics.turnCount ?? undefined,
+      activeDurationMs: metrics.activeDurationMs ?? null,
       filename,
     };
   }, []);
@@ -122,7 +89,7 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
         const parsed = parseJsonl(raw);
         setTurns(parsed.turns);
         setParseErrors(parsed.errors);
-        const derivedMeta = buildDerivedMeta(sessionId, parsed.turns);
+        const derivedMeta = buildParsedMeta(sessionId, parsed.metrics);
         const indexed = findSessionById(sessionId);
         const metaFilename = indexed?.filename ?? derivedMeta.filename ?? sessionId;
         const fallbackSessionId = extractSessionIdFromPath(metaFilename);
@@ -143,7 +110,7 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
         setLoadingSession(false);
       }
     },
-    [buildDerivedMeta, findSessionById, onError],
+    [buildParsedMeta, findSessionById, onError],
   );
 
   const jumpToTurn = useCallback(
@@ -182,7 +149,7 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
       toolCallCount: indexed?.toolCallCount ?? null,
       metaCount: indexed?.metaCount ?? null,
       tokenCount: indexed?.tokenCount ?? null,
-      activeDurationMs: indexed?.activeDurationMs ?? null,
+      activeDurationMs: parsedMeta?.activeDurationMs ?? indexed?.activeDurationMs ?? null,
       cwd: indexed?.cwd ?? null,
       gitBranch: indexed?.gitBranch ?? null,
       gitRepo: indexed?.gitRepo ?? null,
