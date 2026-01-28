@@ -63,7 +63,7 @@ pre-commit run --all-files
   - `TurnList.tsx` / `TurnCard.tsx` / `MessageCard.tsx` (conversation rendering)
   - `SettingsModal.tsx` (session root + indexing actions)
   - `Toggle.tsx` (feature toggles)
-  - `StickyTest.tsx` (dev route for validating sticky behavior)
+- `src/features/conversation/StickyTest.tsx` (dev route for validating sticky behavior)
 - `src/features/conversation/hooks/` manages data flow:
   - `useSessions.ts` (config, sessions tree, reindex)
   - `useSession.ts` (load/parse a session)
@@ -100,6 +100,7 @@ pre-commit run --all-files
 
 ## Search API Notes
 - Sorting is server-driven: `resultSort` applies in SQL, `groupSort` applies after grouping.
+- Relevance uses FTS5 bm25; lower scores are more relevant (ordered ASC).
 - Search responses include `requestId` (echoed when supplied) and `Server-Timing` headers for profiling.
 - Workspace summaries are computed only for workspaces present in the search results (Option A).
 - If Option A becomes slow at scale, the clean third approach is to materialize a workspaces table during indexing and query it directly (requires schema/migration updates and reindex invalidation).

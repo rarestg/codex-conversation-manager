@@ -106,7 +106,6 @@ header_text = '\n'.join(header_lines).rstrip()
 new_text = header_text + '\n\n' + '\n\n'.join(ordered_blocks) + '\n'
 INDEX_PATH.write_text(new_text)
 
-original_entries = [block[2] for block in plan_entries]
 if original_text == new_text:
     print('Reorder index: no changes (entries already in order).')
 else:

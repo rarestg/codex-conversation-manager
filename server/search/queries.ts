@@ -77,6 +77,7 @@ export const searchSessions = (database: Database.Database, options: SearchSessi
     truncated: normalized.truncated,
     resultSort,
     groupSort,
+    bm25_note: 'lower score means more relevant',
   });
   const params: Array<string | number> = [normalized.normalized];
   const workspaceFilter = workspace ? 'AND sessions.cwd = ?' : '';
@@ -171,6 +172,7 @@ export const searchSessions = (database: Database.Database, options: SearchSessi
         groupCount: 0,
         results: [],
         groups: [],
+        bm25_note: 'lower score means more relevant',
         durationMs: Number(totalMs.toFixed(2)),
       });
       return {
@@ -258,6 +260,7 @@ export const searchSessions = (database: Database.Database, options: SearchSessi
       groupCount: groups.length,
       results,
       groups,
+      bm25_note: 'lower score means more relevant',
       durationMs: Number(totalMs.toFixed(2)),
     });
 

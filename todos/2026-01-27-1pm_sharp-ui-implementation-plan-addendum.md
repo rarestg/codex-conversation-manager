@@ -18,8 +18,8 @@ These choices affect multiple files and should be decided once, centrally:
      while retaining a sans for headings. This better matches the TUI-adjacent
      direction but increases visual density and may feel less friendly.
    - Decision impacts: `index.html` font imports, `src/index.css` base font-family.
-     - Caveat: a system UI + mono-forward shell improves scanability, but if Sora is a
-       brand anchor we should keep it and achieve sharpness via surfaces instead.
+   - Caveat: a system UI + mono-forward shell improves scannability, but if Sora is a
+     brand anchor we should keep it and achieve sharpness via surfaces instead.
 
 2. Chip vs Tag naming
    - Option A: Keep the name `.chip` but redefine it to a sharp label.

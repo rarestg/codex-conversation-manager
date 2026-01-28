@@ -221,5 +221,6 @@ Fix commands when needed:
 
 ## Todos Index Usage
 - The canonical completed-plan index lives at `todos/_done/INDEX.txt`.
-- New entries must use timestamped filenames (see the index instructions).
+- Entries are ordered newest-first (top of file is most recent).
+- New entries must use timestamped filenames in the format `YYYY-MM-DD-<h>am|pm_<name>.txt` (example: `2026-01-28-1pm_example.txt`).
 - Run `python3 todos/_done/reorder_index.py` after edits to keep newest-first ordering.

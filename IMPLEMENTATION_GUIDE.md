@@ -295,6 +295,7 @@ reindex to apply definition changes to existing sessions.
 ### Sorting
 Server-driven:
 - `resultSort` controls SQL ORDER BY.
+- Relevance uses FTS5 bm25; lower scores are more relevant (ordered ASC).
 - `groupSort` applied after grouping results in JS.
 - Deterministic tie-breaker: `sessions.id ASC`.
 
