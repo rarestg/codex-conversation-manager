@@ -3,7 +3,7 @@
 ## Purpose
 This addendum captures the concrete code touchpoints, design-system inventory, and
 critical UX decisions needed to implement the sharp/no-radius refactor described in
-`todos/2026-01-27-1pm_sharp-ui-implementation-plan.md`. It is intentionally
+`todos/2026-01-28-1pm_sharp-ui-implementation-plan.md`. It is intentionally
 context-rich so implementation can proceed without re-auditing the codebase.
 
 This is NOT a new plan. It is a scoped, actionable mapping of the plan to the
@@ -13,39 +13,41 @@ existing code and UI primitives, with a UX-first simplification lens.
 These choices affect multiple files and should be decided once, centrally:
 
 1. Typography strategy
-- Option A: Keep Sora as the primary UI font, keep mono for code only.
-- Option B: Use a mono-forward UI (e.g., IBM Plex Mono) for the app shell
-  while retaining a sans for headings. This better matches the TUI-adjacent
-  direction but increases visual density and may feel less friendly.
-- Decision impacts: `index.html` font imports, `src/index.css` base font-family.
-  - Caveat: a system UI + mono-forward shell improves scanability, but if Sora is a\n+    brand anchor we should keep it and achieve sharpness via surfaces instead.
+   - Option A: Keep Sora as the primary UI font, keep mono for code only.
+   - Option B: Use a mono-forward UI (e.g., IBM Plex Mono) for the app shell
+     while retaining a sans for headings. This better matches the TUI-adjacent
+     direction but increases visual density and may feel less friendly.
+   - Decision impacts: `index.html` font imports, `src/index.css` base font-family.
+     - Caveat: a system UI + mono-forward shell improves scanability, but if Sora is a
+       brand anchor we should keep it and achieve sharpness via surfaces instead.
 
-1. Chip vs Tag naming
-- Option A: Keep the name `.chip` but redefine it to a sharp label.
-- Option B: Rename `.chip` to `.tag` and migrate all usage.
-- Decision impacts: `src/index.css`, every component using chip classes.
-  - Caveat: renaming is churn; redefining `.chip` is cheaper and can be revisited later.
+2. Chip vs Tag naming
+   - Option A: Keep the name `.chip` but redefine it to a sharp label.
+   - Option B: Rename `.chip` to `.tag` and migrate all usage.
+   - Decision impacts: `src/index.css`, every component using chip classes.
+     - Caveat: renaming is churn; redefining `.chip` is cheaper and can be revisited later.
 
-1. Tag variants (keep minimal)
-- Recommend: only 2-3 variants total. Example:
-  - Base: `.tag` (bordered, sharp, neutral)
-  - Muted: `.tag-muted` (subtle background for secondary info)
-  - Solid: `.tag-solid` (for CTA or emphasis)
-- Retire: `.chip-soft`, `.chip-white`, `.chip-shadow` (too many variants).
+3. Tag variants (keep minimal)
+   - Recommend: only 2-3 variants total. Example:
+     - Base: `.tag` (bordered, sharp, neutral)
+     - Muted: `.tag-muted` (subtle background for secondary info)
+     - Solid: `.tag-solid` (for CTA or emphasis)
+   - Retire: `.chip-soft`, `.chip-white`, `.chip-shadow` (too many variants).
 
-1. Toggle affordance
-- Replace rounded pill switches with square toggles or checkbox-style control.
-- Decision impacts: `Toggle.tsx`, compact toggles in `SessionOverview.tsx`.
+4. Toggle affordance
+   - Replace rounded pill switches with square toggles or checkbox-style control.
+   - Decision impacts: `Toggle.tsx`, compact toggles in `SessionOverview.tsx`.
 
-1. Hierarchy approach
-- Borders + typographic weight only. No shadows, blur, or glass.
-- Focus state: border emphasis (avoid glow/ring if possible).
-  - Must not regress: keyboard focus needs to be obvious (sharp outline or border bump).
+5. Hierarchy approach
+   - Borders + typographic weight only. No shadows, blur, or glass.
+   - Focus state: border emphasis (avoid glow/ring if possible).
+     - Must not regress: keyboard focus needs to be obvious (sharp outline or border bump).
 
-1. Primitives strategy
-- Option A: start with CSS utilities + CVA recipes to reduce class drift.
-- Option B: introduce `<Panel/>`, `<Tag/>`, `<Button/>`, `<Input/>` wrappers immediately.
-- Caveat: wrappers are higher churn. Prefer recipes first; promote to components only if\n+  class drift persists after refactor.
+6. Primitives strategy
+   - Option A: start with CSS utilities + CVA recipes to reduce class drift.
+   - Option B: introduce `<Panel/>`, `<Tag/>`, `<Button/>`, `<Input/>` wrappers immediately.
+   - Caveat: wrappers are higher churn. Prefer recipes first; promote to components only if
+     class drift persists after refactor.
 
 ## Design-System Inventory: Pills/Chips (Current)
 Current system is fragmented and should be consolidated.
@@ -100,7 +102,8 @@ These replace repeated Tailwind class strings across components.
 These are required to keep “sharp” from becoming “harsh,” and to preserve usability.
 
 Focus visibility (must not regress)
-- Use a strong, sharp focus indicator (e.g., `outline: 2px solid var(--accent)` or\n+  border swap to accent + 1px thickness bump).
+- Use a strong, sharp focus indicator (e.g., `outline: 2px solid var(--accent)` or
+  border swap to accent + 1px thickness bump).
 - Avoid glow-only focus states; focus must be visible on light backgrounds.
 
 Row/list interaction states
@@ -110,10 +113,12 @@ Row/list interaction states
 - Clickable affordance: cursor + hover + state; avoid shadow-only affordance.
 
 Modal overlay exception
-- Allow one controlled overlay token (e.g., `--overlay: rgba(0,0,0,0.6)`), used only\n+  for modal backdrops. Modals remain opaque and bordered.
+- Allow one controlled overlay token (e.g., `--overlay: rgba(0,0,0,0.6)`), used only
+  for modal backdrops. Modals remain opaque and bordered.
 
 Density contract (minimum viable guidance)
-- Define standard paddings (e.g., `--panel-pad: 12px`, `--row-pad-x: 10px`, `--row-pad-y: 6px`).\n+- Favor rows for list content; reserve cards for multi-paragraph/narrative content.
+- Define standard paddings (e.g., `--panel-pad: 12px`, `--row-pad-x: 10px`, `--row-pad-y: 6px`).
+- Favor rows for list content; reserve cards for multi-paragraph/narrative content.
 - Use tabular numerals (`tabular-nums`) in numeric-heavy areas.
 
 ## High-Impact Files to Update

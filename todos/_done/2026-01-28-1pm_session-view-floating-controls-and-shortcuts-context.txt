@@ -1,0 +1,25 @@
+Title: Session view floating controls + shortcuts + search UX cleanup — Context
+
+Summary
+- Implemented a single sticky session controls bar that docks below the header with a consistent top gap.
+- Updated shortcut UX to be focus-gated with clickable keycap hints and a clear “Shortcuts” scope indicator.
+- Cleaned up search UX: reliable clear behavior, Lucide X/spyglass icons, and sidebar search reset on session open.
+
+What shipped
+- Single sticky toggle bar in the main session column (no duplicate control surfaces).
+- Toggle defaults set to all-off in useSessionOverview.
+- Focus-gated keyboard shortcuts:
+  - Cmd/Ctrl+↑ and Cmd/Ctrl+↓ for first/last turn.
+  - Cmd/Ctrl+K opens the go-to turn modal.
+  - ArrowLeft/ArrowRight for prev/next turn (handled in useTurnNavigation).
+- Sticky bar shortcuts row includes clickable keycaps and a “Shortcuts” scope pill with active/inactive dot.
+- Match navigation moved into the sticky bar, on its own row when q is active; includes active query pill with search icon.
+- Search clear behavior unified via useSearch.clearSearch; session q clear updates URL without reload.
+- Search input uses Lucide X clear button; native search cancel UI hidden via CSS.
+- Sidebar search clears when opening a session from search results.
+- Session header subtitle row left-aligned; spacer dots removed for consistency.
+- /stickytest route retained as a dev/QA sticky behavior sandbox with keyboard navigation.
+
+Notes
+- Match navigation is only shown when a session search query exists.
+- /stickytest is intentionally kept for sticky UX validation.
