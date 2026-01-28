@@ -11,10 +11,17 @@ Implemented (plan steps 1–9 complete; checks run after each):
 - Server-Timing headers + requestId echo for /api/search and /api/session-matches.
 - Shared API types added in shared/apiTypes.ts and wired through client + server (tsconfig includes updated).
 
+Post-review follow-ups:
+- Added deterministic tie-breaker (sessions.id ASC) to all /api/search orderings to avoid tie jitter.
+- Server now imports SearchGroupSort/SearchResultSort directly from shared/apiTypes.ts; removed type re-exports from server/search/queries.ts.
+
 Not implemented yet (plan steps 10–11 remainder):
 - Tests (explicitly deferred).
 
+Step 11 status:
+- Completed. apiPlugin routes now delegate through server/routes/index.ts, and README/AGENTS updated to describe the new module layout.
+
 Docs to understand the original plan + current status:
-- Original plan: todos/2026-01-27-12pm_search-api-refactor-plan.txt
-- Related context: todos/_done/2026-01-27-2pm_search-sorting-controls-context.txt
+- Original plan: todos/_done/2026-01-27-12pm_search-api-refactor-plan.txt
+- Related context: todos/_done/2026-01-27-12pm_search-sorting-controls-context.txt
 - Current status: task_plan.md, progress.md, findings.md

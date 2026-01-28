@@ -5,6 +5,9 @@ This file provides guidance for contributors working on this repository.
 ## Project Overview
 Codex Conversation Manager (codex-formatter) is a local web app for parsing, visualizing, and searching Codex JSONL sessions. It reads local session logs, groups conversations by user turn, renders messages with markdown, and surfaces tools/actions inline.
 
+## Implementation Guide
+See `IMPLEMENTATION_GUIDE.md` for the canonical, up-to-date architecture and invariants.
+
 ## Current Stack
 - React 19 + TypeScript (strict)
 - Vite 7 (dev server + API middleware)
@@ -69,7 +72,7 @@ Fix commands when needed:
 - `server/logging.ts` - debug/search logging toggles.
 - `vite.config.ts` - Vite config wiring.
 - `shared/apiTypes.ts` - shared API response/types for client + server.
-- `IMPLEMENTATION_PLAN.txt` / `DESIGN_APPENDIX.txt` - historical spec + schema notes.
+- `IMPLEMENTATION_GUIDE.md` - canonical architecture + invariants (replaces legacy plan/appendix docs).
 
 ## Architecture at a Glance
 - **Frontend**: `ConversationViewer` composes the page (home vs. session). `ConversationMain` renders the active session view.

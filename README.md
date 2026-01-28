@@ -6,6 +6,9 @@
 
 A local web app for parsing, visualizing, and searching Codex JSONL sessions. It reads local session logs, groups conversations by user turn, renders messages with markdown, and surfaces tools/actions inline.
 
+## Implementation Guide
+For a comprehensive, up-to-date overview of the current architecture and invariants, see `IMPLEMENTATION_GUIDE.md`.
+
 ## Features
 - Browse Codex sessions stored on disk and keep sessions separate.
 - View conversations grouped by user turn with inline tools/actions.

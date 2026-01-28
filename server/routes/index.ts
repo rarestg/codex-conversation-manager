@@ -25,7 +25,15 @@ const routes: Record<string, ApiHandler> = {
         error: 'CODEX_SESSIONS_ROOT is set; config updates are disabled until it is unset.',
       });
     }
-    const body = await readJsonBody(req);
+    let body: unknown;
+    try {
+      body = await readJsonBody(req);
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        return sendJson(res, 400, { error: 'Invalid JSON body.' });
+      }
+      throw error;
+    }
     const sessionsRoot = typeof body === 'object' && body ? (body as Record<string, unknown>).sessionsRoot : undefined;
     if (!sessionsRoot || typeof sessionsRoot !== 'string') {
       return sendJson(res, 400, { error: 'sessionsRoot is required.' });
@@ -228,7 +236,9 @@ const routes: Record<string, ApiHandler> = {
   },
   'GET /api/search': async (_req, res, url) => {
     const q = url.searchParams.get('q');
-    const limit = Number(url.searchParams.get('limit') || '20');
+    const rawLimit = url.searchParams.get('limit');
+    const limitParam = rawLimit ? Number(rawLimit) : 20;
+    const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 200) : 20;
     const workspace = url.searchParams.get('workspace')?.trim() || null;
     const requestId = url.searchParams.get('requestId')?.trim() || null;
     const resultSortParam = url.searchParams.get('resultSort')?.trim();
@@ -240,7 +250,7 @@ const routes: Record<string, ApiHandler> = {
     const database = getDb();
     const { response, timings } = searchSessions(database, {
       query: q,
-      limit: Number.isFinite(limit) ? limit : 20,
+      limit,
       workspace,
       requestId,
       resultSort,

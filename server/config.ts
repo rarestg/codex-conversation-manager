@@ -39,11 +39,11 @@ const writeConfigFile = async (config: ConfigFile) => {
 };
 
 export const resolveSessionsRoot = async (): Promise<SessionsRootInfo> => {
-  if (cachedRoot) return cachedRoot;
   if (process.env.CODEX_SESSIONS_ROOT) {
     cachedRoot = { value: process.env.CODEX_SESSIONS_ROOT, source: 'env' };
     return cachedRoot;
   }
+  if (cachedRoot) return cachedRoot;
   const config = await readConfigFile();
   if (config.sessionsRoot) {
     cachedRoot = { value: config.sessionsRoot, source: 'config' };

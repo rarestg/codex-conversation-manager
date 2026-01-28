@@ -13,6 +13,7 @@ How to extend this index
    - Outcome: 2-4 bullets on what changed or was implemented
    - Notes: optional cautions, follow-ups, or deviations from the plan
 2) Ensure plan filenames include the time (e.g., 2026-01-27-12pm_...) based on the current date/time (`date` in shell) when the plan is written.
+   - If a plan file doesn’t already follow the timestamped naming convention, rename it using the file’s creation or last-modified metadata (localized to NYC time) and update references.
 3) Keep summaries short; link to the plan + context for full detail.
 4) If a plan was only partially implemented, state that explicitly.
 5) Add new entries in reverse-chronological order by plan timestamp (newest first) so `head` shows the latest work.
@@ -32,7 +33,7 @@ Entries
   - Latin short tokens like “AI”/“Go” are intentionally blocked unless paired with a longer token.
 
 - Plan: 2026-01-27-12pm_search-sorting-controls-plan.txt
-  Context: 2026-01-27-2pm_search-sorting-controls-context.txt
+  Context: 2026-01-27-12pm_search-sorting-controls-context.txt
   Why: Make result/workspace ordering explicit so users can choose relevance vs match count vs recency without confusion.
   Outcome:
   - Added resultSort/groupSort params end-to-end (types, UI controls, and server ordering).
@@ -40,6 +41,17 @@ Entries
   - Search loading now uses a results-area skeleton; group last_seen fallback uses the latest session timestamp.
   Notes:
   - Defaults preserved; server applies relevance + last_seen when params are absent.
+
+- Plan: 2026-01-27-12pm_search-api-refactor-plan.txt
+  Context: 2026-01-27-12pm_search-api-refactor-plan-context.txt
+  Why: Split the monolithic search API into focused modules and improve search performance without changing UI contracts.
+  Outcome:
+  - Introduced a router + shared HTTP helpers; apiPlugin now delegates to route handlers.
+  - Extracted config, DB/logging, indexing/session tree, search normalization/queries, and workspace helpers into dedicated modules.
+  - Applied workspace filtering in the matches CTE and limited workspace summaries to result workspaces (Option A).
+  - Added Server-Timing headers and requestId echoing for /api/search and /api/session-matches; shared API types now live in shared/apiTypes.ts.
+  Notes:
+  - Tests were deferred per the plan (steps 10–11 not implemented).
 
 - Plan: 2026-01-27-2am_search-result-dedupe-and-metadata-plan.txt
   Context: 2026-01-27-12am_search-roadmap-context.txt

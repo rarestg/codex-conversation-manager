@@ -9,7 +9,7 @@ import type {
   WorkspaceSearchGroup,
 } from '../../shared/apiTypes';
 import { logDebug, logSearchDebug } from '../logging';
-import type { WorkspaceSummary } from '../workspaces';
+import { extractGithubSlug, type WorkspaceSummary } from '../workspaces';
 import { normalizeFtsQuery } from './normalize';
 
 type SearchResultRow = SessionSearchResult;
@@ -198,7 +198,7 @@ export const searchSessions = (database: Database.Database, options: SearchSessi
             git_branch: result.git_branch ?? null,
             git_repo: result.git_repo ?? null,
             git_commit_hash: result.git_commit_hash ?? null,
-            github_slug: null,
+            github_slug: extractGithubSlug(result.git_repo ?? undefined),
           };
       const group = groupsMap.get(workspaceKey) ?? {
         workspace: workspaceSummary,

@@ -117,6 +117,7 @@ const ensureDb = () => {
     fs.mkdirSync(CONFIG_DIR, { recursive: true });
   }
   db = new Database(DB_PATH);
+  db.pragma('foreign_keys = ON');
   db.pragma('journal_mode = WAL');
   db.pragma('synchronous = NORMAL');
   db.pragma('trusted_schema = ON'); // Allow schema-defined triggers/virtual tables in our local DB; we control the schema and accept the trade-off.
