@@ -1,5 +1,5 @@
 import { Home, Settings } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { CanvasView } from './CanvasView';
 import { ConversationMain } from './ConversationMain';
 import { SearchPanel } from './components/SearchPanel';
@@ -94,6 +94,11 @@ export default function ConversationViewer() {
     groupSort,
     sessionsTreeRoot: sessionsTree?.root ?? null,
   });
+
+  useEffect(() => {
+    if (!activeSession || !activeWorkspace) return;
+    setActiveWorkspace(null);
+  }, [activeSession, activeWorkspace]);
 
   const handleClearIndex = useCallback(async () => {
     const confirmed = window.confirm('This will clear the index and rebuild it from scratch. Continue?');
@@ -218,6 +223,9 @@ export default function ConversationViewer() {
               onClearSearch={clearSearch}
               onSearchKeyDown={handleSearchKeyDown}
               onSearchPasteUuid={handleSearchPasteUuid}
+              activeWorkspace={activeWorkspace}
+              onClearWorkspace={handleClearWorkspace}
+              showWorkspaceFilter
               searchGroups={searchGroups}
               searchStatus={searchStatus}
               searchError={searchError}
@@ -247,6 +255,7 @@ export default function ConversationViewer() {
                 activeSession={activeSession}
                 activeWorkspace={activeWorkspace}
                 onClearWorkspace={handleClearWorkspace}
+                showWorkspaceFilter
               />
             </div>
           </div>
