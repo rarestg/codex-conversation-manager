@@ -1,0 +1,78 @@
+MessageCard Renderer Options (Light Refactor Plan)
+
+Context
+The current MessageCard is compact and works, but it mixes per-type concerns (labels, tone, copy actions, body rendering) in one branching component. There is no longer a token_count narrowing bug, so a refactor should be optional and low-risk. This plan proposes two low-churn options to improve clarity without destabilizing UI.
+
+Goals
+- Reduce branching complexity while preserving identical rendering, copy behavior, and truncation.
+- Avoid a large multi-file rewrite unless the UI needs type-specific divergence.
+- Keep MessageCard’s public API unchanged for TurnCard usage.
+
+Option A: Small dispatcher + two renderers (preferred if future per-type divergence is likely)
+Summary
+- Split MessageCard into a tiny dispatcher and 2 renderer components:
+  - MarkdownMessageCard (user/assistant/thought)
+  - StructuredMessageCard (tool_call/tool_output/meta)
+- Keep TokenCountCard as-is and route token_count directly.
+
+Plan
+1) Create two renderer components:
+   - MarkdownMessageCard.tsx
+     - Label + tone mapping for user/assistant/thought
+     - Copy text + Copy MD (uses markdownToPlainText)
+     - MarkdownBlock for body
+   - StructuredMessageCard.tsx
+     - Label + tone mapping for tool_call/tool_output/meta
+     - Copy (raw content only)
+     - Preformatted body
+2) Update MessageCard to dispatch:
+   - token_count -> TokenCountCard
+   - user/assistant/thought -> MarkdownMessageCard
+   - tool_call/tool_output/meta -> StructuredMessageCard
+3) Ensure all previous classes/tones/copy labels remain identical.
+4) Run typecheck + visual parity check on a session with all item types.
+
+Pros
+- Minimal file growth (2 files instead of 6).
+- Clear boundary between markdown vs structured content.
+- Easy to expand later if one type diverges.
+
+Cons
+- Still introduces new files for modest gain.
+
+Option B: Keep single file, extract helper functions (preferred if we want zero file churn)
+Summary
+- Keep MessageCard as a single component but extract helper functions for:
+  - label/tone lookup
+  - copy config
+  - body renderer choice
+
+Plan
+1) Add small pure helpers within MessageCard.tsx:
+   - getRoleLabel(type)
+   - getTone(type)
+   - isMarkdownType(type)
+   - getCopyConfig(type)
+2) Replace inline branching with helper calls.
+3) Keep layout and classnames unchanged.
+
+Pros
+- No new files or import churn.
+- Low risk; fastest to review.
+
+Cons
+- Still a single component; less modular if future divergence grows.
+
+Non-goals
+- No changes to parsing, filtering, or indexing.
+- No UI design changes; visual parity is required.
+
+Verification
+- Manual visual check for all item types.
+- Copy actions produce identical output (text vs MD vs raw).
+- Truncation behavior unchanged with Full Content toggle.
+- `npm run typecheck` passes.
+
+Recommendation
+- If the sharp UI refactor is imminent: choose Option B to avoid churn.
+- If we expect more per-type UI divergence soon: choose Option A.
