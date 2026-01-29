@@ -22,6 +22,16 @@ How to extend this index
 Entries
 =======
 
+- Plan: 2026-01-28-7pm_workspace-filter-ui-polish.txt
+  Context: 2026-01-28-7pm_workspace-filter-ui-polish-context.txt
+  Why: Workspace filtering was not communicated consistently across panels and workspace cards had dead zones around the GitHub link.
+  Outcome:
+  - Standardized workspace filter pills in Search/Sessions (and hid them in the sidebar for space) while clearing workspace state on session open.
+  - Adjusted Sessions header spacing so Refresh no longer visually aligns with wrapping filter pills.
+  - Rebuilt workspace cards so the row remains fully clickable with the GitHub link as a separate target; added folder icons for non-GitHub workspaces.
+  Notes:
+  - Search header now uses a grid-based layout with an explicit wrap breakpoint to preserve gap rhythm.
+
 - Plan: 2026-01-28-1pm_session-view-floating-controls-and-shortcuts.txt
   Context: 2026-01-28-1pm_session-view-floating-controls-and-shortcuts-context.txt
   Why: Session controls, shortcuts, and search clearing were easy to lose in long sessions and needed clearer, sticky access.

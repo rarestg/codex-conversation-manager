@@ -1,4 +1,4 @@
-import { ArrowDownWideNarrow } from 'lucide-react';
+import { ArrowDownWideNarrow, Folder } from 'lucide-react';
 import { memo } from 'react';
 import { formatDate, formatTime, formatWorkspacePath } from '../format';
 import { useRenderDebug } from '../hooks/useRenderDebug';
@@ -100,56 +100,65 @@ const WorkspacesPanelComponent = ({
                 const displayCwd = formatWorkspacePath(workspace.cwd);
                 const githubUrl = workspace.github_slug ? `https://github.com/${workspace.github_slug}` : null;
                 return (
-                  <button
+                  <div
                     key={workspace.cwd}
-                    type="button"
-                    aria-pressed={isActive}
-                    onClick={() => onSelectWorkspace(workspace.cwd)}
-                    className={`w-full cursor-pointer rounded-2xl border text-left text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-200 ${
+                    className={`relative w-full rounded-2xl border text-left text-sm transition focus-within:ring-2 focus-within:ring-teal-200 ${
                       isActive
                         ? 'border-teal-300 bg-teal-50 text-teal-800'
                         : 'border-slate-100 bg-white text-slate-700 hover:border-teal-200 hover:bg-white'
                     }`}
                   >
-                    <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0 sm:flex-1">
-                        <div className="flex items-center gap-2 text-sm font-semibold">
-                          {githubUrl && (
-                            <a
-                              href={githubUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              onClick={(event) => event.stopPropagation()}
-                              aria-label={`Open ${workspace.github_slug} on GitHub`}
-                              title="Open on GitHub"
-                              className="rounded-full bg-slate-200 p-1 text-slate-600 transition hover:bg-slate-300"
-                            >
-                              <GitHubIcon className="h-3.5 w-3.5" />
-                            </a>
-                          )}
-                          <span className="truncate">{getWorkspaceTitle(workspace)}</span>
-                        </div>
-                        <div className="mt-1 truncate text-xs text-slate-500" title={workspace.cwd}>
-                          {displayCwd}
-                        </div>
-                        {workspace.git_branch && (
-                          <div className="mt-1 text-[11px] text-slate-500">Branch: {workspace.git_branch}</div>
-                        )}
-                      </div>
-                      <div className="shrink-0 text-right text-xs text-slate-500">
-                        <div>{workspace.session_count} sessions</div>
-                        {workspace.last_seen && (
-                          <>
-                            <div>{formatDate(workspace.last_seen)}</div>
-                            <div>{formatTime(workspace.last_seen)}</div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    {workspace.git_repo && !githubUrl && (
-                      <div className="px-4 pb-3 text-[11px] text-slate-500">{workspace.git_repo}</div>
+                    {githubUrl && (
+                      <a
+                        href={githubUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label={`Open ${workspace.github_slug} on GitHub`}
+                        title="Open on GitHub"
+                        className="absolute left-4 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-slate-600 transition hover:bg-slate-300"
+                      >
+                        <GitHubIcon className="h-3.5 w-3.5" />
+                      </a>
                     )}
-                  </button>
+                    {!githubUrl && (
+                      <span className="absolute left-4 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                        <Folder className="h-3.5 w-3.5" aria-hidden="true" />
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      aria-pressed={isActive}
+                      onClick={() => onSelectWorkspace(workspace.cwd)}
+                      className="w-full cursor-pointer px-4 py-3 text-left focus-visible:outline-none"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 sm:flex-1">
+                          <div className="flex items-center gap-2 text-sm font-semibold">
+                            <span aria-hidden="true" className="h-6 w-6 shrink-0" />
+                            <span className="truncate">{getWorkspaceTitle(workspace)}</span>
+                          </div>
+                          <div className="mt-1 truncate text-xs text-slate-500" title={workspace.cwd}>
+                            {displayCwd}
+                          </div>
+                          {workspace.git_branch && (
+                            <div className="mt-1 text-[11px] text-slate-500">Branch: {workspace.git_branch}</div>
+                          )}
+                          {workspace.git_repo && !githubUrl && (
+                            <div className="mt-2 text-[11px] text-slate-500">{workspace.git_repo}</div>
+                          )}
+                        </div>
+                        <div className="shrink-0 text-right text-xs text-slate-500">
+                          <div>{workspace.session_count} sessions</div>
+                          {workspace.last_seen && (
+                            <>
+                              <div>{formatDate(workspace.last_seen)}</div>
+                              <div>{formatTime(workspace.last_seen)}</div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  </div>
                 );
               })
             ) : (

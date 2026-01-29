@@ -1,0 +1,19 @@
+Title: Workspace filter clarity + sessions/search header alignment (Completion)
+
+Summary
+- Applied consistent workspace filter messaging across Search/Sessions (with sidebar hiding to reduce clutter) and kept filters as a global state.
+- Reworked Sessions header spacing/alignment so Refresh no longer visually aligns with filter pills on wrap.
+- Fixed workspace card clickability while keeping GitHub link separate and valid HTML.
+- Tightened Search header layout for responsive wrap spacing using a grid-based header row.
+
+What Changed
+- SearchPanel and SessionsPanel show consistent workspace filter pills; sidebar versions hide the filter UI for space.
+- Workspace selection clears when entering a session to avoid cramped sidebar state.
+- Sessions header layout adjusted to keep refresh alignment and spacing consistent when pills wrap.
+- Workspace cards restructured so the whole card is clickable while keeping the GitHub link as a distinct target.
+- Added non-GitHub folder icons where appropriate for visual consistency.
+- Search header now uses grid layout + explicit wrap breakpoint to preserve gap rhythm on narrow widths.
+
+Notes
+- Filter copy is “Workspace filter on/off” rather than “Filtered by workspace,” but the UI now communicates global filter state consistently.
+- Link behavior improvements (session list/search results as real links) landed alongside this work for native browser navigation.
