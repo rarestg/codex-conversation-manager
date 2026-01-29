@@ -1,4 +1,4 @@
-import { Keyboard } from 'lucide-react';
+import { ArrowDownWideNarrow, Keyboard } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { TurnJumpModal } from './components/TurnJumpModal';
 
@@ -65,11 +65,87 @@ export const StickyTest = () => {
       <div className="flex flex-col gap-6 lg:flex-row-reverse">
         <aside className="w-full max-w-none space-y-5 lg:w-[340px]">
           <section className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur">
-            <h2 className="text-lg text-slate-900">Search panel (mock)</h2>
-            <p className="mt-1 text-xs text-slate-500">Mimics sidebar search size.</p>
-            <div className="mt-4 space-y-2">
-              <div className="h-9 rounded-2xl border border-slate-200 bg-white" />
-              <div className="h-24 rounded-2xl border border-slate-100 bg-slate-50/80" />
+            <div className="flex flex-col gap-3">
+              <div>
+                <h2 className="text-lg text-slate-900">Search panel (mock)</h2>
+                <p className="text-xs text-slate-500">Mimics sidebar search size.</p>
+              </div>
+              <div className="flex flex-col gap-3">
+                <div className="h-9 rounded-2xl border border-slate-200 bg-white" />
+                <div className="flex flex-col gap-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                    Sort disclosure variants
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-2">
+                      <span className="text-xs font-medium text-slate-500">Variant A: current</span>
+                      {/* Winner: best weight/scanability for a disclosure control; matches current SearchPanel. */}
+                      <details open className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                        <summary className="flex items-center justify-between px-3 py-2">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500">
+                              <ArrowDownWideNarrow className="h-3 w-3" />
+                              Sort
+                            </div>
+                            <div className="truncate text-xs text-slate-700">Relevance · Last active</div>
+                          </div>
+                          <span className="ml-3 text-slate-400">▾</span>
+                        </summary>
+                        <div className="grid gap-3 p-3">
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="text-[11px] font-semibold text-slate-500">Results</span>
+                            <select className="w-full rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 shadow-sm">
+                              <option>Relevance</option>
+                              <option>Most matches</option>
+                              <option>Most recent</option>
+                            </select>
+                          </div>
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="text-[11px] font-semibold text-slate-500">Workspaces</span>
+                            <select className="w-full rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 shadow-sm">
+                              <option>Last active</option>
+                              <option>Most matches</option>
+                            </select>
+                          </div>
+                        </div>
+                      </details>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <span className="text-xs font-medium text-slate-500">Variant B: slim summary row</span>
+                      {/* Loses weight and feels less like a control; useful for tight layouts but not preferred. */}
+                      <details open className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                        <summary className="flex items-center justify-between px-3 py-1">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500">
+                              <ArrowDownWideNarrow className="h-3 w-3" />
+                              Sort
+                            </div>
+                            <div className="truncate text-xs text-slate-700">Relevance · Last active</div>
+                          </div>
+                          <span className="ml-3 text-slate-400">▾</span>
+                        </summary>
+                        <div className="grid gap-3 p-3">
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="text-[11px] font-semibold text-slate-500">Results</span>
+                            <select className="w-full rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 shadow-sm">
+                              <option>Relevance</option>
+                              <option>Most matches</option>
+                              <option>Most recent</option>
+                            </select>
+                          </div>
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="text-[11px] font-semibold text-slate-500">Workspaces</span>
+                            <select className="w-full rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 shadow-sm">
+                              <option>Last active</option>
+                              <option>Most matches</option>
+                            </select>
+                          </div>
+                        </div>
+                      </details>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
           <section className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur">

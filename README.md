@@ -22,6 +22,11 @@ For a comprehensive, up-to-date overview of the current architecture and invaria
 - Workspace summary panel for filtering sessions by working directory.
 - URL deep links to sessions and turns (`?session=...&turn=...`).
 
+## Quirks
+- Workspace branch labels come from the latest indexed session metadata for that workspace, not live Git state.
+- If you switch branches without generating new sessions (or reindexing files that changed), the displayed branch can drift until a new session is indexed or you reindex.
+- GitHub icons are clickable; their URLs are derived from `git_repo` session metadata by extracting the `owner/repo` slug (see `extractGithubSlug` in `server/workspaces.ts`).
+
 ## Getting Started
 ```bash
 npm install

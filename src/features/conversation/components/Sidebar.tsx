@@ -115,6 +115,9 @@ const SidebarComponent = ({
         onClearSearch={onClearSearch}
         onSearchKeyDown={onSearchKeyDown}
         onSearchPasteUuid={onSearchPasteUuid}
+        activeWorkspace={activeWorkspace}
+        onClearWorkspace={onClearWorkspace}
+        showWorkspaceFilter={false}
         searchGroups={searchGroups}
         searchStatus={searchStatus}
         searchError={searchError}
@@ -134,6 +137,7 @@ const SidebarComponent = ({
         activeSession={activeSession}
         activeWorkspace={activeWorkspace}
         onClearWorkspace={onClearWorkspace}
+        showWorkspaceFilter={false}
       />
     </aside>
   );

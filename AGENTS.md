@@ -198,6 +198,16 @@ Fix commands when needed:
 ## Communication Guardrails
 - If user-provided content appears redacted or summarized (e.g. `[Pasted Content ...]`), call it out immediately and ask for the full content.
 
+## Patch Discipline
+- `apply_patch` matches text context, not line numbers. Always target the exact selector/block and keep the context tight.
+- Before editing CSS, locate the selector with `rg` and confirm a short surrounding snippet.
+- After `apply_patch`, re-open the edited block and scan `git diff` to confirm only the intended selectors changed.
+
+## Workflow Notes (Formatting & Syntax)
+- After edits, check syntax quickly with `npm run check` or `npm run typecheck` before reviewing UI/behavior.
+- If formatting is off, run `npm run format:write` instead of hand-adjusting whitespace.
+- Do a final review only after syntax is clean and formatting is applied.
+
 ## Agent-Browser (UI Automation)
 - Before using, confirm availability: run `agent-browser --help`.
 - Use it for quick UI sanity checks while implementing:
