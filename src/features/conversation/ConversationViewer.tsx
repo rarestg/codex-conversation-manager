@@ -236,8 +236,9 @@ export default function ConversationViewer() {
               onGroupSortChange={setGroupSort}
               onLoadSession={loadSession}
             />
-            <div className="grid gap-6 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <WorkspacesPanel
+                className="min-w-0"
                 workspaces={workspaces}
                 loading={workspacesLoading}
                 sort={workspacesSort}
@@ -247,6 +248,7 @@ export default function ConversationViewer() {
                 onClearWorkspace={handleClearWorkspace}
               />
               <SessionsPanel
+                className="min-w-0"
                 sessionsTree={sessionsTree}
                 sessionsRoot={sessionsRoot}
                 loading={loadingSessions}

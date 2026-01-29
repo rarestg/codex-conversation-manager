@@ -1,4 +1,4 @@
-import { ArrowDownWideNarrow, CalendarClock, GitBranch, Hourglass, Repeat2, Search, X } from 'lucide-react';
+import { ArrowDownWideNarrow, CalendarClock, Folder, GitBranch, Hourglass, Repeat2, Search, X } from 'lucide-react';
 import { type ClipboardEvent, type KeyboardEvent, useEffect, useRef } from 'react';
 import { logSearch } from '../debug';
 import { formatDate, formatDuration, formatDurationMs, formatTime, formatWorkspacePath } from '../format';
@@ -10,7 +10,9 @@ import type {
   SearchStatus,
   WorkspaceSearchGroup,
 } from '../types';
+import { buildSessionUrl } from '../url';
 import { GitHubIcon } from './GitHubIcon';
+import { SessionLink } from './SessionLink';
 
 interface SearchPanelProps {
   searchQuery: string;
@@ -84,6 +86,8 @@ export const SearchPanel = ({
     Boolean(searchQuery) && !showTooShortState && searchStatus === 'success' && searchGroups.length === 0;
   const showErrorState = searchStatus === 'error';
   const isWorkspaceFilterActive = Boolean(activeWorkspace);
+  const trimmedQuery = searchQuery.trim();
+  const searchQueryParam = trimmedQuery || null;
   const handleClearSearch = () => {
     if (onClearSearch) {
       onClearSearch();
@@ -167,12 +171,12 @@ export const SearchPanel = ({
       <div className="search-panel rounded-3xl border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur">
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-start justify-between">
-              <div>
+            <div className="grid gap-3 min-[900px]:grid-cols-[minmax(0,1fr)_auto] min-[900px]:items-start">
+              <div className="min-w-0">
                 <h2 className="text-lg text-slate-900">Search sessions</h2>
                 <p className="text-xs text-slate-500">Full-text search across user and assistant messages.</p>
               </div>
-              <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="flex flex-wrap items-center justify-start gap-2 min-[900px]:justify-end">
                 <div className="search-sort-desktop search-sort-controls">
                   <span className="search-sort-label">
                     <ArrowDownWideNarrow className="h-3 w-3" />
@@ -338,7 +342,7 @@ export const SearchPanel = ({
                 <div key={group.workspace.cwd} className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
                   <div className="search-group-header">
                     <div className="flex min-w-0 items-start gap-3 sm:flex-1">
-                      {group.workspace.github_slug && (
+                      {group.workspace.github_slug ? (
                         <a
                           href={`https://github.com/${group.workspace.github_slug}`}
                           target="_blank"
@@ -349,6 +353,10 @@ export const SearchPanel = ({
                         >
                           <GitHubIcon className="h-3.5 w-3.5" />
                         </a>
+                      ) : (
+                        <span className="search-github-icon-link mt-0.5 rounded-full bg-slate-100 p-1 text-slate-400">
+                          <Folder className="h-3.5 w-3.5" aria-hidden="true" />
+                        </span>
                       )}
                       <div className="min-w-0">
                         <div className="truncate text-sm font-semibold text-slate-800">
@@ -382,19 +390,23 @@ export const SearchPanel = ({
                         formatDuration(result.started_at, result.ended_at);
                       const durationDisplay = durationLabel || (timeSource ? '-' : '');
                       const turnCountValue = result.turn_count ?? null;
+                      const sessionHref = buildSessionUrl(
+                        result.session_path,
+                        result.first_match_turn_id ?? undefined,
+                        searchQueryParam,
+                      );
 
                       return (
-                        <button
-                          type="button"
+                        <SessionLink
                           key={result.session_path}
-                          onClick={() => {
-                            const trimmedQuery = searchQuery.trim();
+                          href={sessionHref}
+                          onNavigate={() => {
                             handleClearSearch();
                             onLoadSession(result.session_path, result.first_match_turn_id ?? undefined, {
-                              searchQuery: trimmedQuery || null,
+                              searchQuery: searchQueryParam,
                             });
                           }}
-                          className="w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left text-sm text-slate-700 transition hover:border-teal-200 hover:bg-white"
+                          className="block w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left text-sm text-slate-700 transition hover:border-teal-200 hover:bg-white"
                         >
                           <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
                             <span className="min-w-0 flex-1 truncate" title={result.session_id || result.session_path}>
@@ -445,7 +457,7 @@ export const SearchPanel = ({
                               {renderSnippet(result.snippet)}
                             </div>
                           </div>
-                        </button>
+                        </SessionLink>
                       );
                     })}
                   </div>

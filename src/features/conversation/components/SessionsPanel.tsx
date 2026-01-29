@@ -17,7 +17,9 @@ import {
 import { useRenderDebug } from '../hooks/useRenderDebug';
 import { useWhyDidYouRender } from '../hooks/useWhyDidYouRender';
 import type { LoadSessionOptions, SessionFileEntry, SessionTree } from '../types';
+import { buildSessionUrl } from '../url';
 import { CopyButton } from './CopyButton';
+import { SessionLink } from './SessionLink';
 
 const SESSIONS_SKELETON_KEYS = ['a', 'b', 'c', 'd', 'e'];
 
@@ -355,21 +357,24 @@ const SessionsPanelComponent = ({
                                     const sessionId = file.sessionId;
                                     const sessionIdLabel = formatSessionId(sessionId);
                                     const turnCountValue = file.turnCount ?? null;
+                                    const sessionHref = buildSessionUrl(file.id);
+                                    const isActiveSession = activeSession?.id === file.id;
 
                                     return (
                                       <div
                                         key={file.id}
                                         ref={file.id === activeSession?.id ? activeRowRef : null}
                                         className={`w-full rounded-2xl border px-3 py-2 text-left text-xs transition ${
-                                          activeSession?.id === file.id
+                                          isActiveSession
                                             ? 'border-teal-300 bg-teal-50 text-teal-800'
                                             : 'border-slate-100 bg-white text-slate-600 hover:border-teal-200 hover:text-slate-900'
                                         }`}
                                       >
-                                        <button
-                                          type="button"
-                                          onClick={() => onLoadSession(file.id)}
-                                          className="w-full text-left"
+                                        <SessionLink
+                                          href={sessionHref}
+                                          ariaCurrent={isActiveSession ? 'page' : undefined}
+                                          onNavigate={() => onLoadSession(file.id)}
+                                          className="block w-full text-left"
                                         >
                                           <div className="flex items-start justify-between gap-3">
                                             <div className="min-w-0">
@@ -414,7 +419,7 @@ const SessionsPanelComponent = ({
                                               </span>
                                             )}
                                           </div>
-                                        </button>
+                                        </SessionLink>
                                         <CopyButton
                                           text={sessionId}
                                           idleLabel={sessionIdLabel}
