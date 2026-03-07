@@ -12,6 +12,7 @@ primitives when this slice starts. Keep the surface styling local, sharp, and
 free of nested box-on-box-on-box chrome.
 
 ## Read first (required)
+- `IMPLEMENTATION_GUIDE.md`
 - `todos/sharp-ui/2026-01-27-1pm_sharp-ui-implementation-plan.md`
 - `todos/sharp-ui/2026-01-27-1pm_sharp-ui-implementation-plan-mapping.md`
 - `todos/sharp-ui/2026-01-27-1pm_sharp-ui-implementation-plan-addendum.md`
@@ -78,7 +79,7 @@ Historical reference only:
 ## Acceptance criteria
 - All modals and chrome surfaces are sharp, opaque, and border-based.
 - Toggle control matches the sharp theme and is keyboard-accessible.
-- `rg "rounded-|backdrop-blur|bg-white/|shadow-|ring-" src` returns only documented exceptions (ideally none).
+- `rg -n 'rounded-|backdrop-blur|bg-[[:alnum:]_-]+/[0-9]+|shadow-|ring-' src` returns only documented exceptions (ideally none).
 - Style guide matches the final UI and documents focus + list rules.
 - Base UI primitives are styled in a way that still matches the sharp devtool
   direction.
@@ -86,4 +87,4 @@ Historical reference only:
 ## Verification
 - Open Settings + TurnJump; verify overlays and focus outlines.
 - Tab through header buttons and match controls; focus is visible.
-- Run grep checks and confirm cleanup.
+- Run `rg -n 'rounded-|backdrop-blur|bg-[[:alnum:]_-]+/[0-9]+|shadow-|ring-' src` and confirm cleanup.
