@@ -12,12 +12,18 @@ to `.tag` consistently across the codebase.
 
 Panels (containers)
 - `.panel`: primary container (flat bg, solid border, no radius, no shadow)
-- `.panel-muted`: nested section (subtle bg, solid border, no radius)
+- `.panel-muted`: nested section (subtle bg, no border by default to avoid border overload)
 - `.panel-dashed`: empty/placeholder state (dashed border, no radius)
 - `.panel-row`: tight header row (no padding bloat; used for headers/controls)
 
+Lists (scan-first rows)
+- `.list`: list container (border + background, often same as panel)
+- `.list-row`: base row layout + padding
+- `.list-row--interactive`: hover/focus/active states
+- `.list-row--selected`: selected styling (persistent)
+
 Tags (labels)
-- `.tag` (or `.chip`): base label, sharp, border-only by default
+- `.tag` (or `.chip`): base label, sharp, minimal (ensure contrast vs white panels)
 - `.tag-muted`: low-emphasis label (subtle bg)
 - `.tag-solid`: stronger emphasis (solid bg, usually for CTA or active)
 - Sizes: `tag-xs`, `tag-sm`, `tag-md`, `tag-lg` (or keep chip sizes)
@@ -29,6 +35,7 @@ Inputs / Controls
 - `.select`: shared sharp select styling
 - `.button`: shared sharp button styling (bordered, no rounding, minimal hover)
 - `.toggle`: if keeping a custom switch, make it square; otherwise use checkbox
+- `.focusable`: outline-based focus helper applied to inputs/buttons/rows
 
 Other
 - `.code-inline`: sharp inline code (no rounding)
@@ -36,6 +43,11 @@ Other
 - `.mark`: sharp snippet highlight (no rounding)
 - `--overlay`: modal backdrop token (opaque modal, dimmed backdrop)
 - `--focus`, `--hover`, `--selected`: state tokens for list/row interactions
+  - Hover: background = `--surface-hover`
+  - Selected: background = `--surface-selected` + left border = `--accent`
+  - Focus-visible: outline = `--focus` (or left border + outline for rows)
+  - Pressed: background = `--surface-pressed`
+  - Implement these in `.list-row--interactive` / `.row-button` so components don't re-specify them.
 
 Notes
 - Avoid multiple background opacities (`bg-white/70`, `bg-white/80`).
@@ -43,10 +55,16 @@ Notes
 - Avoid `rounded-*` in all native components; any remaining should be documented.
 - Focus visibility is required; use sharp outlines or border bump, not glow-only rings.
 
+## Focus Implementation Rule (Non-Optional)
+- Use outline-based focus (not `ring-*` / box-shadow) and apply it centrally.
+- Apply `.focusable` to `.button`, `.input`, `.select`, `.list-row--interactive`, and use `focus-within` for compound rows.
+- Ensure focus outlines are not clipped by `overflow-hidden` ancestors (use inset outlines or avoid clipping).
+
 ## Interaction + Density Contract (Applied Across Mapping)
 - List/row hover: subtle background shift and/or left border accent.
 - Selected: persistent accent border (left bar) + stronger bg.
 - Active/focused row: same as selected, keyed off keyboard focus.
+- Selected vs focused is non-optional: selected persists; focus is transient; both must remain visible.
 - Numeric-heavy rows use `tabular-nums`.
 - Favor rows for list content; keep cards for multi-paragraph/narrative content.
 - Modal backdrops use the single approved overlay token; modal itself stays opaque.
@@ -69,8 +87,8 @@ label/tag usage that should be replaced.
 1. `src/features/conversation/components/SearchPanel.tsx`
 - Outer container: `rounded-3xl ... shadow-card backdrop-blur` => `.panel`.
 - Inputs/selects: `rounded-2xl ... shadow-sm` => `.input` / `.select`.
-- Search result group container: `rounded-2xl ... bg-slate-50/80` => `.panel-muted`.
-- Result rows: `rounded-2xl ... bg-white` => `.panel` or `.panel-row` with row states.
+- Search result group container: `rounded-2xl ... bg-slate-50/80` => `.panel-muted` or `.list`.
+- Result rows: `rounded-2xl ... bg-white` => `.list-row` with row states.
 - Result metrics chips: `.search-result-chip` => `.tag tag-xs` (or size).
 - Empty/error/too-short panels: `rounded-2xl border-dashed` => `.panel-dashed`.
 
@@ -97,8 +115,8 @@ label/tag usage that should be replaced.
 - Panel container: `rounded-3xl ... shadow-card` => `.panel`.
 - Filter badges + buttons: `rounded-full` => `.tag` or `.button`.
 - Skeleton cards: `rounded-2xl` => `.panel` (no radius).
-- Year/month/day summaries: `rounded-xl` => `.panel-row` with row states.
-- Session cards: `rounded-2xl` => `.panel` or `.panel-row` with row states.
+- Year/month/day summaries: `rounded-xl` => `.list-row` with row states.
+- Session cards: `rounded-2xl` => `.list-row` with row states.
 - Session metadata chips: `.chip` => `.tag` (no shadow).
 - Copy session id chip: `.chip chip-muted` => `.tag tag-muted`.
 
@@ -106,7 +124,7 @@ label/tag usage that should be replaced.
 - Panel container: `rounded-3xl ... shadow-card` => `.panel`.
 - Loading badge + sort select: `rounded-full` => `.tag` / `.select`.
 - Active workspace pills + clear button: `rounded-full` => `.tag` / `.button`.
-- Workspace cards: `rounded-2xl` => `.panel` or `.panel-row` with row states.
+- Workspace cards: `rounded-2xl` => `.list-row` with row states.
 - GitHub badge: `rounded-full` => `.tag` (or simple icon + text without pill).
 - Empty state: `rounded-2xl` => `.panel-dashed`.
 
@@ -124,7 +142,8 @@ label/tag usage that should be replaced.
 
 1. `src/features/conversation/components/Toggle.tsx`
 - Toggle container: `rounded-xl ... shadow-sm` => `.panel-row`.
-- Toggle track/knob: replace rounded pill with square toggle or checkbox.
+- Toggle track/knob: replace rounded pill with checkbox row (preferred) or square toggle.
+- If keeping a custom switch, add `focus-within` styling on the container (input is `sr-only`).
 
 1. `src/features/conversation/components/SessionOverview.tsx`
 - Container: `rounded-3xl ... shadow-card backdrop-blur` => `.panel`.
@@ -167,6 +186,31 @@ label/tag usage that should be replaced.
 ## Replacement Examples (Class Patterns)
 These are pattern-level replacements used repeatedly in components:
 
+1. Minimal primitives reference (example structure)
+```css
+@layer components {
+  .panel { @apply border border-slate-200 bg-white; }
+  .panel-muted { @apply bg-slate-50; }
+  .panel-dashed { @apply border border-dashed border-slate-300 bg-white; }
+  .panel-row { @apply flex items-center justify-between; }
+
+  .tag { @apply inline-flex items-center gap-1 border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700; }
+  .tag-muted { @apply border-slate-200 bg-slate-50 text-slate-600; }
+  .tag-solid { @apply border-slate-300 bg-slate-200 text-slate-900; }
+
+  .input { @apply border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900; }
+  .select { @apply border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900; }
+  .button { @apply border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800; }
+
+  .list { @apply border border-slate-200 bg-white; }
+  .list-row { @apply px-3 py-2; }
+  .list-row--interactive { @apply w-full text-left; }
+  .list-row--interactive:hover { @apply bg-slate-50; }
+
+  .focusable:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+}
+```
+
 1. Container (glassy card)
 - From: `rounded-3xl border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur`
 - To:   `panel` (with padding utility if panel does not bake in spacing)
@@ -190,7 +234,7 @@ These are pattern-level replacements used repeatedly in components:
 ## Open Questions for Implementation
 - Final naming: `.chip` vs `.tag`.
 - Confirm the minimal set of tag variants (2 vs 3).
-- Toggle redesign: square switch vs checkbox.
+- Toggle redesign: checkbox row preferred; square switch only if required.
 - Typography decision (Sora vs mono-forward).
 
 ## Caveats and Pushbacks (Context)

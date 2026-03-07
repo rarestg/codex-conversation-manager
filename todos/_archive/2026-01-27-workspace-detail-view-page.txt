@@ -1,3 +1,14 @@
+ARCHIVE NOTE
+============
+
+Archived on 2026-03-07.
+
+Reason
+- Superseded by the unified session catalog direction in
+  `todos/2026-03-07-2pm_session-catalog-rearchitecture-plan.txt`.
+- Workspace is now intended to be a filter or saved scope within the catalog,
+  not a separate primary page.
+
 Title: Workspace detail view + “Open workspace” entry point
 
 Why

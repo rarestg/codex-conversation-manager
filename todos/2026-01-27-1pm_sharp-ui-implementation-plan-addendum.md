@@ -17,6 +17,8 @@ These choices affect multiple files and should be decided once, centrally:
    - Option B: Use a mono-forward UI (e.g., IBM Plex Mono) for the app shell
      while retaining a sans for headings. This better matches the TUI-adjacent
      direction but increases visual density and may feel less friendly.
+   - Recommendation: keep body text readable (sans) and apply mono-forward styling
+     to chrome/metadata/IDs via `font-mono`, plus `tabular-nums` for numeric tags.
    - Decision impacts: `index.html` font imports, `src/index.css` base font-family.
    - Caveat: a system UI + mono-forward shell improves scannability, but if Sora is a
      brand anchor we should keep it and achieve sharpness via surfaces instead.
@@ -24,6 +26,8 @@ These choices affect multiple files and should be decided once, centrally:
 2. Chip vs Tag naming
    - Option A: Keep the name `.chip` but redefine it to a sharp label.
    - Option B: Rename `.chip` to `.tag` and migrate all usage.
+   - Recommendation: keep `.chip` now (low churn), redefine to sharp. Optionally
+     alias `.tag` to `.chip` later for semantic clarity.
    - Decision impacts: `src/index.css`, every component using chip classes.
      - Caveat: renaming is churn; redefining `.chip` is cheaper and can be revisited later.
 
@@ -32,6 +36,7 @@ These choices affect multiple files and should be decided once, centrally:
      - Base: `.tag` (bordered, sharp, neutral)
      - Muted: `.tag-muted` (subtle background for secondary info)
      - Solid: `.tag-solid` (for CTA or emphasis)
+   - Recommendation: keep exactly 3 variants (base, muted, solid).
    - Retire: `.chip-soft`, `.chip-white`, `.chip-shadow` (too many variants).
 
 4. Toggle affordance
@@ -40,12 +45,13 @@ These choices affect multiple files and should be decided once, centrally:
 
 5. Hierarchy approach
    - Borders + typographic weight only. No shadows, blur, or glass.
-   - Focus state: border emphasis (avoid glow/ring if possible).
+   - Focus state: outline-based (avoid `ring-*` / glow). Must be visible on light surfaces.
      - Must not regress: keyboard focus needs to be obvious (sharp outline or border bump).
 
 6. Primitives strategy
    - Option A: start with CSS utilities + CVA recipes to reduce class drift.
    - Option B: introduce `<Panel/>`, `<Tag/>`, `<Button/>`, `<Input/>` wrappers immediately.
+   - Recommendation: start with utilities/CVA recipes first; add wrappers only if drift returns.
    - Caveat: wrappers are higher churn. Prefer recipes first; promote to components only if
      class drift persists after refactor.
 
@@ -92,11 +98,35 @@ This is effectively 6-7 styles that should compress into 2-3 sharp tags and
 Add a minimal set of sharp, reusable surface helpers in `src/index.css`:
 
 - `.panel`: primary container, solid background, solid border, square corners.
-- `.panel-muted`: nested section, subtle background for grouping.
+- `.panel-muted`: nested section, subtle background for grouping (no border by default to avoid border overload).
 - `.panel-dashed`: empty states or placeholders, dashed border.
 - `.panel-row`: tight header/row treatment for list headers.
+- `.list`, `.list-row`, `.list-row--interactive`, `.list-row--selected`: list container + row patterns for scan-first UIs.
 
 These replace repeated Tailwind class strings across components.
+
+## `src/index.css` Direction (Delta vs current)
+This is the single entry CSS contract today. Keep a single entrypoint (`src/index.css`), even if we later split into partials.
+
+Current file state:
+- Token palette is bespoke (sand/sage/clay) and used with translucent layers.
+- Body uses gradients + multiple alpha backgrounds.
+- Chip system is rounded + soft (`chip-*` + `search-result-chip`), with shadows.
+- Focus uses `ring-*` in components; no central focus contract in CSS.
+- Motion utilities (`animate-*`) and soft shadows (`shadow-*`) are defined globally.
+- OverlayScrollbars uses rounded handles.
+
+Recommended changes for the sharp refactor:
+1) Tokens: add surface/border/text/accent tokens (mapped to current palette first; no full palette swap yet).
+2) Base: remove gradients, set solid `body` background, keep readable sans for body; use mono-forward utilities (`font-mono`, `tabular-nums`) in chrome/metadata.
+3) Focus: define a single outline-based focus contract (`.focusable`, `focus-within`) and remove reliance on `ring-*`.
+4) Primitives: define a minimal set (`.panel`, `.panel-muted` without border by default, `.panel-dashed`, `.list`, `.list-row`, `.row-button`, `.chip/.tag`, `.input`, `.select`, `.button`, `.code-inline`, `.code-block`, `.mark`).
+5) Remove: `chip-shadow`, `chip-soft`, `chip-white`, `search-result-chip`, `shadow-*` utilities; convert chips to sharp tags.
+6) Motion: reduce decorative animations or gate via `prefers-reduced-motion`.
+7) Vendor: set OverlayScrollbars handle radius to `0`.
+8) Markdown: remove rounded inline code and code block styling; use solid borders + neutral backgrounds.
+
+The goal is to keep spacing in Tailwind (`p-*`, `gap-*`) and keep CSS focused on tokens, focus states, and primitives.
 
 ## Interaction + Density Rules (Add to Style Guide)
 These are required to keep “sharp” from becoming “harsh,” and to preserve usability.
@@ -104,13 +134,17 @@ These are required to keep “sharp” from becoming “harsh,” and to preserv
 Focus visibility (must not regress)
 - Use a strong, sharp focus indicator (e.g., `outline: 2px solid var(--accent)` or
   border swap to accent + 1px thickness bump).
-- Avoid glow-only focus states; focus must be visible on light backgrounds.
+- Avoid `ring-*`/glow-only focus states; focus must be visible on light backgrounds.
+- Apply focus rules in shared utilities (`.button`, `.input`, `.select`, `.list-row--interactive`)
+  and use `focus-within` for compound rows (toggles, disclosures).
+- Ensure focus outlines are not clipped by `overflow-hidden` ancestors.
 
 Row/list interaction states
 - Hover: subtle background shift (surface-0 → surface-1) and/or left border accent.
 - Selected: persistent accent border (left bar) + slightly stronger bg.
 - Active/focused row: same as selected, keyed off keyboard focus.
 - Clickable affordance: cursor + hover + state; avoid shadow-only affordance.
+- Selected vs focused is non-optional: selected persists; focus is transient; both must remain visible.
 
 Modal overlay exception
 - Allow one controlled overlay token (e.g., `--overlay: rgba(0,0,0,0.6)`), used only
@@ -120,6 +154,7 @@ Density contract (minimum viable guidance)
 - Define standard paddings (e.g., `--panel-pad: 12px`, `--row-pad-x: 10px`, `--row-pad-y: 6px`).
 - Favor rows for list content; reserve cards for multi-paragraph/narrative content.
 - Use tabular numerals (`tabular-nums`) in numeric-heavy areas.
+- List conversion is required for Search/Sessions/Workspaces: list container + dividers + row states.
 
 ## High-Impact Files to Update
 These files must be refactored to remove rounded corners, glass, blur, and
@@ -175,6 +210,7 @@ Search:
 - Favor fewer tag styles and fewer surface variants.
 - Tighten dense panels but keep readability: consistent line-height and
   deliberate gaps are better than extra chrome.
+- Reduce decorative motion or gate it behind `prefers-reduced-motion` (e.g., staggered reveals).
 
 ## Open Questions to Resolve
 - Are we keeping Sora for headings, or switching to mono-forward UI?

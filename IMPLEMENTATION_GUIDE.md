@@ -4,8 +4,12 @@ This document replaces the early-era `IMPLEMENTATION_PLAN.txt` and `DESIGN_APPEN
 It is a living guide for contributors and maintainers, describing how the current system
 works and the invariants that must not change.
 
-If you are new to the codebase, start here, then jump to `AGENTS.md` for task-oriented
-notes and file pointers.
+If you are new to the codebase:
+- Start with `README.md` for setup and quick orientation.
+- Use this guide for the canonical architecture and invariants.
+- Use `AGENTS.md` for the repo map and task-oriented pointers.
+- Use `USER_GUIDE.md` for user workflows and QA expectations.
+- Use `VISUAL_STYLE_GUIDE.txt` for frontend/design direction.
 
 ---
 
@@ -47,8 +51,10 @@ Backend (Vite dev server middleware):
 
 ### Frontend entry and page composition
 - `src/main.tsx` boots the app.
-- `src/features/conversation/ConversationViewer.tsx` controls layout and data hooks.
+- `src/features/conversation/ConversationViewer.tsx` controls layout/data hooks and switches
+  between `/`, `/canvas`, `/layouts`, and `/stickytest` without a router.
 - `src/features/conversation/ConversationMain.tsx` renders active session view.
+- `src/features/conversation/CanvasView.tsx` renders the dev/demo variant surface.
 - `src/features/conversation/components/Sidebar.tsx` renders search + session browser.
 - `src/features/conversation/StickyTest.tsx` is a dev-only route for validating sticky behavior.
 
@@ -57,9 +63,11 @@ Backend (Vite dev server middleware):
 - `server/routes/index.ts` maps method + path to handlers.
 - `server/http.ts` provides `sendJson` and `readJsonBody`.
 
-### Shared API contract
+### Shared contracts and metrics
 - `shared/apiTypes.ts` defines shared response types and sort unions.
 - Client and server import these types directly.
+- `shared/sessionMetrics.ts` keeps session metrics and active-duration calculation aligned
+  between server indexing and client-side fallback parsing.
 
 ---
 
@@ -75,7 +83,7 @@ Backend (Vite dev server middleware):
 
 2) **Tools/actions** come from `response_item`:
    - `function_call`, `custom_tool_call`, `web_search_call` → Tool call
-   - `function_call_output`, `custom_tool_call_output` → Tool output
+   - `function_call_output`, `custom_tool_call_output`, `web_search_call_output` → Tool output
 
 ### Turn grouping
 - A new turn starts at each `user_message`.
@@ -129,6 +137,10 @@ Backend (Vite dev server middleware):
   - `CODEX_DEBUG=1` for general debug
   - `CODEX_SEARCH_DEBUG=1` for search logs
 
+### Shared cross-layer logic
+- `shared/sessionMetrics.ts`: canonical session metrics + active duration logic
+- `server/types.ts` and `src/features/conversation/types.ts`: tree/session/viewer data shapes
+
 ---
 
 ## 6) API Endpoints (Current Behavior)
@@ -159,7 +171,7 @@ Drops schema and rebuilds index from scratch.
 ### `GET /api/search`
 Query params:
 - `q` (required)
-- `limit` (default 20)
+- `limit` (default 20, clamped to 1-200)
 - `workspace` (optional)
 - `resultSort` (`relevance` | `matches` | `recent`)
 - `groupSort` (`last_seen` | `matches`)
@@ -181,17 +193,25 @@ Query params:
 - `requestId` (echoed back)
 
 Behavior:
-- Returns `turn_ids` for matches in a given session.
+- Returns `turn_ids` and normalized search `tokens` for matches in a given session.
 - Excludes preamble (`turn_id <= 0`).
 - `Server-Timing` header included.
 
 ### `GET /api/workspaces`
 Returns workspace summaries for the sessions table.
 Accepts `sort=last_seen|session_count`.
+Only sessions with non-empty `cwd` contribute workspace rows.
 
 ### `GET /api/resolve-session?id=...`
-Resolves a session ID/path fragment to a session path.
-Returns `{ id }` or 404 if not found.
+Query params:
+- `id` (required)
+- `workspace` (optional)
+- `requestId` (optional, debug/logging only)
+
+Behavior:
+- Resolves exact `session_id`, then exact `path`, then `path LIKE`.
+- Applies optional workspace filtering before choosing a match.
+- Returns `{ id }` or 404 if not found.
 
 ---
 
@@ -229,16 +249,20 @@ Tracks file state for incremental indexing:
 - `path`, `size`, `mtime`, `hash`, `indexed_at`
 
 ### messages
-All indexed content:
+Searchable indexed content only:
 - `id` (AUTOINCREMENT)
 - `session_id` (FK → sessions.id)
 - `turn_id`
-- `role` (`user | assistant | thought | tool_call | tool_output | meta`)
+- `role` (`user | assistant | thought | tool_call | tool_output`)
 - `timestamp`
 - `content`
 
 Indexes:
 - `idx_messages_session`, `idx_messages_turn`
+
+Notes:
+- `session_meta`, `turn_context`, and `token_count` contribute session metrics / client rendering,
+  but are not written into `messages` or `messages_fts` today.
 
 ### messages_fts (FTS5)
 Virtual table synchronized by triggers:
@@ -260,11 +284,12 @@ Workflow:
 3) If unchanged and `session_id_checked` already done, skip.
 4) If unchanged but `session_id_checked` missing, read just session_meta/turn_context.
 5) If changed or new, parse entire JSONL:
-   - Build messages list
-   - Extract metadata (cwd, git info, timestamps)
+   - Build searchable messages list (`user`, `assistant`, `thought`, `tool_call`, `tool_output`)
+   - Extract metadata (cwd, git info, timestamps, session-id fallbacks)
    - Count items (turns, thoughts, tools, meta, token_count)
+   - Keep `session_meta`, `turn_context`, and `token_count` in metrics/state, but not in FTS rows
    - Compute `active_duration_ms` per turn from user message → last assistant activity
-     (assistant message, agent_reasoning, tool calls, tool outputs)
+     (assistant message, agent_reasoning, tool calls, tool outputs, including web search output)
 6) Insert/update sessions and messages in a transaction.
 7) Remove DB rows for deleted files.
 
@@ -272,6 +297,13 @@ Important: filename session ID wins; session_meta is fallback only.
 Active duration and related metrics are computed by the shared accumulator in
 `shared/sessionMetrics.ts` (used by server indexing and client fallback), so
 reindex to apply definition changes to existing sessions.
+
+### Shared metrics contracts (`shared/sessionMetrics.ts`)
+- `message_count` includes `user`, `assistant`, `thought`, `tool_call`, and `tool_output`
+- `tool_call_count` counts tool-call entries only; outputs are separate message rows
+- `meta_count` and `token_count_count` are tracked separately from searchable message rows
+- `active_duration_ms` only accumulates for turns that have both a user-start timestamp and later assistant activity
+- `first_user_message` is preview-truncated before storage/tree rendering
 
 ---
 
@@ -285,6 +317,12 @@ reindex to apply definition changes to existing sessions.
   - Numeric: >= 2
   - Non-Latin: >= 1
 - Produces `"token"` AND `"token"` query.
+- If no searchable tokens remain after normalization, the server returns no results and no tokens.
+
+### Search surface
+- SQLite search currently indexes `user`, `assistant`, `thought`, `tool_call`, and `tool_output`.
+- `session_meta`, `turn_context`, and `token_count` are rendered in the client but are not searchable via FTS.
+- The client mirrors the same token rules to drive the "too short to search" state before sending requests.
 
 ### Search result invariants
 - One row per session file.
@@ -317,25 +355,41 @@ Unknown workspace behavior:
 ### Home view
 - Search panel + Workspaces panel + Sessions panel.
 - Search results are grouped by workspace with match counts and snippets.
+- Typing debounces FTS search (350ms) once the query has at least one searchable token.
+- Queries that normalize to no searchable tokens stay client-side in the "too short to search" state.
+- Enter attempts direct session resolution first.
+- Pasting an exact UUID attempts immediate session resolution before falling back to FTS.
 - Search sorting controls: results (relevance/matches/recent) and workspaces (last_seen/matches).
+- Opening a session clears any active workspace filter.
 
 ### Session view
-- Session header with metadata + copy controls.
+- Session view is composed around `SessionOverview`, the sticky controls bar, `TurnList`, and `TurnJumpModal`.
+- Session header shows metadata + copy controls.
 - Toggles:
   - Show Thoughts
   - Show Tools
   - Show Metadata
   - Show Token Counts
   - Show Full Content
-- Sticky controls bar with focus-gated shortcuts (first/last, prev/next, go to turn).
+- When token counts are shown, the UI compresses them to usage-bearing `token_count` items that follow content.
+- Sticky controls bar has focus-gated shortcuts:
+  - ArrowLeft / ArrowRight → previous / next turn
+  - Cmd/Ctrl + ArrowUp / ArrowDown → first / last turn
+  - Cmd/Ctrl + K → turn jump modal
+  - Cmd/Ctrl + Shift + H → Home
 - Turn grouping is preserved; preamble shown separately.
 - Match navigation (Prev/Next) for active search query.
+
+### Dev-only routes
+- `/canvas` and `/layouts` render the variant/demo surface.
+- `/stickytest` is a focused sticky-behavior sandbox.
 
 ### URL sync
 Deep links:
 - `?session=...&turn=...`
 - `?q=...` for search highlighting
-- `useUrlSync` and `url.ts` handle normalization and history updates.
+- `useUrlSync` handles initial load and back/forward navigation.
+- `url.ts` handles normalization and history updates; turn tracking uses `replaceState` while scrolling.
 
 ### Copy / export
 - Per-message copy: plain text (markdown stripped) and raw markdown.
@@ -343,6 +397,7 @@ Deep links:
 - XML-like tags for export:
   - `<USER-MSG-n>`, `<ASSISTANT-RESPONSE-n>`, `<THINKING-n>`
   - `<TOOL-CALL-n name="..." call_id="...">`, `<TOOL-OUTPUT-n call_id="...">`
+  - `<TOKEN-COUNT-n>`, `<META-n>`
 
 ---
 
@@ -354,9 +409,13 @@ API behavior:
 - 403 for unreadable session file.
 - 500 for unhandled exceptions.
 
-Parsing behavior:
+Server indexing behavior:
 - Blank lines ignored.
 - Malformed JSON lines logged (rate-limited), parsing continues.
+
+Client parsing behavior:
+- Blank lines ignored.
+- Malformed JSON lines are collected as per-line parse errors and parsing continues.
 - UI surfaces non-blocking parse error banners when applicable.
 
 ---
@@ -385,12 +444,22 @@ Client (dev only):
 
 ## 15) Testing / Validation
 
-Formal tests are currently deferred. Manual verification flows include:
+Automated checks:
+- `npm run typecheck`
+- `npm run check`
+- `npm run mdlint`
+
+CI runs the same three commands above. Formal tests are currently deferred.
+
+Manual verification flows include:
 - Search with multiple queries; confirm grouping, snippets, and navigation.
+- Direct session resolution via Enter and UUID paste.
 - Sorting by relevance/matches/recent; group sort by last_seen/matches.
-- Workspace filter applied to search and session list.
+- Workspace filter applied to search and session list, then cleared when opening a session.
 - Match navigation excludes preamble and aligns with highlighting.
+- Turn shortcuts only activate when the messages pane is focused.
 - Reindex and clear-index flows rebuild data safely.
+- `/canvas`, `/layouts`, and `/stickytest` remain usable when touching layout/sticky behavior.
 
 ---
 
@@ -399,8 +468,10 @@ Formal tests are currently deferred. Manual verification flows include:
 When modifying:
 - Keep parsing invariants intact; they are relied upon by UI and search.
 - Don’t change snippet markers (`[[...]]`) without updating the renderer.
-- Ensure `/api/session-matches` continues to exclude preamble.
+- Keep `/api/search` and `/api/session-matches` aligned on preamble exclusion.
 - Keep deterministic ordering in search (tie-breaker required).
 - Update shared API types in `shared/apiTypes.ts` when changing response shapes.
+- Update `shared/sessionMetrics.ts` when changing metric or active-duration definitions.
+- Update `README.md` / `AGENTS.md` when canonical doc locations or validation commands change.
 
 For detailed file pointers, see `AGENTS.md`.

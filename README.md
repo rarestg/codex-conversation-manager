@@ -4,118 +4,97 @@
 
 # Codex Conversation Manager
 
-A local web app for parsing, visualizing, and searching Codex JSONL sessions. It reads local session logs, groups conversations by user turn, renders messages with markdown, and surfaces tools/actions inline.
+Local web app for browsing, searching, and inspecting Codex JSONL session logs. It runs entirely on your machine: the frontend is React/Vite, the backend is local Vite middleware, and search/indexing are backed by SQLite FTS5.
 
-## Implementation Guide
-For a comprehensive, up-to-date overview of the current architecture and invariants, see `IMPLEMENTATION_GUIDE.md`.
+## Start Here
 
-## Features
-- Browse Codex sessions stored on disk and keep sessions separate.
-- View conversations grouped by user turn with inline tools/actions.
-- Full-text search across user and assistant messages via SQLite FTS5.
-- Session-level search results with match counts, snippets, and per-session metadata pills.
-- Match highlighting in-session with Next/Prev match navigation and `?q=` deep links.
-- Sticky session controls with focus-gated keyboard shortcuts for fast turn navigation.
-- Markdown rendering with sanitized output and code highlighting.
-- Per-message and conversation-wide copy actions with inline feedback.
-- Session settings modal (set root, reindex, clear/rebuild index).
-- Workspace summary panel for filtering sessions by working directory.
-- URL deep links to sessions and turns (`?session=...&turn=...`).
+- [ROADMAP.md](ROADMAP.md) for repo vision, current product direction, and implementation sequencing
+- [USER_GUIDE.md](USER_GUIDE.md) for day-to-day usage and UI workflows
+- [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md) for the canonical architecture, invariants, and API behavior
+- [AGENTS.md](AGENTS.md) for the agent-oriented repo map and workflow rules
+- [VISUAL_STYLE_GUIDE.txt](VISUAL_STYLE_GUIDE.txt) for UI direction and frontend constraints
+- [todos/sharp-ui/README.md](todos/sharp-ui/README.md) for sharp UI implementation tracking
+- `todos/` for active plans and working notes
+- [todos/_done/INDEX.txt](todos/_done/INDEX.txt) for completed-plan history, newest first
 
-## Quirks
-- Workspace branch labels come from the latest indexed session metadata for that workspace, not live Git state.
-- If you switch branches without generating new sessions (or reindexing files that changed), the displayed branch can drift until a new session is indexed or you reindex.
-- GitHub icons are clickable; their URLs are derived from `git_repo` session metadata by extracting the `owner/repo` slug (see `extractGithubSlug` in `server/workspaces.ts`).
+## Current Capabilities
 
-## Getting Started
+- Browse indexed local sessions by date from the home view or sidebar
+- Search across indexed session content with SQLite FTS5, grouped and filterable by workspace
+- Paste a session UUID or press Enter in search to resolve and open a session directly
+- Deep-link to sessions, turns, and active search queries with `?session=...&turn=...&q=...`
+- Render user/assistant messages, thoughts, tool calls/outputs, metadata, and token-count telemetry
+- Copy plain text, markdown, or filtered conversation exports
+- Navigate turns and in-session matches with sticky controls and focus-gated keyboard shortcuts
+- Use dev-only demo routes for layout experiments and sticky-behavior checks
+
+## Quick Start
+
+CI runs on Node 20, so use a current Node 20.x install locally as well.
+
 ```bash
 npm install
 npm run dev
 ```
 
-## Pre-commit Hooks
-We use pre-commit to run Biome and markdownlint before commits.
+Open `http://localhost:5173`.
+
+If your sessions are not under the default root, either:
+
+- set `CODEX_SESSIONS_ROOT=/absolute/path/to/sessions`, or
+- use the Settings modal in the app to update the saved root
+
+On first run, populate the SQLite index before expecting sessions or search results:
+
+- open Settings
+- run `Reindex`
+- reload the home view if you changed the sessions root
+
+## Validation
+
+Run these before wrapping up changes:
+
+- `npm run typecheck`
+- `npm run check`
+- `npm run mdlint` when you edit Markdown
+
+Useful autofix commands:
+
+- `npm run check:write`
+- `npm run lint:fix`
+- `npm run format:write`
+- `npm run mdlint:fix`
+
+Optional local hook setup: install `pre-commit` with your package manager of choice, then run `pre-commit install`.
+
+## Configuration And Storage
+
+- Default sessions root: `~/.codex/sessions`
+- Env override: `CODEX_SESSIONS_ROOT`
+- Saved config: `~/.codex-formatter/config.json`
+- SQLite index: `~/.codex-formatter/codex_index.db`
+- Debug flags: see [.env.example](.env.example)
+
+## Repo Map
+
+- `ROADMAP.md` explains the current vision, immediate next steps, and which plans are active vs deferred
+- `src/features/conversation/` is the main frontend feature: viewer shell, session rendering, parsing, hooks, markdown/copy/url helpers, and UI components
+- `src/features/conversation/canvas/` and `src/features/conversation/CanvasView.tsx` power the dev/demo surface at `/canvas` and `/layouts`
+- `src/features/conversation/StickyTest.tsx` is the dev-only sticky-behavior sandbox at `/stickytest`
+- `server/` contains the local API middleware, config/path safety, SQLite wiring, indexing, search, and workspace summaries
+- `shared/` contains API contracts and shared session-metrics logic used by both client and server
+- `scripts/typecheck.js` runs both TypeScript projects
+- `todos/sharp-ui/` contains the sharp UI implementation slices plus a status tracker
+
+## Development Notes
+
 ```bash
-brew install pre-commit
-pre-commit install
-```
-Run all hooks manually:
-```bash
-pre-commit run --all-files
-```
-
-## Configuration
-- Default sessions root: `~/.codex/sessions` (override with `CODEX_SESSIONS_ROOT`).
-- Optional config file: `~/.codex-formatter/config.json`.
-- SQLite index: `~/.codex-formatter/codex_index.db`.
-- Debug logging: set `CODEX_DEBUG=1`.
-- Search debug logging: set `CODEX_SEARCH_DEBUG=1`.
-- Render debug logging (dev only): `VITE_RENDER_DEBUG=1`.
-- Search UI debug logging (dev only): `VITE_SEARCH_DEBUG=1`.
-- Turn navigation debug logging (dev only): `VITE_TURN_NAV_DEBUG=1`.
-
-## Code Tour
-- `src/main.tsx` wires up the app and imports the feature entry.
-- `src/features/conversation/ConversationViewer.tsx` lays out the page and data hooks.
-- `src/features/conversation/ConversationMain.tsx` renders the active session view (header + filters + turns).
-- `src/features/conversation/components/` holds the UI building blocks:
-  - `Sidebar.tsx` (search + session browser)
-  - `SearchPanel.tsx` (FTS search + results)
-  - `SessionsPanel.tsx` (session tree + session ID copy)
-  - `WorkspacesPanel.tsx` (workspace summaries + filters)
-  - `CopyButton.tsx` (shared copy UX + feedback)
-  - `SessionHeader.tsx` (session metadata + copy controls)
-  - `TurnList.tsx` / `TurnCard.tsx` / `MessageCard.tsx` (conversation rendering)
-  - `SettingsModal.tsx` (session root + indexing actions)
-  - `Toggle.tsx` (feature toggles)
-- `src/features/conversation/StickyTest.tsx` (dev route for validating sticky behavior)
-- `src/features/conversation/hooks/` manages data flow:
-  - `useSessions.ts` (config, sessions tree, reindex)
-  - `useSession.ts` (load/parse a session)
-  - `useSearch.ts` (FTS search + resolve session IDs)
-  - `useUrlSync.ts` (deep-link sync)
-  - `useWorkspaces.ts` (workspace summaries)
-  - `useCopyFeedback.ts` (clipboard feedback state + status)
-  - `useTurnNavigation.ts` (turn-level keyboard navigation + URL sync)
-- `src/features/conversation/parsing.ts` implements JSONL parsing rules and turn grouping.
-- `src/features/conversation/markdown.tsx` handles sanitized markdown + snippet highlighting.
-- `src/features/conversation/api.ts` wraps API fetches; `copy.ts` formats exports; `url.ts` handles deep links.
-- `shared/apiTypes.ts` shares API response types between client + server.
-- `server/apiPlugin.ts` is a thin Vite middleware adapter.
-- `server/routes/index.ts` maps API routes to handlers.
-- `server/http.ts` provides JSON/body helpers.
-- `server/config.ts` handles sessions root config + path safety.
-- `server/db/index.ts` owns SQLite connection + schema.
-- `server/indexing/` contains JSONL parsing + indexing + sessions tree.
-- `server/search/` owns FTS normalization + SQL queries.
-- `server/workspaces.ts` builds workspace summaries.
-- `server/logging.ts` centralizes debug logging.
-- `vite.config.ts` wires Vite + API plugin.
-
-## API Endpoints (dev middleware)
-- `GET /api/config` / `POST /api/config`
-- `GET /api/sessions`
-- `GET /api/session?path=...`
-- `GET /api/search?q=...&limit=...&resultSort=...&groupSort=...`
-- `GET /api/session-matches?session=...&q=...`
-- `GET /api/workspaces?sort=...`
-- `POST /api/reindex`
-- `POST /api/clear-index`
-- `GET /api/resolve-session?id=...`
-
-## Search API Notes
-- Sorting is server-driven: `resultSort` applies in SQL, `groupSort` applies after grouping.
-- Relevance uses FTS5 bm25; lower scores are more relevant (ordered ASC).
-- Search responses include `requestId` (echoed when supplied) and `Server-Timing` headers for profiling.
-- Workspace summaries are computed only for workspaces present in the search results (Option A).
-- If Option A becomes slow at scale, the clean third approach is to materialize a workspaces table during indexing and query it directly (requires schema/migration updates and reindex invalidation).
-
-## Development
-```bash
-npm run dev
 npm run build
 npm run preview
 ```
 
+There is no separate automated test suite in this repo today. CI enforces `npm run typecheck`, `npm run check`, and `npm run mdlint`.
+
 ## License
+
 MIT
