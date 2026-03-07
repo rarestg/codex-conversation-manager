@@ -1,9 +1,9 @@
 # PR 4 — SearchPanel: Sections + Row List
 
 ## Read first (required)
-- `todos/2026-01-27-1pm_sharp-ui-implementation-plan.md`
-- `todos/2026-01-27-1pm_sharp-ui-implementation-plan-mapping.md`
-- `todos/2026-01-27-1pm_sharp-ui-implementation-plan-addendum.md`
+- `todos/sharp-ui/2026-01-27-1pm_sharp-ui-implementation-plan.md`
+- `todos/sharp-ui/2026-01-27-1pm_sharp-ui-implementation-plan-mapping.md`
+- `todos/sharp-ui/2026-01-27-1pm_sharp-ui-implementation-plan-addendum.md`
 - `src/features/conversation/components/SearchPanel.tsx`
 - `src/features/conversation/components/SessionLink.tsx`
 - `src/index.css` (search-related utilities)

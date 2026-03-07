@@ -3,11 +3,11 @@
 This folder tracks the implementation-slice documents for the sharp UI
 migration.
 
-Canonical background docs remain outside this folder:
+Canonical background docs in this folder:
 
-- `todos/2026-01-27-1pm_sharp-ui-implementation-plan.md`
-- `todos/2026-01-27-1pm_sharp-ui-implementation-plan-mapping.md`
-- `todos/2026-01-27-1pm_sharp-ui-implementation-plan-addendum.md`
+- `todos/sharp-ui/2026-01-27-1pm_sharp-ui-implementation-plan.md`
+- `todos/sharp-ui/2026-01-27-1pm_sharp-ui-implementation-plan-mapping.md`
+- `todos/sharp-ui/2026-01-27-1pm_sharp-ui-implementation-plan-addendum.md`
 - `VISUAL_STYLE_GUIDE.txt`
 
 The current product direction matters:

@@ -1,9 +1,9 @@
 # PR 2 — Focus System + Interaction Contract
 
 ## Read first (required)
-- `todos/2026-01-27-1pm_sharp-ui-implementation-plan.md`
-- `todos/2026-01-27-1pm_sharp-ui-implementation-plan-mapping.md`
-- `todos/2026-01-27-1pm_sharp-ui-implementation-plan-addendum.md`
+- `todos/sharp-ui/2026-01-27-1pm_sharp-ui-implementation-plan.md`
+- `todos/sharp-ui/2026-01-27-1pm_sharp-ui-implementation-plan-mapping.md`
+- `todos/sharp-ui/2026-01-27-1pm_sharp-ui-implementation-plan-addendum.md`
 - `src/index.css`
 - `src/features/conversation/components/CopyButton.tsx`
 - `src/features/conversation/components/Toggle.tsx`
