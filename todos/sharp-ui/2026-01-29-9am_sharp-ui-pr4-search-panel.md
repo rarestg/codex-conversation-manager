@@ -11,6 +11,7 @@ filter/search surfaces. Only do legacy `SearchPanel` work if it is a reusable
 primitive migration or a low-risk stopgap that clearly carries forward.
 
 ## Read first (required)
+- `IMPLEMENTATION_GUIDE.md`
 - `todos/sharp-ui/2026-01-27-1pm_sharp-ui-implementation-plan.md`
 - `todos/sharp-ui/2026-01-27-1pm_sharp-ui-implementation-plan-mapping.md`
 - `todos/sharp-ui/2026-01-27-1pm_sharp-ui-implementation-plan-addendum.md`

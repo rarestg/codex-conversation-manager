@@ -11,6 +11,7 @@ clear row selection, workspace-as-filter behavior, and strong keyboard focus.
 Apply these rules to the future catalog pane first.
 
 ## Read first (required)
+- `IMPLEMENTATION_GUIDE.md`
 - `todos/sharp-ui/2026-01-27-1pm_sharp-ui-implementation-plan.md`
 - `todos/sharp-ui/2026-01-27-1pm_sharp-ui-implementation-plan-mapping.md`
 - `todos/sharp-ui/2026-01-27-1pm_sharp-ui-implementation-plan-addendum.md`

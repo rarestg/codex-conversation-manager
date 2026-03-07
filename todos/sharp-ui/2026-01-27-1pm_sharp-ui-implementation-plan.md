@@ -65,9 +65,10 @@ What to do:
 - Introduce surface/border/accent tokens mapped to the current palette (avoid a full palette swap). Example: `--surface-0`, `--surface-1`, `--border-strong`, `--border-soft`, `--accent`.
 - Remove background gradients and set a flat background on `body`.
 - Set a neutral, low-ornament base font and document the typography split:
-  - UI chrome / metadata: mono-forward (or at least tabular-nums, monospace IDs).
+  - UI chrome / metadata: prefer monospace fonts, or use a neutral sans with `font-variant-numeric: tabular-nums`; keep IDs and dense metadata in monospace.
   - Conversation body: readable sans (or keep the current body font).
   - Headings: neutral sans; if Sora stays, tone down the “brand-y” feel via weight/size choices.
+  - Document fallback examples near the typography split, such as `font-family: var(--font-ui-mono, "IBM Plex Mono", "SFMono-Regular", monospace)` for chrome or a neutral sans plus `tabular-nums` for metadata where full monospace would feel too heavy.
 
 Why:
 - A single, flat background eliminates “consumer app” gloss and avoids effects that won’t translate to TUI.
@@ -183,14 +184,16 @@ Dependencies:
 ### Step 6: Clean up Tailwind class usage and remove dead styles
 
 What to do:
-- Search for `rounded-`, `shadow-`, `bg-white/`, `backdrop-blur`, `ring-` and replace with sharp equivalents.
+- Search for `rounded-`, `shadow-`, `bg-[[:alnum:]_-]+/[0-9]+`, `backdrop-blur`, and `ring-` and replace with sharp equivalents.
 - Remove unused utilities from `src/index.css` (e.g., `shadow-card` or rounded-centric class names) once components no longer use them.
 - Make sure any remaining `rounded-*` in 3rd-party components is intentional (e.g., if a library forces rounding). These should be consciously accepted exceptions and documented.
+- When documenting searches, label regex patterns vs literal substring searches so implementers know what to pass to `rg` or `grep`.
 - Add searches for:
-  - `bg-[a-z-]+/\\d+` (alpha backgrounds)
-  - `opacity-` on containers
-  - `ring-offset` / `ring-inset` if moving away from rings
-  - `animate-` or motion classes; reduce decorative animation or gate behind `prefers-reduced-motion`
+  - Regex for alpha backgrounds with Tailwind opacity suffixes: `bg-[[:alnum:]_-]+/[0-9]+`
+  - Literal substring: `opacity-` on containers
+  - Literal substrings: `ring-offset` and `ring-inset` if moving away from rings
+  - Literal substring: `animate-`; reduce decorative animation or gate behind `prefers-reduced-motion`
+- Note: rendered Markdown may show regex escapes differently. If you copy a regex into `rg` or `grep`, use normal shell regex syntax with a single backslash where needed, for example `rg -n 'bg-[a-z-]+/\d+' src`.
 
 Why:
 - This step prevents regressions and leaves the codebase clean and aligned with the new aesthetic.
