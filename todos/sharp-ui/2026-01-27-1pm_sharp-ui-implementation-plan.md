@@ -1,11 +1,33 @@
-# Sharp UI Refactor Plan (No-Radius, Low-Fluff Theme)
+# Sharp UI Design Reference (No-Radius, Low-Fluff Theme)
+
+## Status
+This is a design-reference doc, not a literal implementation ticket for the
+current home-screen shell.
+
+Use it for:
+
+- reusable visual principles
+- shared sharp primitives and focus rules
+- migration heuristics for a crisp devtool UI
+
+Treat direct references to `SearchPanel`, `SessionsPanel`, and
+`WorkspacesPanel` as historical mappings from the legacy shell. Remap those
+ideas onto the future session-catalog + detail-pane layout in
+`todos/2026-03-07-2pm_session-catalog-rearchitecture-plan.txt` before doing
+panel-specific implementation work.
+
+Do not spend major effort polishing the legacy home panels just because they are
+named in this file. Prioritize shared primitives, Base UI-friendly interaction
+patterns, and the future catalog shell.
 
 ## Context
 We are shifting Codex Conversation Manager to a sharp, low-ornament interface that feels closer to a terminal/TUI aesthetic: no rounded corners, no translucent glass, minimal shadows, and a simpler visual hierarchy that prioritizes clarity and scanability. The current UI (see `src/index.css` and components like `SessionHeaderVariantB`, `SearchPanel`, `TurnCard`, `TurnList`) leans on rounded surfaces, soft shadows, translucent layers, and rich background gradients. These design choices look polished but read as “consumer UI,” which is misaligned with a devtool that should feel snappy, direct, and utilitarian.
 
 We are not moving to TUI/INK yet, but we should treat this as a step toward that direction. The new design must avoid visual dependencies that don’t translate to terminal-like rendering (rounded corners, blur, layered transparency), and should rely on plain boxes, borders, and high-contrast text.
 
-This document is a complete implementation handoff. It explains what to change, why, and how to verify each step.
+This document is a design-reference handoff. It explains what to preserve, what
+to remove, and how to judge whether a new UI surface is moving in the right
+direction.
 
 ## Relevant Codebase Areas
 - Global styling and utilities live in `src/index.css`. This file defines color tokens, typography, background gradients, chip/pill utilities, and custom shadows. It is the single most impactful file for the theme change.
@@ -17,12 +39,22 @@ This document is a complete implementation handoff. It explains what to change, 
   - Shared UI helpers like `CopyButton` and chip utilities defined in `src/index.css`.
 - `VISUAL_STYLE_GUIDE.txt` codifies spacing rhythm and CopyButton rules. It must be updated to express the new sharp-only style while preserving spacing and interaction standards.
 
+Legacy-target note:
+- The component names above are useful as an audit of what the old shell does
+  wrong.
+- They are not the required implementation order anymore.
+- Equivalent work should land first in shared primitives, then the future
+  session catalog shell, then the right-hand detail pane.
+
 ## Desired Outcome
 - All primary UI surfaces are sharp (no radii). This includes panels, list rows, inputs, tags, and inline code.
 - Surfaces are opaque, no “glass” or translucency. Backdrop blur and gradients are removed.
 - Shadows are removed or reduced to near-zero. Hierarchy is expressed via borders, typography, and spacing.
 - The design should look clean and dense but not cramped—tight spacing is okay, inconsistent spacing is not.
 - The visual language should be friendly to a future TUI port: simple boxes, plain lines, minimal decorative flourishes.
+- Interaction primitives should compose cleanly with Base UI. Keep the styling
+  local and sharp; do not adopt a pre-styled kit that reintroduces rounded,
+  nested surfaces.
 - A small number of explicit radius exceptions are allowed for semantic controls (e.g. toggle knob/track or scrollbars). If we want zero radius everywhere, replace toggles with checkbox-style rows.
 
 ## The Plan (Execution Order)
@@ -72,9 +104,13 @@ Why:
 Dependencies:
 - After this step, components should migrate from ad-hoc Tailwind classes to the new utilities in Step 3.
 
-### Step 3: Refactor key components to use sharp utilities
+### Step 3: Refactor key surfaces to use sharp utilities
 
 What to do:
+- Prioritize shared utilities and whichever surfaces survive into the new
+  catalog/detail-pane shell.
+- Use the legacy component bullets below as audit targets, not as a mandate to
+  finish the old panel architecture first.
 - `SearchPanel.tsx`:
   - Replace the outer container with `.panel`.
   - Remove `backdrop-blur`, translucent backgrounds, and rounded classes.

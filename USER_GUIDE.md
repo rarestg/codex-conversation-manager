@@ -152,9 +152,9 @@ Back/forward navigation keeps session, turn, and active search state in sync.
 
 ## Copy And Export
 
-Per-message copy options:
-- **Copy text** converts rendered markdown to plain text
-- **Copy MD** copies the raw markdown/content
+Per-message copy options vary by item type:
+- User, assistant, and thought messages expose **Copy text** and **Copy MD**
+- Tool call, tool output, and metadata items expose a single **Copy** action for the raw content
 
 Conversation export:
 - Respects the currently visible toggles

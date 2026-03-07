@@ -1,9 +1,30 @@
-# Sharp UI Refactor — Mapping + Minimal Tag/Panel Spec
+# Sharp UI Design Mapping + Minimal Tag/Panel Spec
+
+## Status
+This is a reusable mapping and inventory doc, not a literal work order for the
+legacy home-screen panels.
+
+Use it to:
+
+- define the minimum sharp surface and label system
+- identify where old UI patterns violate that system
+- remap those rules onto the future session-catalog shell and detail pane
+
+The entries for `SearchPanel`, `SessionsPanel`, and `WorkspacesPanel` are
+historical mappings. They show where the current UI drift lives. They are not a
+reason to keep investing in the old shell.
 
 ## Purpose
 This mapping document defines the minimum tag/panel utility spec and maps each
 component to those utilities. It assumes a sharp, no-radius, no-glass, minimal
 surface language and is meant to prevent ad-hoc class drift during refactors.
+
+The intended frontend direction is:
+
+- Base UI for menus, popovers, dialogs, and other headless interaction
+  primitives
+- local sharp styling for panels, rows, tags, inputs, and buttons
+- row-first layouts that avoid box-in-box-in-box composition
 
 ## Minimal Tag/Panel Spec (Proposed)
 These are the only surface and label utilities needed for the refactor.
@@ -73,6 +94,11 @@ Notes
 Below is a targeted mapping of existing classes to the new utilities. Use this
 as a checklist while refactoring. Each item lists the primary surface(s) and
 label/tag usage that should be replaced.
+
+Legacy-target note:
+- When a mapping points at `SearchPanel`, `SessionsPanel`, or `WorkspacesPanel`,
+  treat it as a source of reusable rules for the future catalog shell.
+- Do not treat those entries as a mandate to finish the legacy home UI.
 
 1. `src/index.css`
 - Replace `.chip` and variants with sharp tag definitions.

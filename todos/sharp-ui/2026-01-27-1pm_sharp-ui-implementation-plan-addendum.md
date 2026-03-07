@@ -3,11 +3,24 @@
 ## Purpose
 This addendum captures the concrete code touchpoints, design-system inventory, and
 critical UX decisions needed to implement the sharp/no-radius refactor described in
-`todos/2026-01-28-1pm_sharp-ui-implementation-plan.md`. It is intentionally
+`todos/sharp-ui/2026-01-27-1pm_sharp-ui-implementation-plan.md`. It is intentionally
 context-rich so implementation can proceed without re-auditing the codebase.
 
 This is NOT a new plan. It is a scoped, actionable mapping of the plan to the
 existing code and UI primitives, with a UX-first simplification lens.
+
+## Status
+Use this file as design-system inventory and migration context.
+
+References to `SearchPanel`, `SessionsPanel`, and `WorkspacesPanel` are
+historical audits until the session-catalog shell exists. Do not use this file
+as a reason to keep polishing the legacy panel architecture.
+
+Prefer:
+
+- shared CSS tokens and primitives
+- Base UI for dialogs, popovers, menus, and similar interaction primitives
+- a crisp layout that avoids nested box-in-box-in-box composition
 
 ## UX/Design Decisions Required (Before Coding)
 These choices affect multiple files and should be decided once, centrally:
@@ -51,9 +64,12 @@ These choices affect multiple files and should be decided once, centrally:
 6. Primitives strategy
    - Option A: start with CSS utilities + CVA recipes to reduce class drift.
    - Option B: introduce `<Panel/>`, `<Tag/>`, `<Button/>`, `<Input/>` wrappers immediately.
-   - Recommendation: start with utilities/CVA recipes first; add wrappers only if drift returns.
-   - Caveat: wrappers are higher churn. Prefer recipes first; promote to components only if
-     class drift persists after refactor.
+   - Option C: use Base UI for dialogs, popovers, menus, and similar headless interaction
+     primitives while keeping sharp surface styling local.
+   - Recommendation: use Base UI for interaction primitives and keep local utilities/recipes
+     for panels, tags, buttons, and inputs. Add wrappers only if drift returns.
+   - Caveat: a pre-styled component kit would fight the visual goal. Keep the surface language
+     local, tight, and explicitly sharp.
 
 ## Design-System Inventory: Pills/Chips (Current)
 Current system is fragmented and should be consolidated.

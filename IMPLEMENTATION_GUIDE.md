@@ -38,7 +38,7 @@ Frontend:
 - React 19 + TypeScript (strict)
 - Vite 7
 - Tailwind CSS 4 via `@tailwindcss/vite`
-- `react-markdown` + `remark-gfm` + `rehype-sanitize`
+- `react-markdown` + `remark-gfm` + `rehype-raw` + `rehype-sanitize`
 - `react-syntax-highlighter` (Prism)
 
 Backend (Vite dev server middleware):

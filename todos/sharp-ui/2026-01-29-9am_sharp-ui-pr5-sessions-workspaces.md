@@ -1,5 +1,15 @@
 # PR 5 — SessionsPanel + WorkspacesPanel: Lists + Selection
 
+## Status
+Re-scope required.
+
+The legacy `SessionsPanel` and `WorkspacesPanel` targets below are historical.
+Do not spend a PR polishing those panels as end-state architecture.
+
+The design intent survives: one metadata-rich, scan-first session catalog with
+clear row selection, workspace-as-filter behavior, and strong keyboard focus.
+Apply these rules to the future catalog pane first.
+
 ## Read first (required)
 - `todos/sharp-ui/2026-01-27-1pm_sharp-ui-implementation-plan.md`
 - `todos/sharp-ui/2026-01-27-1pm_sharp-ui-implementation-plan-mapping.md`
@@ -10,18 +20,23 @@
 - `src/index.css` (list/row primitives)
 
 ## Goal
-Convert the remaining “tile” UI to **true row lists** with clear selection and focus states.
+Convert the old tile-based browse model into **true row lists** with clear
+selection and focus states, then carry that into the unified session catalog.
 
 ## Scope
-SessionsPanel tree + WorkspacesPanel list.
+Unified catalog row-selection rules, workspace-filter affordances, and any
+shared list primitives needed to support them.
 
 ## Files to touch
-- `src/features/conversation/components/SessionsPanel.tsx`
-- `src/features/conversation/components/WorkspacesPanel.tsx`
+- Future session-catalog pane and its row/filter components once they exist
 - Optional: `src/index.css` (add `.disclosure-row` or list helpers if needed)
 
+Historical references only:
+- `src/features/conversation/components/SessionsPanel.tsx`
+- `src/features/conversation/components/WorkspacesPanel.tsx`
+
 ## Implementation steps
-### SessionsPanel
+### Historical SessionsPanel mapping
 1) Panel shell
    - Replace frosted container with `panel p-5`.
 2) Tree structure
@@ -38,7 +53,7 @@ SessionsPanel tree + WorkspacesPanel list.
    - Do not break `details` open state logic or scroll-into-view.
    - Keep `activeRowRef` wiring unchanged.
 
-### WorkspacesPanel
+### Historical WorkspacesPanel mapping
 1) Panel shell to `panel p-5`.
 2) Convert workspace cards into a `.list` with `.list-row row-button`.
 3) Selected workspace uses `.row-selected` (left accent).
@@ -47,9 +62,11 @@ SessionsPanel tree + WorkspacesPanel list.
    - Ensure keyboard users can discover it.
 
 ## Acceptance criteria
-- Sessions and workspaces are now list-based, not card stacks.
+- The browse model is row-based, not card-based.
 - Selected rows are unmistakable (left accent + bg).
 - Focus styles are visible on disclosure rows and session rows.
+- Workspace scope behaves like a filter or saved scope in the unified catalog,
+  not a separate destination.
 
 ## Verification
 - Expand/collapse year/month/day; check hover/focus states.

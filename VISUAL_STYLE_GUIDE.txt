@@ -1,9 +1,17 @@
 Codex Conversation Manager — Visual Design Guide (Sharp UI System)
 
 Purpose
-This guide defines the long-term visual and interaction standards for Codex
+This guide defines the target-state visual and interaction direction for Codex
 Conversation Manager. It replaces older “glassy / pill / card” conventions with a
 sharp, scan-first, devtool-native system.
+
+The current app is still in transition and does not fully conform yet. Treat this file
+as the direction for new UI, substantial restyles, and the eventual component-system
+cleanup, not as a claim that every existing screen already matches it.
+
+The intended trajectory is a cleaner, more coherent frontend system over time, likely
+using Base UI primitives where helpful, tuned for tight spacing, sharp corners, strong
+focus states, and fewer nested containers.
 
 Use this guide when:
 - adding UI
@@ -13,14 +21,17 @@ Use this guide when:
 
 Non-goals
 - This is not a one-off migration plan (“make it sharp”). That plan can live in
-  /todos and eventually /done-tasks.
+  /todos and eventually `todos/_done/INDEX.txt`.
 - This is not a full design system for all products. It’s tailored to this repo’s
   devtool UI: dense, readable, keyboard-safe, and consistent.
 
+============================================================
+1) Product Aesthetic and Constraints (Target-State Rules)
+============================================================
 
-============================================================
-1) Product Aesthetic and Constraints (Hard Rules)
-============================================================
+These rules define the destination system we are migrating toward. Legacy screens may
+temporarily violate them; the goal is to move touched UI closer to this contract rather
+than pretend untouched areas already comply.
 
 Sharp UI Rules
 1) No rounded corners (radius = 0)
@@ -43,7 +54,6 @@ Sharp UI Rules
 5) Preserve the existing spacing rhythm
    - Do not “fix” sharpness by changing spacing everywhere.
    - Make the UI sharper by changing surfaces + states, not by compressing layout.
-
 
 ============================================================
 2) Core Principles (How the UI Should Feel)
@@ -70,7 +80,6 @@ Sharp UI Rules
    - Keyboard navigation must always have a visible focus state.
    - Motion respects prefers-reduced-motion.
 
-
 ============================================================
 3) Tokens and Naming (Design Language)
 ============================================================
@@ -87,14 +96,13 @@ Naming
 - The codebase may keep the class name “chip” temporarily to reduce churn, but it
   should mean “sharp tag”, not a rounded pill.
 
-
 ============================================================
 4) Layout and Spacing Rhythm
 ============================================================
 
 Rule: One spacing system per stack
-- Use a single parent gap (gap-* or space-y-*) to control vertical rhythm inside a section.
-- Avoid mixing parent gaps with ad-hoc child margins (mt-*, mb-*) unless there is a
+- Use a single parent gap (`gap-*` or `space-y-*`) to control vertical rhythm inside a section.
+- Avoid mixing parent gaps with ad-hoc child margins (`mt-*`, `mb-*`) unless there is a
   documented exception.
 - If spacing feels off, change the parent gap instead of patching child margins.
 
@@ -107,7 +115,6 @@ Grid safety
 - Always define explicit columns at all breakpoints (grid-cols-1, etc.).
 - Always use min-w-0 on grid children that contain truncating text.
 - Use truncation intentionally (truncate / line-clamp) to prevent horizontal bleed.
-
 
 ============================================================
 5) Surfaces and Containers
@@ -126,7 +133,6 @@ Hierarchy strategy
 Empty states
 - Use dashed border + clear copy.
 - Empty states are content blocks, not interactive elements.
-
 
 ============================================================
 6) Lists and Rows (Scan-First Contract)
@@ -159,7 +165,6 @@ Numeric scanability
 - Use tabular-nums for numeric-heavy chips/tags/columns.
 - Align metrics consistently (same column positions across rows when possible).
 
-
 ============================================================
 7) Focus and Keyboard Navigation (Hard Requirements)
 ============================================================
@@ -177,7 +182,6 @@ Compound controls
 Keyboard affordance
 - If an action appears on hover, it must also appear on focus-within (keyboard).
 - All interactive elements must be reachable and visually focusable.
-
 
 ============================================================
 8) Controls and Inputs
@@ -197,7 +201,6 @@ Toggles (recommended approach)
 - Prefer checkbox-style controls for “sharp devtool” feel.
 - If a switch UI is used, it must not depend on rounded track/knob.
 - Toggle containers must have focus-within styling (common regression risk).
-
 
 ============================================================
 9) Tags (Status, Labels, Chips)
@@ -233,7 +236,6 @@ Stable width rule for labels that change
 - When a tag/button label changes (e.g., “On” -> “Off”), reserve width to avoid UI jitter.
 - Preferred technique: “reserve label overlay” (see section 11).
 
-
 ============================================================
 10) Content Blocks (Conversation, Markdown, Code)
 ============================================================
@@ -251,7 +253,6 @@ Markdown + code
 Highlights (search snippets)
 - Highlights should be sharp (no rounding) and subtle.
 - Avoid high-saturation “marker” colors that dominate reading.
-
 
 ============================================================
 11) Label Width Stability (No Layout Shift)
@@ -273,7 +274,6 @@ Example pattern (conceptual)
 Notes
 - This is already the approach used in CopyButton; follow the same pattern.
 - Use this for StatusTag/StatusPill when label changes between states (“on/off”).
-
 
 ============================================================
 12) Copy UX Standard (CopyButton + Copy Interactions)
@@ -306,7 +306,6 @@ CopyButton rules
 5) Focus
    - CopyButton must always show focus-visible (do not rely on chip/button wrappers).
 
-
 ============================================================
 13) Modals and Overlays
 ============================================================
@@ -324,7 +323,6 @@ Keyboard
 - Focus trap must be correct (implementation detail), but visually:
   - focus-visible must remain obvious on all elements inside the modal.
 
-
 ============================================================
 14) Motion
 ============================================================
@@ -337,10 +335,12 @@ Motion should never be “decorative gloss” in this UI.
   - remove repeated animations
   - disable parallax-like behaviors
 
-
 ============================================================
 15) Consistency Checklist (PR Review)
 ============================================================
+
+Use this checklist for new UI, major restyles, and sharp/Base UI migration work. For
+legacy areas, document deliberate exceptions instead of claiming full conformance.
 
 Sharp rules
 - Any rounded corners? (rounded-*) -> remove (or document exception)
@@ -374,7 +374,6 @@ Vendor
 - Scrollbar handles sharp (no forced rounding)?
 - Any third-party rounding documented?
 
-
 ============================================================
 16) Spacing/State Debug Playbook
 ============================================================
@@ -396,7 +395,6 @@ If UI feels “busy” after removing shadows
 2) Prefer list separators over bordered tiles.
 3) Use headers and typographic weight for structure.
 
-
 ============================================================
 17) Exceptions Policy
 ============================================================
@@ -409,11 +407,9 @@ When an exception is necessary:
   - add a note here if it’s recurring or system-wide
 - Prefer fixing upstream styling hooks (vendor overrides) over accepting inconsistency.
 
-
 == THE FOLLOWING RULES ARE APPLICABLE TO MESSAGE RENDERING IN CONVERSATIONS / TURNS
 == BETWEEN USER AND ASSISTANT, SINCE WE LIKELY USE MARKDOWN RENDERERS AND MONOSPACED
 == FONTS TO RENDER A CONVERSATION THAT TOOK PLACE IN THE TERMINAL
-
 
 ============================================================
 Typography and Message Rendering (Terminal-Adjacent Rules)
@@ -424,6 +420,15 @@ Goals
 - Accuracy: user input should be represented faithfully.
 - Safety: markdown rendering must be sanitized and never execute raw HTML.
 - Resilience: message rendering must not crash a turn if the markdown pipeline fails.
+
+Current implementation snapshot
+- Today, `user`, `assistant`, and `thought` items all render through the sanitized
+  markdown pipeline.
+- `tool_call`, `tool_output`, and `meta` items render as literal preformatted blocks.
+- There is not yet a dedicated error-boundary fallback around the markdown renderer.
+
+The policy below describes the target rendering direction. Keep `IMPLEMENTATION_GUIDE.md`
+and `USER_GUIDE.md` as the source of truth for the current shipped behavior.
 
 Font policy
 1) UI chrome vs message content
@@ -439,9 +444,9 @@ Font policy
    - Prefer monospace families with good bold + italic so markdown emphasis doesn’t look broken.
    - If italic renders poorly (fake oblique), consider mapping <em> to underline in markdown styling.
 
-Rendering policy by message type
-1) User messages (default: literal)
-   - Default rendering is literal text (no markdown parsing).
+Target rendering policy by message type
+1) User messages (target: literal by default)
+   - Preferred end state is literal text rendering (no markdown parsing).
    - Preserve whitespace and characters exactly as typed.
    - Use a pre-wrap style (whitespace-pre-wrap) so prompts remain readable without horizontal scrolling.
    - Optional: provide a user-visible toggle to “Render Markdown” for that message or globally.
@@ -462,9 +467,9 @@ Rendering policy by message type
 4) Token telemetry (structured)
    - TokenCount entries render as structured UI, not markdown.
 
-Fallback rule (must not crash)
+Target resilience rule
 - The markdown renderer may fail due to plugin/transform bugs or malformed injected markup.
-- Wrap markdown rendering in an error boundary and fall back to literal rendering:
+- Add an error boundary and fall back to literal rendering:
   - show raw text in a code-block container
   - do not crash the whole turn/session view
 
@@ -472,7 +477,7 @@ Security rule
 - Do not render unsanitized HTML from any message content.
 - If a pipeline requires raw HTML for internal features (e.g., search highlights),
   sanitize and restrict allowed elements/attributes.
-- User messages should never be allowed to inject HTML into the UI.
+- User-authored content must never inject unsanitized HTML into the UI.
 
 Copy behavior alignment
 - Always support copying the raw source:

@@ -1,5 +1,15 @@
 # PR 4 — SearchPanel: Sections + Row List
 
+## Status
+Re-scope required.
+
+This file preserves the scan-first list rules from the old `SearchPanel` plan.
+Do not open a PR just to polish the current `SearchPanel`.
+
+The intended destination is the future session-catalog pane and its
+filter/search surfaces. Only do legacy `SearchPanel` work if it is a reusable
+primitive migration or a low-risk stopgap that clearly carries forward.
+
 ## Read first (required)
 - `todos/sharp-ui/2026-01-27-1pm_sharp-ui-implementation-plan.md`
 - `todos/sharp-ui/2026-01-27-1pm_sharp-ui-implementation-plan-mapping.md`
@@ -9,14 +19,19 @@
 - `src/index.css` (search-related utilities)
 
 ## Goal
-Make Search the first “scan-first” proof point: **row-based results** with clear focus/hover states and no nested cards.
+Make search and filtering the first scan-first proof point:
+**row-based results** with clear focus/hover states and no nested cards.
 
 ## Scope
-SearchPanel layout + search-related CSS utilities (if needed).
+Search/filter layout rules plus search-related CSS utilities that should carry
+forward into the future session catalog pane.
 
 ## Files to touch
-- `src/features/conversation/components/SearchPanel.tsx`
+- Future session-catalog pane/filter surfaces once they exist
 - `src/index.css` (search skeletons, search-result chips, list helpers)
+
+Historical reference only:
+- `src/features/conversation/components/SearchPanel.tsx`
 
 ## Implementation steps
 1) Outer container becomes a sharp panel
@@ -32,6 +47,7 @@ SearchPanel layout + search-related CSS utilities (if needed).
    - Wrap results in `.list` and use `divide-y` (or `.list` + `> * + * { border-top }`).
    - Each result row uses `.list-row row-button focusable`.
    - Remove per-row borders and rounded corners.
+   - In the new shell, prefer one unified catalog list over grouped mini-cards.
 5) Interaction states (non-optional)
    - Hover: subtle bg shift.
    - Focus-visible: outline (from `.focusable`).
@@ -42,8 +58,8 @@ SearchPanel layout + search-related CSS utilities (if needed).
    - Update `.search-skeleton-*` to remove rounding and translucency.
 
 ## Acceptance criteria
-- Search results read as a single list, not nested cards.
-- No rounded corners or shadows in SearchPanel or result rows.
+- Search/filter results read as a single list, not nested cards.
+- No rounded corners or shadows remain in the shared list/search primitives.
 - Keyboard focus on result rows is clearly visible.
 
 ## Verification
