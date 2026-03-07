@@ -1,12 +1,17 @@
 # Codex Conversation Manager — Implementation Guide
 
 This document replaces the early-era `IMPLEMENTATION_PLAN.txt` and `DESIGN_APPENDIX.txt`.
-It is a living guide for contributors and maintainers, describing how the current system
-works and the invariants that must not change.
+It is the canonical current-state behavior and invariants guide for contributors and
+maintainers: it describes what ships today and what must not break while the architecture
+changes.
+
+Target-state architecture and migration sequencing now live in:
+- `ROADMAP.md` (`## Primary Initiative`)
+- `todos/2026-03-07-2pm_session-catalog-rearchitecture-plan.txt`
 
 If you are new to the codebase:
 - Start with `README.md` for setup and quick orientation.
-- Use this guide for the canonical architecture and invariants.
+- Use this guide for current shipped behavior and invariants.
 - Use `AGENTS.md` for the repo map and task-oriented pointers.
 - Use `USER_GUIDE.md` for user workflows and QA expectations.
 - Use `VISUAL_STYLE_GUIDE.txt` for frontend/design direction.
@@ -47,7 +52,7 @@ Backend (Vite dev server middleware):
 
 ---
 
-## 3) Architecture Overview
+## 3) Current Shipped Architecture Overview
 
 ### Frontend entry and page composition
 - `src/main.tsx` boots the app.
@@ -64,8 +69,10 @@ Backend (Vite dev server middleware):
 - `server/http.ts` provides `sendJson` and `readJsonBody`.
 
 ### Shared contracts and metrics
-- `shared/apiTypes.ts` defines shared response types and sort unions.
-- Client and server import these types directly.
+- `shared/apiTypes.ts` defines legacy/widget-shaped endpoint types and sort unions used by the
+  current home shell during migration.
+- New domain contracts belong in `shared/sessionCatalogTypes.ts` and
+  `shared/sessionDetailTypes.ts`.
 - `shared/sessionMetrics.ts` keeps session metrics and active-duration calculation aligned
   between server indexing and client-side fallback parsing.
 
@@ -143,7 +150,7 @@ Backend (Vite dev server middleware):
 
 ---
 
-## 6) API Endpoints (Current Behavior)
+## 6) Current Legacy Adapters And Supporting Endpoints
 
 ### `GET /api/config`
 Returns `{ value, source }`, where source is `env | config | default`.
@@ -156,11 +163,14 @@ Validates absolute path and directory existence.
 Returns a year/month/day tree of sessions, built from SQLite.
 Accepts optional `workspace` filter.
 Includes `Server-Timing` header.
+This is a current home-shell projection, not the target catalog contract.
 
 ### `GET /api/session?path=...`
 Returns raw JSONL text for a session file.
 Validates path safety (no traversal).
 404 if missing; 403 if unreadable.
+This remains the current debug/export/raw-access path while `GET /api/session-detail`
+becomes the canonical UI contract.
 
 ### `POST /api/reindex`
 Rebuilds index incrementally (mtime/size checks).
@@ -185,6 +195,8 @@ Behavior:
 - Workspace summaries computed for **result workspaces only** (Option A).
 - Deterministic ordering via `sessions.id ASC` tie-breaker.
 - `Server-Timing` header included.
+This grouped response is a legacy adapter for the current search panel, not the target
+catalog/search contract.
 
 ### `GET /api/session-matches`
 Query params:
@@ -201,6 +213,7 @@ Behavior:
 Returns workspace summaries for the sessions table.
 Accepts `sort=last_seen|session_count`.
 Only sessions with non-empty `cwd` contribute workspace rows.
+This is a current panel feed and should collapse into catalog facets during migration.
 
 ### `GET /api/resolve-session?id=...`
 Query params:
@@ -212,6 +225,9 @@ Behavior:
 - Resolves exact `session_id`, then exact `path`, then `path LIKE`.
 - Applies optional workspace filtering before choosing a match.
 - Returns `{ id }` or 404 if not found.
+- During the catalog migration, this should remain a thin adapter over the same
+  locator-resolution service used by `locatorQuery`, so Enter/UUID flows keep working
+  without duplicating lookup logic.
 
 ---
 
@@ -339,7 +355,7 @@ Server-driven:
 
 ---
 
-## 10) Workspace Summaries (Option A)
+## 10) Workspace Summaries (Current Legacy Adapter, Option A)
 
 The search endpoint collects the set of workspaces present in the results and fetches
 only those summaries. This avoids scanning the entire sessions table per search.
@@ -350,7 +366,7 @@ Unknown workspace behavior:
 
 ---
 
-## 11) Frontend Behavior and UX Contracts
+## 11) Frontend Behavior and UX Contracts (Current Home Shell)
 
 ### Home view
 - Search panel + Workspaces panel + Sessions panel.
@@ -361,6 +377,10 @@ Unknown workspace behavior:
 - Pasting an exact UUID attempts immediate session resolution before falling back to FTS.
 - Search sorting controls: results (relevance/matches/recent) and workspaces (last_seen/matches).
 - Opening a session clears any active workspace filter.
+
+This section documents the current shipped home shell. The target replacement is the
+session-catalog split-pane architecture described in `ROADMAP.md` and
+`todos/2026-03-07-2pm_session-catalog-rearchitecture-plan.txt`.
 
 ### Session view
 - Session view is composed around `SessionOverview`, the sticky controls bar, `TurnList`, and `TurnJumpModal`.
@@ -461,6 +481,12 @@ Manual verification flows include:
 - Reindex and clear-index flows rebuild data safely.
 - `/canvas`, `/layouts`, and `/stickytest` remain usable when touching layout/sticky behavior.
 
+Migration parity checks to add once session-detail and session-catalog land:
+- Compare current raw-file parsing against server `session-detail` output for representative
+  sessions, including parse errors, preamble handling, and turn grouping.
+- Compare `/api/resolve-session` against locator-service / `locatorQuery` behavior so Enter
+  and UUID flows stay equivalent during migration.
+
 ---
 
 ## 16) Contribution Tips
@@ -470,7 +496,9 @@ When modifying:
 - Don’t change snippet markers (`[[...]]`) without updating the renderer.
 - Keep `/api/search` and `/api/session-matches` aligned on preamble exclusion.
 - Keep deterministic ordering in search (tie-breaker required).
-- Update shared API types in `shared/apiTypes.ts` when changing response shapes.
+- Update `shared/apiTypes.ts` only for current legacy/widget-shaped endpoints.
+- Put new domain contracts in `shared/sessionCatalogTypes.ts` and
+  `shared/sessionDetailTypes.ts`.
 - Update `shared/sessionMetrics.ts` when changing metric or active-duration definitions.
 - Update `README.md` / `AGENTS.md` when canonical doc locations or validation commands change.
 

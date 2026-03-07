@@ -125,6 +125,8 @@ Important note on search
 - contentQuery is for FTS-backed content search.
 - locatorQuery is for exact-ish session lookup by session_id / path / filename fragments.
 - Do not overload one field to mean both. The current search box does that because the UI is simple; the new architecture should separate them.
+- Keep `/api/resolve-session` as a thin migration adapter over the same locator-resolution
+  service until the new catalog UI fully replaces the current Enter/UUID flow.
 
 Proposed response shape
 - rows: SessionCatalogRow[]
@@ -346,33 +348,37 @@ Step 3: Extend the sessions summary schema
 - Update the indexer to populate them.
 - Keep these additions conservative and query-driven.
 
-Step 4: Add a catalog query module and endpoint
-- Build the query parser, SQL layer, and DTO mapping.
-- Support filters, contentQuery, locatorQuery, sorting, and pagination.
-- Keep deterministic ordering.
-
-Step 5: Add a facet query module and endpoint
-- Provide counts for key exact-value filters and ranges for numeric filters.
-- Treat workspaces as one facet among several, not a special home-screen panel.
-
-Step 6: Add a canonical session detail endpoint
+Step 4: Add a canonical session detail endpoint
 - Return normalized turns/items/session metadata.
 - Keep the raw endpoint for debug/export.
 
-Step 7: Build the new left-pane catalog UI
+Step 5: Migrate the viewer to consume session-detail DTOs
+- Replace client-side raw parsing with the new endpoint.
+- Keep viewer behavior as stable as possible while changing the data source.
+
+Step 6: Add a catalog query module and endpoint
+- Build the query parser, SQL layer, and DTO mapping.
+- Support filters, contentQuery, locatorQuery, sorting, and pagination.
+- Keep deterministic ordering.
+- Keep `/api/resolve-session` as a thin adapter over the same locator-resolution logic
+  during migration.
+
+Step 7: Add a facet query module and endpoint
+- Provide counts for key exact-value filters and ranges for numeric filters.
+- Treat workspaces as one facet among several, not a special home-screen panel.
+
+Step 8: Build the new left-pane catalog UI
 - Base UI for filter menus/popovers.
 - TanStack Table for row state.
 - TanStack Virtual for row rendering.
 - resizable split layout with the current viewer on the right.
 
-Step 8: Migrate the viewer to consume session-detail DTOs
-- Replace client-side raw parsing with the new endpoint.
-- Keep viewer behavior as stable as possible while changing the data source.
-
 Step 9: De-emphasize or remove legacy adapters
 - /api/sessions date tree becomes optional/legacy.
 - /api/workspaces becomes an adapter or disappears once facets land.
 - grouped search becomes a compatibility layer until the new catalog fully replaces it.
+- /api/resolve-session stays as an adapter only as long as the current home shell still
+  needs it.
 
 Decisions and tradeoffs
 
