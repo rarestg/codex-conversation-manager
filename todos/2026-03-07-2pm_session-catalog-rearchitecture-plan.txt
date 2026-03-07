@@ -1,0 +1,412 @@
+Session Catalog Rearchitecture Plan (Backend-First, UI-Decoupled)
+
+Context
+The current app already has a solid indexing core: it scans Codex JSONL files, extracts session-level metrics, stores searchable messages in SQLite FTS, and can load full raw sessions on demand. The problem is that the public API surface is still shaped around the current home UI:
+- /api/sessions returns a date tree.
+- /api/search returns workspace-grouped results for the search panel.
+- /api/workspaces exists as a standalone panel feed.
+- The frontend reparses raw JSONL client-side for the active session view.
+
+That shape made sense for the original UI, but it is the wrong boundary for the next one. The next UI wants one metadata-rich session catalog on the left, powerful filters and search, and a detail pane on the right. The clean approach is not "swap panels for a table"; it is "promote the backend to a canonical session catalog + session detail service, then let the frontend compose views from that."
+
+This plan assumes:
+- Base UI for menus, popovers, dialogs, and other unstyled interaction primitives.
+- TanStack Table for the session catalog state model.
+- TanStack Virtual for large result sets.
+- react-resizable-panels for the left/right split.
+
+Goals
+- Make the backend own scanning, parsing, metadata extraction, and query semantics.
+- Replace UI-shaped API projections with domain-shaped contracts.
+- Support a metadata-rich session catalog with server-driven filtering, sorting, and pagination.
+- Keep the current conversation viewer mostly intact while making it consume cleaner data.
+- Make the future frontend swap incremental instead of a big-bang rewrite.
+
+Non-goals
+- Do not replace SQLite or FTS5.
+- Do not redesign every detail-pane interaction in the same change.
+- Do not try to index every imaginable Codex field on day one.
+- Do not adopt a pre-styled component kit that fights the visual style guide.
+
+Must-not-break invariants
+- sessions.id (the relative file path) remains the canonical navigation key.
+- session_id remains metadata only; it is not safe as the primary identity key.
+- Filename-derived session_id remains authoritative when it conflicts with embedded metadata.
+- Raw session access remains available for debugging, export, and future tooling.
+- Legacy search highlighting markers ([[...]] snippets) remain intact until the old search UI is retired.
+
+Current-state audit
+
+What is already good
+- server/indexing/index.ts already performs durable extraction:
+  - session identity resolution
+  - cwd / git metadata extraction
+  - first user message preview
+  - turn/message/thought/tool/meta/token metrics
+  - active duration metrics
+- shared/sessionMetrics.ts already gives us a reusable metrics contract.
+- server/search/queries.ts already proves that SQLite-backed content search is viable.
+- The sessions table is already close to a useful catalog table.
+
+Where the current architecture is still UI-coupled
+- server/indexing/tree.ts builds a date-tree projection, which is a presentation concern.
+- /api/search returns WorkspaceSearchGroup[], which is tuned to the current grouped search panel.
+- /api/workspaces returns panel-shaped summaries instead of general-purpose facet data.
+- src/features/conversation/hooks/useSession.ts fetches raw text and reparses it in the browser, duplicating parsing rules that the backend already needs.
+- shared/apiTypes.ts mostly describes current widgets, not stable domain contracts.
+
+Clean architecture direction
+The backend should expose four logical layers:
+
+1) Ingest / indexing
+- Scan files.
+- Parse Codex JSONL.
+- Extract durable metadata and metrics.
+- Persist summary rows and searchable message bodies.
+
+2) Catalog query
+- Return one row per session file.
+- Apply filters, ranges, content search, sort, and pagination.
+- Return facet data for filter UIs.
+
+3) Session detail
+- Return the normalized turn/message model for one session.
+- Reuse canonical server parsing logic.
+- Keep a raw-session endpoint as a separate debug/export capability.
+
+4) Legacy adapters
+- Keep /api/sessions, /api/workspaces, and the current grouped search shape during migration if that reduces churn.
+- These should become adapters over the new catalog/query layer, not the other way around.
+
+Key principle
+Do not let the backend expose "whatever the current widget needs." Expose domain objects:
+- SessionCatalogRow
+- SessionCatalogQuery
+- SessionFacetResponse
+- SessionDetail
+- SessionRaw
+
+Then let the UI decide whether to render those as a table, tree, cards, or something else.
+
+Backend contracts the new UI needs
+
+1) Canonical session catalog query
+Add a new endpoint/service whose job is "give me session rows matching this query," not "give me a tree" or "give me grouped search results."
+
+Proposed request shape
+- contentQuery?: string
+- locatorQuery?: string
+- workspaces?: string[]
+- githubSlugs?: string[]
+- gitBranches?: string[]
+- dateFrom?: string
+- dateTo?: string
+- minTurns?: number
+- maxTurns?: number
+- minMessages?: number
+- maxMessages?: number
+- minThoughts?: number
+- maxThoughts?: number
+- minToolCalls?: number
+- maxToolCalls?: number
+- minTokenCounts?: number
+- maxTokenCounts?: number
+- minActiveDurationMs?: number
+- maxActiveDurationMs?: number
+- hasThoughts?: boolean
+- hasToolCalls?: boolean
+- hasTokenCounts?: boolean
+- hasMetadata?: boolean
+- sort?: 'recent' | 'oldest' | 'turns_desc' | 'messages_desc' | 'duration_desc' | 'matches_desc'
+- page?: number
+- pageSize?: number
+
+Important note on search
+- contentQuery is for FTS-backed content search.
+- locatorQuery is for exact-ish session lookup by session_id / path / filename fragments.
+- Do not overload one field to mean both. The current search box does that because the UI is simple; the new architecture should separate them.
+
+Proposed response shape
+- rows: SessionCatalogRow[]
+- totalRows: number
+- page: number
+- pageSize: number
+- totalPages: number
+- appliedQuery: normalized query payload
+- contentTokens?: string[]
+- debug/request metadata when useful (for timing/log correlation)
+
+2) Session facet service
+The table UI will want filter menus with counts. That should be a first-class backend concern rather than an accidental side effect of /api/workspaces.
+
+Recommended approach
+- Add a facet query endpoint/service that accepts the same filters as the catalog query, minus the facet being explored.
+- Return counts for medium-cardinality fields:
+  - workspace
+  - github slug / repo
+  - git branch
+- Return summary ranges for numeric fields:
+  - turns
+  - messages
+  - active duration
+  - token counts
+- For high-cardinality fields, use searchable facet pickers rather than dumping all values at once.
+
+This matters because "metadata-rich rows" is correct, but "show every unique value as a permanent filter menu" is not. High-cardinality values belong in rows and searchable pickers, not in giant checkbox walls.
+
+3) Canonical session detail endpoint
+The frontend should stop reparsing raw JSONL as its primary path.
+
+Add a new endpoint/service:
+- GET /api/session-detail?id=...
+
+Proposed response shape
+- session:
+  - id
+  - sessionId
+  - cwd
+  - gitBranch
+  - gitRepo
+  - gitCommitHash
+  - startedAt
+  - endedAt
+  - activeDurationMs
+  - metrics summary
+- turns:
+  - id
+  - startedAt
+  - activeDurationMs
+  - isPreamble
+  - items[]
+- parseErrors: string[]
+
+Keep the existing raw endpoint (or rename it later to make its purpose clearer), but treat it as:
+- debug/export/raw access
+- not the canonical data contract for the UI
+
+4) Shared query and DTO types
+Create shared types for the new contracts so the backend and frontend stay aligned:
+- shared/sessionCatalogTypes.ts
+- shared/sessionDetailTypes.ts
+
+Keep these files types-only. They should describe contract shapes, not contain runtime helpers.
+
+What the backend is missing today
+
+1) A catalog query service
+Today we have:
+- a tree feed
+- a grouped search feed
+- a workspace summary feed
+
+We do not yet have:
+- one canonical "session rows with filters" query
+
+That is the biggest missing piece.
+
+2) A session detail service owned by the server
+Today, the browser reparses JSONL. That creates duplication and drift risk.
+
+The clean fix is:
+- move canonical parsing ownership to the server
+- reuse one parser for:
+  - indexing summary extraction
+  - on-demand session detail loading
+
+This does not necessarily mean "store full parsed sessions in SQLite." It means "one codepath owns normalization." Full detail can still be parsed from the raw file on demand.
+
+3) Richer summary extraction for table rows
+The current sessions table is a good start, but the catalog UI will benefit from a few more fields.
+
+Recommended additions
+- assistant_message_count
+- tool_output_count
+- malformed_line_count
+- has_parse_issues (derived)
+- maybe preamble_item_count if it proves useful
+
+Optional later, only if the logs support it cleanly
+- model / provider metadata
+- explicit web-search activity flags
+- richer tool taxonomy
+
+Rule: promote only durable, query-worthy metadata into first-class columns. Do not jump straight to a giant JSON blob and call it architecture.
+
+4) Filter parsing and validation
+The new UI will send structured filters. The backend should validate and normalize them in one place before query execution.
+
+Recommended shape
+- server/catalog/filters.ts
+  - parse booleans
+  - clamp numeric ranges
+  - validate sort keys
+  - normalize arrays
+  - trim empty values
+
+5) Pagination and stable sorting
+The current API mostly returns full projections or fixed search limits. A catalog view needs:
+- stable ordering
+- deterministic tie-breakers
+- pagination
+
+For the first implementation, page/pageSize is fine. Cursor pagination can wait unless performance proves otherwise.
+
+Recommended server structure
+
+server/
+- apiPlugin.ts
+- routes/
+  - index.ts
+- http.ts
+- config.ts
+- db/
+  - index.ts
+- indexing/
+  - index.ts
+  - parseSessionFile.ts
+  - extractSessionSummary.ts
+  - tree.ts (legacy adapter until retired)
+- catalog/
+  - types.ts
+  - filters.ts
+  - queries.ts
+  - facets.ts
+- sessionDetail/
+  - getSessionDetail.ts
+- search/
+  - normalize.ts
+  - queries.ts
+- workspaces.ts (legacy adapter / helper until catalog facets replace it)
+
+Notes
+- The exact filenames can vary, but the boundary should not.
+- parseSessionFile.ts should become the canonical parser used by both indexing and session detail loading.
+- tree.ts should be treated as a legacy projection module, not a foundational data model.
+
+Recommended database direction
+
+Sessions table remains the anchor
+- Keep one row per session file.
+- Continue using sessions.id/path as the primary key.
+- Add explicit columns for any new filterable metadata.
+
+Messages + FTS remain the content-search engine
+- Keep one searchable messages table.
+- Continue indexing only content that should participate in FTS.
+- Reuse match counts / first-match-turn logic for catalog content search when contentQuery is present.
+
+Do not over-normalize too early
+- We do not need a full data warehouse.
+- We do need:
+  - a strong summary row
+  - good query indexes
+  - predictable DTOs
+
+Frontend implications
+
+Recommended stack
+- Base UI for menus, popovers, dialogs, and other interaction primitives.
+- TanStack Table in manual/server-side mode.
+- TanStack Virtual for the left-pane row windowing.
+- react-resizable-panels for the split layout.
+
+Base UI foundation requirements
+When Base UI is introduced:
+- add root isolation to the app root container
+- add body { position: relative; } to satisfy the iOS Safari backdrop requirement described in the provided quickstart
+
+Recommended frontend state model
+- useSessionCatalog(queryState)
+- useSessionSelection(selectedSessionId)
+- useSessionDetail(selectedSessionId)
+- keep URL state for:
+  - selected session
+  - active content query
+  - active filters
+  - sort
+  - page
+
+Important boundary
+- TanStack Table should control columns, sorting state, row models, and selection state.
+- It should not define the backend contract.
+- The backend contract should remain valid even if the left pane later stops looking like a table.
+
+Migration plan
+
+Step 1: Introduce shared domain contracts
+- Add shared types for catalog rows, catalog query, facets, and session detail.
+- Do this before changing UI code so the new vocabulary is explicit.
+
+Step 2: Extract a canonical server-side session parser
+- Factor the current parsing/extraction logic so indexing and detail loading share one parser.
+- Stop treating frontend parsing as canonical.
+
+Step 3: Extend the sessions summary schema
+- Add any missing columns needed for the catalog.
+- Update the indexer to populate them.
+- Keep these additions conservative and query-driven.
+
+Step 4: Add a catalog query module and endpoint
+- Build the query parser, SQL layer, and DTO mapping.
+- Support filters, contentQuery, locatorQuery, sorting, and pagination.
+- Keep deterministic ordering.
+
+Step 5: Add a facet query module and endpoint
+- Provide counts for key exact-value filters and ranges for numeric filters.
+- Treat workspaces as one facet among several, not a special home-screen panel.
+
+Step 6: Add a canonical session detail endpoint
+- Return normalized turns/items/session metadata.
+- Keep the raw endpoint for debug/export.
+
+Step 7: Build the new left-pane catalog UI
+- Base UI for filter menus/popovers.
+- TanStack Table for row state.
+- TanStack Virtual for row rendering.
+- resizable split layout with the current viewer on the right.
+
+Step 8: Migrate the viewer to consume session-detail DTOs
+- Replace client-side raw parsing with the new endpoint.
+- Keep viewer behavior as stable as possible while changing the data source.
+
+Step 9: De-emphasize or remove legacy adapters
+- /api/sessions date tree becomes optional/legacy.
+- /api/workspaces becomes an adapter or disappears once facets land.
+- grouped search becomes a compatibility layer until the new catalog fully replaces it.
+
+Decisions and tradeoffs
+
+Server-driven filtering vs client-driven filtering
+- Recommendation: server-driven.
+- Why: the app already has SQLite, FTS, and indexed summary data; pushing all sessions to the client just to filter them would duplicate query logic and age badly as the dataset grows.
+
+Canonical detail endpoint vs raw JSONL in the browser
+- Recommendation: canonical detail endpoint.
+- Why: parsing rules should live in one place. The browser can still request raw text when it explicitly needs raw text.
+
+Explicit columns vs flexible metadata blob
+- Recommendation: explicit columns for real filters, optional derived fields later.
+- Why: the left-pane experience depends on fast, predictable filtering. A giant catch-all metadata blob is easy to write and unpleasant to query.
+
+Separate catalog/facet endpoints vs one mega-endpoint
+- Recommendation: separate services, possibly composed by one UI layer later.
+- Why: rows and facets have different performance profiles and can evolve independently.
+
+Why this is cleaner than "just add TanStack Table"
+Because the real redesign is not visual first. The real redesign is:
+- stop centering the backend around the current widgets
+- expose a real session catalog
+- make session detail canonical on the server
+- let the new UI sit on top of that
+
+That keeps the next frontend implementation cheap to change and prevents the table itself from becoming the new architecture trap.
+
+Verification
+- npm run typecheck
+- npm run check
+- manual API sanity checks once endpoints exist
+- compare session detail output against the current viewer for a few representative sessions
+- confirm that filtering + content search + direct session selection can all be expressed without widget-specific adapters
+
+Recommendation
+Implement the backend boundary changes first, then build the new left-pane UI against those contracts. If we do that, the Base UI + TanStack frontend work becomes straightforward. If we skip that step, we will just recreate the current coupling in a more complicated layout.

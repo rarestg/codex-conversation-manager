@@ -1,190 +1,203 @@
 # Codex Conversation Manager — User Guide
 
-This guide is a fast, practical overview of the core features and daily workflows.
-It assumes the app is running locally and you have Codex JSONL sessions on disk.
+This guide is the practical, user-facing walkthrough for the app. It assumes the app is running locally and that your Codex JSONL sessions live on disk.
 
 ---
 
-## Quick Walkthrough (2 minutes)
+## Quick Walkthrough
 
-1) **Search for a session**
-   - Use the search bar on the home screen.
-   - Type a query (e.g., a library name or error message).
-   - Open a result to load the session at the first matching turn.
-   - ![Quick search and open](GIF_URL_HERE)
-
-2) **Jump between turns**
-   - Use **Left/Right Arrow** keys to navigate turns.
-   - Or press **Cmd/Ctrl + K** to open **Go to turn** and jump directly.
-   - ![Turn navigation shortcuts](GIF_URL_HERE)
-
-3) **Inspect thoughts and context usage**
-   - Enable **Show Thoughts** and **Show Token Counts** in the session header.
-   - View the assistant’s reasoning and context usage metrics inline.
-   - ![Thoughts and token counts](GIF_URL_HERE)
+- Search from the home screen to find a session by query, then open a result at the first matching turn.
+- Inside a session, use the sticky controls or keyboard shortcuts to move between turns and matches.
+- Toggle thoughts, tools, metadata, and token counts on or off depending on how much detail you want to inspect.
+- Copy individual messages or export the currently visible conversation view.
 
 ---
 
-## Indexing Your Database
+## First Run And Indexing
 
-The app uses SQLite to index session files for fast search.
+The app uses SQLite to index sessions for fast search and browsing.
 
-How to index:
-- Open **Settings** (gear icon).
+On first run:
+- Open **Settings**.
+- Confirm the sessions root.
 - Click **Reindex** to scan new or changed files.
-- Use **Clear & Rebuild** only if you suspect corruption or want a full reset.
-- ![Reindexing sessions](GIF_URL_HERE)
+
+Use **Clear & Rebuild** only when you want to rebuild the index from scratch.
 
 Notes:
 - Default sessions root: `~/.codex/sessions`
-- Optional config file: `~/.codex-formatter/config.json`
-- Env override: `CODEX_SESSIONS_ROOT` (disables editing in the UI)
+- Saved config file: `~/.codex-formatter/config.json`
+- `CODEX_SESSIONS_ROOT` overrides the root and disables editing it in the UI
 
 ---
 
-## Searching Conversations
+## Searching Sessions
 
-### What you can search
+### What is searchable
+
+Search covers indexed session content:
 - User messages
 - Assistant messages
-- (Thoughts and tools are indexed, but results emphasize user/assistant text)
+- Assistant thoughts
+- Tool calls and tool outputs
+
+Search does not currently cover:
+- Metadata entries such as `session_meta` and `turn_context`
+- Token-count telemetry entries
 
 ### Search behavior
-- Queries are normalized for Unicode and tokenized safely.
-- Minimum token length rules:
-  - Latin script: **>= 3**
-  - Numeric: **>= 2**
-  - Non-Latin: **>= 1**
-- If your query is too short, you’ll see a “Type a longer query” hint.
 
-### Sorting results
-Use the **Results** and **Workspaces** dropdowns:
-- Results: **Relevance**, **Most matches**, **Most recent**
-- Workspaces: **Last active**, **Most matches**
-- The server honors these parameters and keeps ordering deterministic.
+- Typing performs a short debounce before search runs.
+- Queries must contain at least one searchable token:
+  - Latin script: `>= 3` characters
+  - Numeric: `>= 2`
+  - Non-Latin: `>= 1`
+- If your query is too short, the UI stays in a "Type a longer query to search" state.
+- Press **Enter** in the search box to try resolving a session ID or path fragment directly.
+- Pasting an exact UUID tries to open the session immediately before falling back to normal search.
 
-### Grouped results
-Search results are grouped by workspace and include:
-- Match counts
-- Session metadata chips
-- Snippet highlights
+### Results and sorting
 
-![Search sorting and grouping](GIF_URL_HERE)
+Search results are:
+- Grouped by workspace
+- Returned one row per session
+- Shown with match counts, snippets, and session metadata chips
+
+Sort controls:
+- **Results**: Relevance, Most matches, Most recent
+- **Workspaces**: Last active, Most matches
 
 ---
 
-## Limiting to a Workspace or Folder
+## Filtering By Workspace
 
-You can scope search and session browsing to a workspace:
+You can scope the home view to one workspace:
 - Use the **Workspaces** panel to pick a workspace.
-- The **Sessions** panel and **Search** results will be filtered.
-- Clear the filter to return to the full view.
+- The **Search** and **Sessions** panels will filter to that workspace.
+- Clear the filter to return to the full home view.
 
-![Workspace filtering](GIF_URL_HERE)
+Current behavior to know:
+- Opening a session clears the active home-view workspace filter.
 
 ---
 
-## Browsing the Session List
+## Browsing Sessions
 
-The sessions browser is a year → month → day tree.
+The sessions browser is a year → month → day tree backed by the SQLite index.
 
 You can:
-- Expand dates to reveal sessions.
-- See chips for time, duration, turns, and repo metadata.
-- Copy the session ID directly from the row.
-- Click a session to open it.
+- Expand dates to reveal sessions
+- See chips for time, duration, turns, and repo metadata
+- Copy the session ID directly from the row
+- Open a session from the list
 
-![Browsing the session tree](GIF_URL_HERE)
+If a session file has been deleted or moved since indexing, the row can be stale until you reindex.
 
 ---
 
-## Working Inside a Session
+## Working Inside A Session
 
 ### Header and toggles
-The header shows:
-- Session time, duration, turns, and counts
-- Copyable session ID and workspace path
-- **Copy conversation** export button
 
-Toggles:
+The session header shows:
+- Session time and relative recency
+- Duration and turn count
+- Token-count totals and visible-item count
+- Copyable session ID and workspace path
+- **Copy conversation** export action
+
+Available toggles:
 - Show Thoughts
 - Show Tools
 - Show Metadata
 - Show Token Counts
 - Show Full Content
 
-![Session header toggles](GIF_URL_HERE)
+When **Show Token Counts** is on, the UI only shows token-count entries that follow content and contain usage data.
 
-### Copy and export
-Per-message copy options:
-- Copy text (markdown stripped)
-- Copy markdown (raw content)
+### Search within a session
+
+When a session is open from search or has a `?q=` query in the URL:
+- Matching turns are highlighted
+- The sticky bar shows the active query
+- **Prev** and **Next** move through matching turns only
+- Preamble entries are excluded from match navigation
+
+---
+
+## Keyboard Navigation
+
+Shortcuts are focus-gated: they only work when the messages pane is focused.
+
+Available shortcuts:
+- **Left / Right Arrow**: previous / next turn
+- **Cmd/Ctrl + Up Arrow**: first turn
+- **Cmd/Ctrl + Down Arrow**: last turn
+- **Cmd/Ctrl + K**: open **Go to turn**
+- **Cmd/Ctrl + Shift + H**: return Home
+
+The sticky controls bar shows whether shortcuts are currently active.
+
+---
+
+## Deep Links
+
+The app supports URL-based deep links:
+- `?session=...&turn=...` opens a specific session and turn
+- `?q=...` preserves the active search term for in-session match highlighting and navigation
+
+Back/forward navigation keeps session, turn, and active search state in sync.
+
+---
+
+## Copy And Export
+
+Per-message copy options vary by item type:
+- User, assistant, and thought messages expose **Copy text** and **Copy MD**
+- Tool call, tool output, and metadata items expose a single **Copy** action for the raw content
 
 Conversation export:
-- Uses XML-like tags for user/assistant/thought/tool blocks
-- Respects visibility toggles
-
-![Copy and export](GIF_URL_HERE)
-
----
-
-## Turn Navigation and Deep Links
-
-### Keyboard navigation
-- **Left/Right Arrow**: move to previous/next turn
-- **Cmd/Ctrl + K**: open “Go to turn” modal
-
-### URL deep linking
-- `?session=...&turn=...` deep links to a specific turn
-- `?q=...` deep links to a search match and enables Next/Prev
-
-![Turn jump modal](GIF_URL_HERE)
+- Respects the currently visible toggles
+- Uses XML-like tags for exported blocks
+- Includes user, assistant, thought, tool, metadata, and token-count entries when visible
 
 ---
 
-## Match Navigation (Search Within a Session)
+## Settings
 
-When a search query is active:
-- The session view shows a **match bar**.
-- Use **Prev/Next** to move between matching turns.
-- Matches are highlighted and only include turns > 0 (preamble excluded).
+The Settings modal lets you:
+- Change the sessions root when `CODEX_SESSIONS_ROOT` is not set
+- Reindex new or changed files
+- Clear and rebuild the index
 
-![Session match navigation](GIF_URL_HERE)
-
----
-
-## Settings and Configuration
-
-Settings modal allows:
-- Changing sessions root (disabled when `CODEX_SESSIONS_ROOT` is set)
-- Reindexing and clear/rebuild flows
-
-![Settings modal](GIF_URL_HERE)
+If you change the root, reindex before expecting accurate browsing or search results.
 
 ---
 
 ## Troubleshooting
 
 ### Search returns nothing
-- Reindex the sessions root.
-- Check if your query is long enough (token rules above).
 
-### Session file not found
-- The session list is DB-backed; reindex to refresh stale entries.
+- Reindex the current sessions root
+- Make sure the query is long enough to be searchable
+- Confirm you are not still scoped to a workspace filter on the home view
 
-### Workspace filter feels wrong
-- Clear the filter and retry search/browse to verify root scope.
+### A session row opens to "file not found"
+
+- The sessions list is index-backed, so stale rows can survive until the next reindex
+- Run **Reindex** to refresh the database view of the filesystem
+
+### Workspace filtering feels inconsistent
+
+- Workspace filters apply on the home view only
+- Opening a session clears the active workspace filter
+- Return Home if you want to choose a different workspace filter
 
 ---
 
-## Feature Recap (Checklist)
+## Recap
 
-- Local JSONL session browser with turn grouping
-- SQLite-backed indexing and FTS search
-- Workspace-grouped search results with sort controls
-- Search match navigation with `?q=` deep links
-- Sessions tree (year/month/day) + copyable session IDs
-- Session header stats and copy actions
-- Token count visualization + export
-- Turn navigation via arrows and Cmd/Ctrl+K
-- Settings modal for root + indexing management
+- Index the sessions root before relying on browse/search
+- Use search for session-level discovery and `?q=` for in-session match navigation
+- Use toggles to reduce noise and export exactly the visible conversation surface
+- Focus the messages pane before using keyboard shortcuts

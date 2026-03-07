@@ -1,11 +1,33 @@
-# Sharp UI Refactor Plan (No-Radius, Low-Fluff Theme)
+# Sharp UI Design Reference (No-Radius, Low-Fluff Theme)
+
+## Status
+This is a design-reference doc, not a literal implementation ticket for the
+current home-screen shell.
+
+Use it for:
+
+- reusable visual principles
+- shared sharp primitives and focus rules
+- migration heuristics for a crisp devtool UI
+
+Treat direct references to `SearchPanel`, `SessionsPanel`, and
+`WorkspacesPanel` as historical mappings from the legacy shell. Remap those
+ideas onto the future session-catalog + detail-pane layout in
+`todos/2026-03-07-2pm_session-catalog-rearchitecture-plan.txt` before doing
+panel-specific implementation work.
+
+Do not spend major effort polishing the legacy home panels just because they are
+named in this file. Prioritize shared primitives, Base UI-friendly interaction
+patterns, and the future catalog shell.
 
 ## Context
 We are shifting Codex Conversation Manager to a sharp, low-ornament interface that feels closer to a terminal/TUI aesthetic: no rounded corners, no translucent glass, minimal shadows, and a simpler visual hierarchy that prioritizes clarity and scanability. The current UI (see `src/index.css` and components like `SessionHeaderVariantB`, `SearchPanel`, `TurnCard`, `TurnList`) leans on rounded surfaces, soft shadows, translucent layers, and rich background gradients. These design choices look polished but read as “consumer UI,” which is misaligned with a devtool that should feel snappy, direct, and utilitarian.
 
 We are not moving to TUI/INK yet, but we should treat this as a step toward that direction. The new design must avoid visual dependencies that don’t translate to terminal-like rendering (rounded corners, blur, layered transparency), and should rely on plain boxes, borders, and high-contrast text.
 
-This document is a complete implementation handoff. It explains what to change, why, and how to verify each step.
+This document is a design-reference handoff. It explains what to preserve, what
+to remove, and how to judge whether a new UI surface is moving in the right
+direction.
 
 ## Relevant Codebase Areas
 - Global styling and utilities live in `src/index.css`. This file defines color tokens, typography, background gradients, chip/pill utilities, and custom shadows. It is the single most impactful file for the theme change.
@@ -17,25 +39,40 @@ This document is a complete implementation handoff. It explains what to change, 
   - Shared UI helpers like `CopyButton` and chip utilities defined in `src/index.css`.
 - `VISUAL_STYLE_GUIDE.txt` codifies spacing rhythm and CopyButton rules. It must be updated to express the new sharp-only style while preserving spacing and interaction standards.
 
+Legacy-target note:
+- The component names above are useful as an audit of what the old shell does
+  wrong.
+- They are not the required implementation order anymore.
+- Equivalent work should land first in shared primitives, then the future
+  session catalog shell, then the right-hand detail pane.
+
 ## Desired Outcome
-- All UI surfaces are sharp (no radii). This includes cards, inputs, chips/tags, and inline code.
+- All primary UI surfaces are sharp (no radii). This includes panels, list rows, inputs, tags, and inline code.
 - Surfaces are opaque, no “glass” or translucency. Backdrop blur and gradients are removed.
 - Shadows are removed or reduced to near-zero. Hierarchy is expressed via borders, typography, and spacing.
 - The design should look clean and dense but not cramped—tight spacing is okay, inconsistent spacing is not.
 - The visual language should be friendly to a future TUI port: simple boxes, plain lines, minimal decorative flourishes.
+- Interaction primitives should compose cleanly with Base UI. Keep the styling
+  local and sharp; do not adopt a pre-styled kit that reintroduces rounded,
+  nested surfaces.
+- A small number of explicit radius exceptions are allowed for semantic controls (e.g. toggle knob/track or scrollbars). If we want zero radius everywhere, replace toggles with checkbox-style rows.
 
 ## The Plan (Execution Order)
 
 ### Step 1: Establish sharp theme tokens and base surfaces in `src/index.css`
 
 What to do:
-- Replace the current root color palette with a minimal, high-contrast palette suitable for sharp surfaces. Keep variables for inks and surfaces so component classes stay readable. Example: `--surface-0`, `--surface-1`, `--border-strong`, `--border-soft`, `--accent`.
+- Introduce surface/border/accent tokens mapped to the current palette (avoid a full palette swap). Example: `--surface-0`, `--surface-1`, `--border-strong`, `--border-soft`, `--accent`.
 - Remove background gradients and set a flat background on `body`.
-- Set a neutral, low-ornament base font (a clean mono-forward or simple sans). If you keep Sora, make sure it doesn’t feel “brand-heavy.” For a TUI-leaning feel, prefer a mono or hybrid (e.g., mono for UI, sans for headings). This should be a deliberate decision documented in the style guide.
+- Set a neutral, low-ornament base font and document the typography split:
+  - UI chrome / metadata: mono-forward (or at least tabular-nums, monospace IDs).
+  - Conversation body: readable sans (or keep the current body font).
+  - Headings: neutral sans; if Sora stays, tone down the “brand-y” feel via weight/size choices.
 
 Why:
 - A single, flat background eliminates “consumer app” gloss and avoids effects that won’t translate to TUI.
 - Centralized variables prevent a whack-a-mole of per-component color changes.
+- De-scoping a palette replacement reduces contrast regressions while still delivering most of the visual shift.
 
 Dependencies:
 - None, but this will inform how component class refactors are structured.
@@ -50,21 +87,30 @@ What to do:
   - Remove `shadow-card` and `shadow-soft` or reduce them to no-op utilities. If you retain a “shadow,” it should be barely visible and not used for hierarchy.
 - Introduce new shared classes for surfaces and states to replace repetitive Tailwind class strings:
   - `.panel` (primary container: solid background, solid border, sharp edges).
-  - `.panel-muted` (subtle background for nested sections).
+  - `.panel-muted` (subtle background for nested sections; avoid extra borders when nested to prevent border overload).
   - `.panel-dashed` (empty/placeholder state).
   - `.panel-header` or `.panel-row` (tight header rows with clear text hierarchy).
+  - `.row`, `.row-button`, `.row-selected`, `.row-focus` (base row layout + interactive states).
 - Update `.chip` naming in the guide to “tag” or “label.” If the team prefers “chip,” keep the name but redefine the style to be sharp.
+- Decide whether `.panel` includes padding. Recommendation: `.panel` is surface only (bg + border), components keep their existing `p-*` to preserve spacing rhythm.
+- Define a focus strategy here (outline-based, not ring-based). Example:
+  - `focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-500 focus-visible:outline-offset-[-2px]`
 
 Why:
 - Having one or two surface utilities reduces component class noise and makes the theme consistent.
 - The old rounded/glassy styles were pervasive; replacing them centrally is faster and less error-prone.
+- Row utilities prevent per-component focus/hover drift once “cards” become lists.
 
 Dependencies:
 - After this step, components should migrate from ad-hoc Tailwind classes to the new utilities in Step 3.
 
-### Step 3: Refactor key components to use sharp utilities
+### Step 3: Refactor key surfaces to use sharp utilities
 
 What to do:
+- Prioritize shared utilities and whichever surfaces survive into the new
+  catalog/detail-pane shell.
+- Use the legacy component bullets below as audit targets, not as a mandate to
+  finish the old panel architecture first.
 - `SearchPanel.tsx`:
   - Replace the outer container with `.panel`.
   - Remove `backdrop-blur`, translucent backgrounds, and rounded classes.
@@ -83,10 +129,22 @@ What to do:
   - Meta rows should use the updated `.meta-row` (sharp).
 - Check other high-surface components even if not listed here: `Sidebar.tsx`, `SessionsPanel.tsx`, `WorkspacesPanel.tsx`, `MessageCard.tsx`, `SettingsModal.tsx`, `Toggle.tsx`.
   - Any `rounded-*`, `shadow-*`, `bg-white/XX`, or `backdrop-blur` should be replaced with sharp equivalents.
+  - For list-style components, convert `space-y-*` + per-row borders to:
+    - single container border
+    - `divide-y` separators
+    - rows without per-row borders
+    - a persistent selected indicator (e.g., left bar + background)
+  - Ensure hover is mirrored by keyboard focus (`:focus-visible`, `:focus-within`) so clickability isn’t lost.
 
 Why:
 - The theme cannot be achieved only through utilities; per-component class cleanup is required.
 - This also reduces repeated class strings and makes future changes easier.
+- Row-based structure requires minimal markup/layout changes; swapping classes alone will not deliver the scan-first feel.
+
+### Focus Implementation Rule (Non-Optional)
+- Focus styling must be outline-based (no `ring-*` / box-shadow) and applied centrally.
+- Apply focus classes to `.button`, `.input`, `.select`, `.row-button`, and add `focus-within` to compound containers (rows with nested controls, disclosure summaries, toggle rows).
+- Ensure focus outlines are not clipped (avoid `overflow-hidden` on focusable ancestors, or use inset outline with negative offset).
 
 Dependencies:
 - Depends on Step 2. Do not refactor components before new utilities exist.
@@ -98,6 +156,7 @@ What to do:
   - Reduce padding and remove any rounding on code blocks.
   - Inline code should be minimal: plain background or subtle underline, no rounded pill.
 - Ensure line-height and spacing in `.markdown-body` remain consistent, but tighten where it currently feels overly airy.
+- Tool output and `pre` blocks should retain containment without translucency: use a subtle solid background plus a border or left bar, and keep consistent mono + line-height.
 
 Why:
 - Markdown is core content. If it retains soft styling, the overall look will still feel “rounded.”
@@ -113,6 +172,7 @@ What to do:
 - Update the “Meta rows” rule to emphasize square edges and border-based hierarchy.
 - Preserve the spacing/copy button rules. The spacing system is still valid; only the visual skin changes.
 - Add a note about future TUI portability: avoid designs that require translucency or complex visual stacking.
+- Add a focus visibility rule: “Focus must never be clipped.” Note that outlines can be cut by `overflow-hidden`; prefer inset outlines or avoid clipping ancestors for focusable controls.
 
 Why:
 - The visual guide is the contract for future changes. If it doesn’t encode the new style, drift will occur.
@@ -126,6 +186,11 @@ What to do:
 - Search for `rounded-`, `shadow-`, `bg-white/`, `backdrop-blur`, `ring-` and replace with sharp equivalents.
 - Remove unused utilities from `src/index.css` (e.g., `shadow-card` or rounded-centric class names) once components no longer use them.
 - Make sure any remaining `rounded-*` in 3rd-party components is intentional (e.g., if a library forces rounding). These should be consciously accepted exceptions and documented.
+- Add searches for:
+  - `bg-[a-z-]+/\\d+` (alpha backgrounds)
+  - `opacity-` on containers
+  - `ring-offset` / `ring-inset` if moving away from rings
+  - `animate-` or motion classes; reduce decorative animation or gate behind `prefers-reduced-motion`
 
 Why:
 - This step prevents regressions and leaves the codebase clean and aligned with the new aesthetic.
@@ -142,7 +207,7 @@ Dependencies:
 ## Decisions & Tradeoffs
 
 ### Decision: Full sharp-only replacement (no hybrid mode)
-- Alternative: keep a toggle or preserve rounded pills. We are explicitly not doing this. The goal is a consistent, no-radius language.
+- Alternative: keep a toggle or preserve rounded pills. We are explicitly not doing this for primary surfaces. Semantic controls may keep minimal radius, or we swap to checkbox-style rows to preserve recognizability.
 - Tradeoff: the UI may feel less “friendly” or “premium,” but it will feel more like a professional devtool.
 
 ### Decision: Remove translucency and blur entirely
@@ -152,6 +217,10 @@ Dependencies:
 ### Decision: Use borders over shadows
 - Alternative: keep micro-shadows. Rejected because even small shadows reintroduce “softness.”
 - Tradeoff: less visual separation at a glance. Counteract by raising contrast and tightening spacing.
+
+### Decision: Focus styling uses outlines, not rings
+- Alternative: Tailwind `ring-*` for focus. Rejected if “no shadows” is strict because rings are box-shadows.
+- Tradeoff: outlines must be managed carefully to avoid clipping; use inset outlines or avoid `overflow-hidden` on focusable ancestors.
 
 ### Decision: Maintain existing spacing system
 - Alternative: redesign spacing entirely. Rejected because the spacing guide is strong and already tested.
@@ -164,6 +233,8 @@ Dependencies:
 - Inline markdown styles are applied via `markdown-body` and could be overridden by Tailwind classes in components. Keep changes in CSS to avoid per-component divergence.
 - `os-theme-codex` defines scrollbar handle rounding. This should be updated to a sharp handle (radius 0) or it will look inconsistent.
 - `MessageCard` is not shown above but likely contains rounded elements. It must be audited; it is easy to miss.
+- Removing `ring-*` will drop focus visibility unless you replace it with consistent outline utilities on buttons, rows, disclosures, and inputs.
+- Border overload is likely if nested containers all keep borders; prefer a single outer border plus `divide-y` inside.
 
 ## Verification
 
@@ -173,6 +244,7 @@ Step-by-step checks:
 3) After Step 3 (components): navigate to Search, Session view, and empty states; visually confirm all surfaces are square, opaque, and no shadows/blur remain.
 4) After Step 4 (markdown): open a session with code blocks and inline code; confirm sharp edges and consistent line spacing.
 5) After Step 5 (style guide): ensure the guide reads clearly and matches the new UI; it should be possible to build a new component using only that guide.
+6) Focus pass: tab through Search, Sessions tree, and session rows; ensure focus is visible and not clipped.
 
 Technical checks:
 - Run `npm run typecheck` to catch any TS issues from refactors.

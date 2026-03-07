@@ -1,110 +1,493 @@
-Codex Formatter UI Style Guide (Visual Rhythm + Copy UX)
+Codex Conversation Manager — Visual Design Guide (Sharp UI System)
 
 Purpose
-This guide captures the visual rhythm and interaction standards established while refining SessionHeaderVariantB, CopyButton, and the Canvas layout. Follow these rules when adding or modifying UI so spacing, alignment, and copy interactions remain consistent and scalable.
+This guide defines the target-state visual and interaction direction for Codex
+Conversation Manager. It replaces older “glassy / pill / card” conventions with a
+sharp, scan-first, devtool-native system.
 
-Core Principles
-1) One spacing system per stack
-   - Use a single parent gap (gap-* or space-y-*) to control vertical rhythm inside a section.
-   - Avoid mixing parent gaps with ad-hoc child margins (mt-*, mb-*) unless there is a specific, documented exception.
-   - If you need a distinct spacing unit, change the parent gap instead of adding margins on children.
+The current app is still in transition and does not fully conform yet. Treat this file
+as the direction for new UI, substantial restyles, and the eventual component-system
+cleanup, not as a claim that every existing screen already matches it.
 
-2) Visual rhythm (spacing cadence)
-   - For stacked content blocks in headers, use gap-3 (12px) as the baseline.
-   - For higher-level section separation (e.g., header vs. toggles), use the same gap value unless the entire section should be intentionally looser.
-   - If you see mismatched measurements (e.g., 44px above and 62px below), it almost always means margins and parent gaps are being combined.
+The intended trajectory is a cleaner, more coherent frontend system over time, likely
+using Base UI primitives where helpful, tuned for tight spacing, sharp corners, strong
+focus states, and fewer nested containers.
 
-3) Constrain content width in grids
-   - Grid layouts must define explicit columns on small screens (e.g., grid-cols-1 or grid-cols-[minmax(0,1fr)]).
-   - Wrap grid items with min-w-0 so long text can shrink/truncate.
-   - Rationale: grids without explicit columns default to max-content width, which causes horizontal bleed on narrow screens.
+Use this guide when:
+- adding UI
+- refactoring UI
+- introducing new primitives (tags, panels, lists, controls)
+- reviewing PRs for visual consistency, accessibility, and interaction quality
 
-CopyButton UX Standard
+Non-goals
+- This is not a one-off migration plan (“make it sharp”). That plan can live in
+  /todos and eventually `todos/_done/INDEX.txt`.
+- This is not a full design system for all products. It’s tailored to this repo’s
+  devtool UI: dense, readable, keyboard-safe, and consistent.
+
+============================================================
+1) Product Aesthetic and Constraints (Target-State Rules)
+============================================================
+
+These rules define the destination system we are migrating toward. Legacy screens may
+temporarily violate them; the goal is to move touched UI closer to this contract rather
+than pretend untouched areas already comply.
+
+Sharp UI Rules
+1) No rounded corners (radius = 0)
+   - Applies to: panels, rows, tags, inputs, modals, code blocks, badges.
+   - Any exception must be documented inline (comment) and in this guide.
+
+2) No translucency / glass / blur
+   - No alpha surfaces like bg-white/80, bg-slate-50/80.
+   - No backdrop-blur.
+   - One exception: modal overlay scrim may use a single controlled overlay token.
+
+3) No shadows for hierarchy
+   - Don’t use shadow-card / shadow-sm / “glow” to separate surfaces.
+   - Hierarchy is expressed via: borders, typography, spacing, and grouping.
+
+4) Preserve keyboard focus visibility
+   - Focus must be obvious, consistent, and never clipped.
+   - Do not rely on glow/ring-only effects if they are implemented via shadow.
+
+5) Preserve the existing spacing rhythm
+   - Do not “fix” sharpness by changing spacing everywhere.
+   - Make the UI sharper by changing surfaces + states, not by compressing layout.
+
+============================================================
+2) Core Principles (How the UI Should Feel)
+============================================================
+
+1) Scan-first
+   - Lists, sessions, workspaces, and search results should be readable at a glance.
+   - Prefer structured rows over nested tiles/cards.
+
+2) Dense, not cramped
+   - Density comes from alignment and structure, not tiny tap targets.
+   - Hit areas must remain generous and accessible.
+
+3) Clear hierarchy without decoration
+   - Use borders and typographic weight to show “what is a container” and “what is a row”.
+   - Avoid “borders inside borders inside borders” (nested border fatigue).
+
+4) State-driven interaction
+   - Hover/focus/selected/active states are the affordance.
+   - If something is clickable, it must behave clickable.
+
+5) Accessibility is not optional
+   - Color is never the only cue.
+   - Keyboard navigation must always have a visible focus state.
+   - Motion respects prefers-reduced-motion.
+
+============================================================
+3) Tokens and Naming (Design Language)
+============================================================
+
+Tokens (Conceptual)
+- Surfaces: surface-0 (panel), surface-1 (muted grouping), surface-2 (pressed/strong hover)
+- Borders: border, border-muted, border-strong
+- Text: text-0 (primary), text-1 (secondary), text-2 (muted)
+- Accent: accent (focus + selection), accent-muted (optional selection/hover helpers)
+- Overlay: overlay (modal scrim only)
+
+Naming
+- “Tag” is the preferred concept name.
+- The codebase may keep the class name “chip” temporarily to reduce churn, but it
+  should mean “sharp tag”, not a rounded pill.
+
+============================================================
+4) Layout and Spacing Rhythm
+============================================================
+
+Rule: One spacing system per stack
+- Use a single parent gap (`gap-*` or `space-y-*`) to control vertical rhythm inside a section.
+- Avoid mixing parent gaps with ad-hoc child margins (`mt-*`, `mb-*`) unless there is a
+  documented exception.
+- If spacing feels off, change the parent gap instead of patching child margins.
+
+Baseline rhythm (guidance, not a mandate)
+- Internal stacks: gap-3 is the default cadence.
+- Tight stacks (lists/rows): gap-2 or divider-based separation is often better than bigger gaps.
+- Avoid “floating tiles” created by: space-y + per-item borders + big radii (banned anyway).
+
+Grid safety
+- Always define explicit columns at all breakpoints (grid-cols-1, etc.).
+- Always use min-w-0 on grid children that contain truncating text.
+- Use truncation intentionally (truncate / line-clamp) to prevent horizontal bleed.
+
+============================================================
+5) Surfaces and Containers
+============================================================
+
+Surface primitives (conceptual)
+- Panel: bordered, opaque, sharp edges. Used for primary containers.
+- Muted panel: subtle background for grouping. Prefer no border by default.
+- Dashed panel: empty/placeholder states.
+
+Hierarchy strategy
+- Outer containers get borders.
+- Inner groupings often get background only (no border) to prevent border stacking.
+- Use headers + dividers inside panels for structure instead of nested cards.
+
+Empty states
+- Use dashed border + clear copy.
+- Empty states are content blocks, not interactive elements.
+
+============================================================
+6) Lists and Rows (Scan-First Contract)
+============================================================
+
+Where rows are required
+- Sessions list
+- Workspaces list
+- Search results list
+- Tool call/event lists
+- Any repeated, comparable items where the user scans and selects
+
+Row structure (recommended)
+- One list container + separators (divide-y or border-top on siblings)
+- Rows should not be individual bordered “tiles” with gaps unless there is a clear reason.
+- Rows may be 1–2 lines. Multi-paragraph content belongs in a details panel/block.
+
+States (must exist for interactive rows)
+- Hover: subtle background shift and/or hint (cursor, underline, etc.)
+- Focus-visible: sharp outline (not glow-only)
+- Active/pressed: slightly stronger background shift
+- Selected: persistent left accent bar + background shift
+
+Selection vs Focus (do not conflate)
+- Selected = the item currently shown in the details/content pane.
+- Focused = where keyboard navigation is currently located.
+- These may be different; the UI must support both states.
+
+Numeric scanability
+- Use tabular-nums for numeric-heavy chips/tags/columns.
+- Align metrics consistently (same column positions across rows when possible).
+
+============================================================
+7) Focus and Keyboard Navigation (Hard Requirements)
+============================================================
+
+Focus contract
+- Use a single, consistent focus-visible style across buttons, inputs, row buttons, tags.
+- Prefer outline-based focus so it works in the “no shadows” rule set.
+- Focus must not be clipped:
+  - Avoid overflow-hidden on focusable ancestors OR use inset outlines intentionally.
+
+Compound controls
+- If an input is visually hidden (sr-only), the visible wrapper must show focus-within.
+  Example: toggles implemented as label + hidden checkbox must still show focus.
+
+Keyboard affordance
+- If an action appears on hover, it must also appear on focus-within (keyboard).
+- All interactive elements must be reachable and visually focusable.
+
+============================================================
+8) Controls and Inputs
+============================================================
+
+Inputs / Selects
+- Sharp edges, opaque background, border-driven focus.
+- Avoid ring/glow-only focus if implemented with shadows.
+- Error states are border + text (not shadows).
+
+Buttons
+- Sharp edges, border-driven hierarchy.
+- Hover/pressed states must be visible without shadows.
+- Use consistent padding and text sizing.
+
+Toggles (recommended approach)
+- Prefer checkbox-style controls for “sharp devtool” feel.
+- If a switch UI is used, it must not depend on rounded track/knob.
+- Toggle containers must have focus-within styling (common regression risk).
+
+============================================================
+9) Tags (Status, Labels, Chips)
+============================================================
+
+Tag principles
+- Tags are informational labels, counts, or quick states.
+- Tags are not “decorative pills”.
+- Keep variants minimal (2–3 variants total):
+  - Base (bordered)
+  - Muted (subtle background)
+  - Solid (CTA/emphasis)
+
+Tag usage
+- Metadata: repo, branch, timestamps, counts
+- Filters: active filters, scopes
+- Status: indexed, searching, connected, shortcuts enabled
+
+Do not rely on color alone
+- If state matters, provide a second cue:
+  - fill vs hollow indicator
+  - text tone (muted vs normal)
+  - explicit label (“On” / “Off” where appropriate)
+  - sr-only text that includes the state
+
+Status indicator (recommended)
+- Use a small square indicator sub-element:
+  - active: filled block
+  - inactive: hollow block (border only)
+- This supports a TUI-adjacent aesthetic and avoids radius exceptions.
+
+Stable width rule for labels that change
+- When a tag/button label changes (e.g., “On” -> “Off”), reserve width to avoid UI jitter.
+- Preferred technique: “reserve label overlay” (see section 11).
+
+============================================================
+10) Content Blocks (Conversation, Markdown, Code)
+============================================================
+
+Narrative content stays block-based
+- Turns and messages are content blocks (not table rows).
+- Avoid converting conversation content into grid/table layouts.
+- The scan-first principle applies to the chrome and lists around content, not to paragraphs.
+
+Markdown + code
+- Code blocks are sharp containers (border + solid background, no rounding).
+- Inline code is minimal (border or subtle background), no pill styling.
+- Keep line-height readable; do not over-tighten markdown.
+
+Highlights (search snippets)
+- Highlights should be sharp (no rounding) and subtle.
+- Avoid high-saturation “marker” colors that dominate reading.
+
+============================================================
+11) Label Width Stability (No Layout Shift)
+============================================================
+
+Why it matters
+- In a scan-first UI, small layout shifts (changing widths) feel sloppy and distract users.
+- Any UI element with swapping text should preserve width.
+
+Approved pattern: Reserve label overlay
+- Render an invisible “reserve” label to establish width.
+- Render the current label on top (grid overlay preferred).
+
+Example pattern (conceptual)
+- Wrapper: relative inline-grid
+- Reserve: opacity-0, aria-hidden, pointer-events-none
+- Visible label: in the same grid cell, truncation allowed
+
+Notes
+- This is already the approach used in CopyButton; follow the same pattern.
+- Use this for StatusTag/StatusPill when label changes between states (“on/off”).
+
+============================================================
+12) Copy UX Standard (CopyButton + Copy Interactions)
+============================================================
+
+Copy is a first-class action in this devtool.
+Copy interactions must be:
+- stable (no width jump)
+- fast
+- accessible (announced)
+- predictable across the app
+
+CopyButton rules
 1) Single control with overlay labels
-   - CopyButton swaps idle/hover/copied/failed labels using overlay spans.
-   - The button’s width must remain stable during label swaps.
+   - Idle/hover/copied/failed labels swap using overlays.
+   - Width must remain stable (reserve label).
 
-2) Inline success/failure icons
-   - Success/failure icons render inline with the copied/failed labels (e.g., “Copied ✓”).
-   - Do NOT reserve a right-side icon slot.
-   - If a label is longer, set reserveLabel to prevent width jumps.
+2) Inline success/failure feedback
+   - Success/failure icons appear inline with the status label (e.g., “Copied ✓”).
+   - Do not reserve a separate icon slot.
 
 3) Hover label handling
    - hoverLabel defaults to “Copy”.
-   - Set hoverLabel={null} to disable hover swapping and keep the idle label visible on hover.
+   - Set hoverLabel={null} to disable hover swapping.
 
-4) Accessible feedback
-   - Use <output aria-live="polite"> to announce success/failure.
-   - If idleLabel is not a string, always provide ariaLabel.
+4) Accessibility
+   - Must announce results via aria-live output.
+   - If idleLabel is not a string, provide ariaLabel.
 
-Label alignment (CopyButton)
-- CopyButton labels are left-aligned within their slot by default.
-- Do not add text-center or absolute overlays to center the label stack.
-- If a button needs visual balance, prefer container alignment (e.g., justify-center on the button) or padding tweaks instead of centering the label stack.
+5) Focus
+   - CopyButton must always show focus-visible (do not rely on chip/button wrappers).
 
-Chip Utilities (Reusable Pills)
-1) Composition-first
-   - Base .chip is background-free. Add backgrounds via .chip-filled / .chip-soft / .chip-muted / .chip-white as needed.
-   - Use size utilities (.chip-xs/.chip-sm/.chip-md/.chip-lg) and helpers (.chip-value, .chip-shadow) for composability.
-2) Interaction
-   - Use .chip-button for hover/disabled behavior on interactive chips (CopyButtons, compact toggles).
-3) Muted chips
-   - .chip-muted includes both muted background and muted text (bg-slate-100 + text-slate-500).
-   - If you only need a muted background, set bg-slate-100 inline instead of reusing .chip-muted.
-4) Meta rows
-   - Meta rows use .meta-row/.meta-label/.meta-value.
-   - Outline matches other pill borders (border-slate-200).
+============================================================
+13) Modals and Overlays
+============================================================
 
-SessionHeaderVariantB Rhythm Rules
-1) Header stack
-   - headerClassName uses space-y-3.
-   - Title + subtitle/copy row are wrapped in a flex-col gap-3 container.
-   - Avoid title mb-*, copy row mt-* in this block. Let the gap govern spacing.
+Modal rules
+- Modal surface is opaque and bordered.
+- No glass, no blur, no shadow hierarchy.
+- Use a single overlay token for the backdrop scrim (allowed exception).
 
-2) Subtitle/copy row (date/repo/branch)
-   - All three items are CopyButton instances for consistent layout and affordance.
-   - Use hoverLabel={null} so the label does not change on hover.
-   - Use a shared subtitle class for consistent icon + text sizing.
+Layering cues (without shadows)
+- Use borders, header bars, and clear spacing.
+- Make the modal boundary unmistakable (strong border, clear title row).
 
-3) Stats row and action button
-   - The stats row and the copy-conversation action should align on the same row.
-   - Maintain consistent icon sizing (h-3.5 w-3.5) and pill spacing.
+Keyboard
+- Focus trap must be correct (implementation detail), but visually:
+  - focus-visible must remain obvious on all elements inside the modal.
 
-4) Meta rows (Session/Dir/File)
-   - Keep meta rows in a single vertical stack with gap-2.
-   - Do not add extra top margins; spacing is controlled by the parent gap.
+============================================================
+14) Motion
+============================================================
 
-SessionOverview Spacing Rules
-- The header block and toggle block must be wrapped in a flex-col gap-3 parent.
-- Toggle grid should not carry mt-* spacing; that gap is handled by the parent.
-- Compact toggle layout uses flex wrap with gap-2 and no extra top margin.
+Motion should never be “decorative gloss” in this UI.
+- Avoid stagger/float animations that read as consumer UI polish.
+- If animations exist, keep them subtle and functional (feedback, not decoration).
+- Respect prefers-reduced-motion:
+  - reduce durations
+  - remove repeated animations
+  - disable parallax-like behaviors
 
-Canvas Layout Rules
-- For variant grids:
-  - Always define grid-cols-1 on smaller screens.
-  - Use lg:grid-cols-2 when side-by-side variants are desired.
-  - Wrap each variant card with min-w-0 to prevent overflow.
+============================================================
+15) Consistency Checklist (PR Review)
+============================================================
 
-Checklist for future changes
-- Are you mixing space-y/gap with mt/mb in the same stack? If yes, consolidate.
-- Are grid columns explicitly defined at all breakpoints? If not, add grid-cols-1.
-- Do CopyButtons reserve width for labels and avoid layout shift? If not, add reserveLabel.
-- Are CopyButtons left-aligned and using reserveLabel to prevent layout shift? If not, refactor.
-- Do repeated rows (date/repo/branch) share a unified layout style? If not, extract shared classes.
+Use this checklist for new UI, major restyles, and sharp/Base UI migration work. For
+legacy areas, document deliberate exceptions instead of claiming full conformance.
 
+Sharp rules
+- Any rounded corners? (rounded-*) -> remove (or document exception)
+- Any translucency? (bg-*/80, opacity tricks) -> remove
+- Any blur? (backdrop-blur) -> remove
+- Any shadow used for hierarchy? -> remove
 
-Spacing Audit Playbook (Debugging)
-- If a gap looks off, inspect BOTH boundaries that form it.
-- Look for stacked spacing: parent space-y/gap plus child mt/mb is the most common source of imbalance.
-- Normalize spacing by consolidating to a single parent gap wherever possible.
-- Use temporary outlines (e.g., outline: 1px solid magenta) on adjacent blocks to measure gaps reliably.
+Focus and states
+- Can I tab through and always see focus?
+- Do interactive rows have hover + focus-visible + active states?
+- Is selected state distinct from focus state?
 
-Spacing Tokens + Rules of Thumb
-- Header internal stack: gap-3 (baseline rhythm).
-- Title/subtitle block: no mt/mb; rely on the parent gap.
-- Toggle stacks inherit the parent gap; toggle grids should not carry mt-* unless explicitly documented.
-- If you see 44px vs 62px (or similar), it likely indicates mixed spacing systems.
+Layout
+- One spacing system per stack (gap/space-y vs mt/mb)?
+- Grids define columns at all breakpoints?
+- min-w-0 used where truncation is expected?
 
-Component Consistency Rules
-- Subtitle rows (date/repo/branch) should use the same component type (CopyButton) for consistent alignment and affordance.
-- If you convert a text row to CopyButton and want no hover text swap, set hoverLabel={null}.
+Lists
+- Are repeated items presented as rows (not tiles) where scan/compare is needed?
+- Are separators handled by the list container (divide-y) rather than per-item cards?
+
+Copy + label stability
+- Do swapping labels reserve width (no jitter)?
+- CopyButton follows the overlay label pattern and remains accessible?
+
+Accessibility
+- Is color the only cue? If yes, add a non-color cue + sr text.
+- Are icon-only buttons labeled?
+
+Vendor
+- Scrollbar handles sharp (no forced rounding)?
+- Any third-party rounding documented?
+
+============================================================
+16) Spacing/State Debug Playbook
+============================================================
+
+If spacing looks wrong
+1) Inspect both boundaries that form the perceived gap.
+2) Look for stacked spacing: parent gap/space-y + child mt/mb.
+3) Consolidate to a single parent gap wherever possible.
+4) Use temporary outlines on adjacent blocks to measure reliably.
+
+If “clickability” feels unclear
+1) Confirm hover exists and is visible.
+2) Confirm focus-visible exists and is visible.
+3) Confirm active/pressed exists for pointer users.
+4) Confirm hit area is large enough (don’t shrink padding to gain density).
+
+If UI feels “busy” after removing shadows
+1) Reduce nested borders (use muted background without border).
+2) Prefer list separators over bordered tiles.
+3) Use headers and typographic weight for structure.
+
+============================================================
+17) Exceptions Policy
+============================================================
+
+Sometimes you can’t avoid a violation (third-party components, vendor UIs).
+When an exception is necessary:
+- Keep it as small and localized as possible.
+- Document it:
+  - inline comment in the component/CSS
+  - add a note here if it’s recurring or system-wide
+- Prefer fixing upstream styling hooks (vendor overrides) over accepting inconsistency.
+
+== THE FOLLOWING RULES ARE APPLICABLE TO MESSAGE RENDERING IN CONVERSATIONS / TURNS
+== BETWEEN USER AND ASSISTANT, SINCE WE LIKELY USE MARKDOWN RENDERERS AND MONOSPACED
+== FONTS TO RENDER A CONVERSATION THAT TOOK PLACE IN THE TERMINAL
+
+============================================================
+Typography and Message Rendering (Terminal-Adjacent Rules)
+============================================================
+
+Goals
+- Terminal-adjacent readability: mono-forward content, scan-first structure.
+- Accuracy: user input should be represented faithfully.
+- Safety: markdown rendering must be sanitized and never execute raw HTML.
+- Resilience: message rendering must not crash a turn if the markdown pipeline fails.
+
+Current implementation snapshot
+- Today, `user`, `assistant`, and `thought` items all render through the sanitized
+  markdown pipeline.
+- `tool_call`, `tool_output`, and `meta` items render as literal preformatted blocks.
+- There is not yet a dedicated error-boundary fallback around the markdown renderer.
+
+The policy below describes the target rendering direction. Keep `IMPLEMENTATION_GUIDE.md`
+and `USER_GUIDE.md` as the source of truth for the current shipped behavior.
+
+Font policy
+1) UI chrome vs message content
+   - UI chrome (navigation, panels, lists, headers): UI font (sans/system).
+   - Conversation content (user/assistant/thought/tool/meta): mono-forward.
+   - Numeric-heavy UI: tabular numerals (tabular-nums) where applicable.
+
+2) No font switching inside conversation content
+   - Markdown headings, lists, and emphasis must not switch to a different font family.
+   - Emphasis uses weight/style (bold/italic/underline), not a font change.
+
+3) Pick a mono font that supports emphasis
+   - Prefer monospace families with good bold + italic so markdown emphasis doesn’t look broken.
+   - If italic renders poorly (fake oblique), consider mapping <em> to underline in markdown styling.
+
+Target rendering policy by message type
+1) User messages (target: literal by default)
+   - Preferred end state is literal text rendering (no markdown parsing).
+   - Preserve whitespace and characters exactly as typed.
+   - Use a pre-wrap style (whitespace-pre-wrap) so prompts remain readable without horizontal scrolling.
+   - Optional: provide a user-visible toggle to “Render Markdown” for that message or globally.
+
+2) Assistant + thought messages (default: rendered markdown)
+   - Render markdown (GFM allowed) with sanitization.
+   - Keep markdown styling terminal-adjacent:
+     - headings are subtle (avoid huge type jumps)
+     - lists are clean and compact
+     - code blocks are sharp containers (border + solid bg, no radius)
+     - inline code is minimal (no pill styling)
+
+3) Tool calls / tool output / meta (always literal)
+   - Never parse as markdown.
+   - Always render inside a code-block container (<pre> / monospace).
+   - Prefer horizontal scroll for very long lines; avoid wrapping JSON unless explicitly formatted.
+
+4) Token telemetry (structured)
+   - TokenCount entries render as structured UI, not markdown.
+
+Target resilience rule
+- The markdown renderer may fail due to plugin/transform bugs or malformed injected markup.
+- Add an error boundary and fall back to literal rendering:
+  - show raw text in a code-block container
+  - do not crash the whole turn/session view
+
+Security rule
+- Do not render unsanitized HTML from any message content.
+- If a pipeline requires raw HTML for internal features (e.g., search highlights),
+  sanitize and restrict allowed elements/attributes.
+- User-authored content must never inject unsanitized HTML into the UI.
+
+Copy behavior alignment
+- Always support copying the raw source:
+  - User: Copy raw text
+  - Assistant: Copy markdown source and/or Copy plain text
+- Copy interactions must preserve width and avoid layout shift (reserve label overlay).
+
+Search highlighting
+- Search highlighting must not break code or inline code rendering.
+- When highlighting in markdown, avoid injecting highlights inside code fences/inline code.
+- When highlighting literal user text, prefer a safe highlighter that does not interpret HTML.
+
+End of guide.
