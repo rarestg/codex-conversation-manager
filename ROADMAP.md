@@ -55,11 +55,17 @@ Immediate sequence:
 
 1. Add shared session-catalog and session-detail contract types.
 2. Move canonical session-detail parsing ownership to the server.
-3. Add a minimal `session-catalog` endpoint.
-4. Add facets once the catalog query shape is stable.
-5. Build the new split-pane UI on top of those contracts.
-6. Re-scope the remaining sharp UI work onto the new layout rather than the old
-   panel stack.
+3. Extend the summary schema conservatively for new catalog filters and row metadata.
+4. Add `GET /api/session-detail` as the canonical session-detail contract.
+5. Migrate the viewer off raw `GET /api/session` for its primary data path.
+6. Add a minimal `session-catalog` endpoint with stable filtering, sorting, pagination,
+   and `locatorQuery`.
+7. Keep `/api/resolve-session` as a thin migration adapter over the same
+   locator-resolution service so Enter/UUID flows stay stable during the transition.
+8. Add facets once the catalog query shape is stable.
+9. Build the new split-pane UI on top of those contracts.
+10. Re-scope the remaining sharp UI work onto the new layout rather than the old
+    panel stack, then retire legacy adapters as the new shell takes over.
 
 ## Useful Before Or During The Rearchitecture
 
