@@ -3,16 +3,87 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import type { SearchGroupSort, SearchResultSort } from '../../shared/apiTypes';
+import type { SessionCatalogQuery, SessionCatalogSort } from '../../shared/sessionCatalogTypes';
+import { getSessionCatalogFacets } from '../catalog/facets';
+import { resolveSessionId } from '../catalog/locator';
+import { getSessionCatalog } from '../catalog/queries';
 import { ensurePathSafe, ensureRootExists, resolveSessionsRoot, setSessionsRoot } from '../config';
 import { getDb, resetDb } from '../db';
 import { readJsonBody, sendJson } from '../http';
 import { indexSessions } from '../indexing';
 import { buildSessionsTree, getSessionsForTree } from '../indexing/tree';
 import { DEBUG_ENABLED, logDebug } from '../logging';
-import { resolveSession, searchSessions, sessionMatches } from '../search/queries';
+import { searchSessions, sessionMatches } from '../search/queries';
+import { buildSessionDetailResponse } from '../sessionDetail/service';
 import { getWorkspaceSummaries } from '../workspaces';
 
 type ApiHandler = (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<void>;
+
+const parseCatalogSort = (value: string | null): SessionCatalogSort | undefined => {
+  if (
+    value === 'recent' ||
+    value === 'oldest' ||
+    value === 'turns_desc' ||
+    value === 'messages_desc' ||
+    value === 'duration_desc'
+  ) {
+    return value;
+  }
+  return undefined;
+};
+
+const getCatalogQueryFromUrl = (url: URL): SessionCatalogQuery => {
+  const getRepeated = (key: string) => {
+    const values = url.searchParams.getAll(key);
+    return values.length > 0 ? values : undefined;
+  };
+
+  return {
+    contentQuery: url.searchParams.get('contentQuery') ?? undefined,
+    locatorQuery: url.searchParams.get('locatorQuery') ?? undefined,
+    workspace: url.searchParams.get('workspace'),
+    workspaces: getRepeated('workspaces'),
+    gitRepos: getRepeated('gitRepos'),
+    gitBranches: getRepeated('gitBranches'),
+    sort: parseCatalogSort(url.searchParams.get('sort')),
+    page: url.searchParams.get('page') ? Number(url.searchParams.get('page')) : undefined,
+    pageSize: url.searchParams.get('pageSize') ? Number(url.searchParams.get('pageSize')) : undefined,
+  };
+};
+
+const ensureAvailableRoot = async (res: ServerResponse) => {
+  const rootInfo = await resolveSessionsRoot();
+  const rootExists = await ensureRootExists(rootInfo.value);
+  if (!rootExists) {
+    sendJson(res, 404, {
+      error: `Sessions root not found: ${rootInfo.value}. Set CODEX_SESSIONS_ROOT or update ~/.codex-formatter/config.json`,
+    });
+    return null;
+  }
+  return rootInfo;
+};
+
+const readSessionFile = async (
+  root: string,
+  sessionId: string,
+): Promise<{ ok: true; raw: string } | { ok: false; status: number; error: string }> => {
+  const resolvedPath = ensurePathSafe(root, sessionId);
+  if (!resolvedPath) {
+    return { ok: false, status: 400, error: 'Invalid session path.' };
+  }
+  try {
+    const raw = await fsp.readFile(resolvedPath, 'utf-8');
+    return { ok: true, raw };
+  } catch (error: any) {
+    if (error?.code === 'ENOENT') {
+      return { ok: false, status: 404, error: 'Session file not found. Please reindex.' };
+    }
+    if (error?.code === 'EACCES') {
+      return { ok: false, status: 403, error: 'Unable to read session file.' };
+    }
+    throw error;
+  }
+};
 
 const routes: Record<string, ApiHandler> = {
   'GET /api/config': async (_req, res) => {
@@ -169,33 +240,31 @@ const routes: Record<string, ApiHandler> = {
     return sendJson(res, 200, { workspaces });
   },
   'GET /api/session': async (_req, res, url) => {
-    const rootInfo = await resolveSessionsRoot();
-    const rootExists = await ensureRootExists(rootInfo.value);
-    if (!rootExists) {
-      return sendJson(res, 404, {
-        error: `Sessions root not found: ${rootInfo.value}. Set CODEX_SESSIONS_ROOT or update ~/.codex-formatter/config.json`,
-      });
-    }
+    const rootInfo = await ensureAvailableRoot(res);
+    if (!rootInfo) return;
     const relativePath = url.searchParams.get('path') || '';
-    const resolvedPath = ensurePathSafe(rootInfo.value, relativePath);
-    if (!resolvedPath) {
-      return sendJson(res, 400, { error: 'Invalid session path.' });
-    }
-    let raw: string;
-    try {
-      raw = await fsp.readFile(resolvedPath, 'utf-8');
-    } catch (error: any) {
-      if (error?.code === 'ENOENT') {
-        return sendJson(res, 404, { error: 'Session file not found. Please reindex.' });
-      }
-      if (error?.code === 'EACCES') {
-        return sendJson(res, 403, { error: 'Unable to read session file.' });
-      }
-      throw error;
+    const result = await readSessionFile(rootInfo.value, relativePath);
+    if (!result.ok) {
+      return sendJson(res, result.status, { error: result.error });
     }
     res.statusCode = 200;
     res.setHeader('Content-Type', 'text/plain');
-    res.end(raw);
+    res.end(result.raw);
+  },
+  'GET /api/session-detail': async (_req, res, url) => {
+    const rootInfo = await ensureAvailableRoot(res);
+    if (!rootInfo) return;
+    const id = url.searchParams.get('id')?.trim();
+    if (!id) {
+      return sendJson(res, 400, { error: 'id is required.' });
+    }
+    const result = await readSessionFile(rootInfo.value, id);
+    if (!result.ok) {
+      return sendJson(res, result.status, { error: result.error });
+    }
+    const database = getDb();
+    const response = buildSessionDetailResponse(database, id, result.raw);
+    return sendJson(res, 200, response);
   },
   'POST /api/reindex': async (_req, res) => {
     const rootInfo = await resolveSessionsRoot();
@@ -230,9 +299,33 @@ const routes: Record<string, ApiHandler> = {
     const requestId = url.searchParams.get('requestId')?.trim() || null;
     const workspace = url.searchParams.get('workspace')?.trim();
     const database = getDb();
-    const resolved = resolveSession(database, { id, workspace, requestId });
+    const resolved = resolveSessionId(database, { id, workspace, requestId });
     if (!resolved) return sendJson(res, 404, { error: 'Session not found.' });
     return sendJson(res, 200, resolved);
+  },
+  'GET /api/session-catalog': async (_req, res, url) => {
+    const rootInfo = await resolveSessionsRoot();
+    const rootExists = await ensureRootExists(rootInfo.value);
+    if (!rootExists) {
+      return sendJson(res, 404, {
+        error: `Sessions root not found: ${rootInfo.value}. Set CODEX_SESSIONS_ROOT or update ~/.codex-formatter/config.json`,
+      });
+    }
+    const database = getDb();
+    const response = getSessionCatalog(database, getCatalogQueryFromUrl(url));
+    return sendJson(res, 200, response);
+  },
+  'GET /api/session-catalog-facets': async (_req, res, url) => {
+    const rootInfo = await resolveSessionsRoot();
+    const rootExists = await ensureRootExists(rootInfo.value);
+    if (!rootExists) {
+      return sendJson(res, 404, {
+        error: `Sessions root not found: ${rootInfo.value}. Set CODEX_SESSIONS_ROOT or update ~/.codex-formatter/config.json`,
+      });
+    }
+    const database = getDb();
+    const response = getSessionCatalogFacets(database, getCatalogQueryFromUrl(url));
+    return sendJson(res, 200, response);
   },
   'GET /api/search': async (_req, res, url) => {
     const q = url.searchParams.get('q');

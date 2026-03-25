@@ -1,344 +1,20 @@
-import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import readline from 'node:readline';
-import { createSessionMetrics } from '../../shared/sessionMetrics';
 import { getDb } from '../db';
 import { logDebug } from '../logging';
+import { extractSessionIdFromPath, parseSessionRaw, readSessionMetadataFromFile } from '../sessionDetail/parser';
 import type { FileEntry } from '../types';
 
 const toPosix = (value: string) => value.split(path.sep).join('/');
 
-const asRecord = (value: unknown): Record<string, unknown> =>
-  value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
-
-const getString = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined);
-
-const parseTimestampFromFilename = (name: string) => {
-  const match = name.match(/(\d{4}-\d{2}-\d{2}T\d{2}[-:]\d{2}[-:]\d{2})/);
-  if (!match) return null;
-  return match[1].replace(/T(\d{2})-(\d{2})-(\d{2})/, 'T$1:$2:$3');
+const parseSessionFile = async (filePath: string, sessionPath: string) => {
+  const raw = await fsp.readFile(filePath, 'utf-8');
+  return parseSessionRaw({ raw, sessionPath });
 };
 
-const formatJsonValue = (value: unknown) => {
-  if (value === undefined || value === null) return '';
-  if (typeof value === 'string') return value;
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch (_error) {
-    return String(value);
-  }
-};
-
-const formatToolCall = (item: unknown) => {
-  const obj = asRecord(item);
-  const tool = asRecord(obj.tool);
-  const name = getString(obj.name) ?? getString(obj.tool_name) ?? getString(tool.name) ?? 'tool';
-  const args = obj.arguments ?? obj.args ?? obj.input ?? obj.parameters;
-  const parts = [`name: ${name}`];
-  const callId = getString(obj.call_id) ?? getString(obj.id) ?? getString(obj.callId);
-  if (callId) {
-    parts.push(`call_id: ${callId}`);
-  }
-  const argText = formatJsonValue(args);
-  if (argText) {
-    parts.push(`arguments:\n${argText}`);
-  }
-  return parts.join('\n');
-};
-
-const formatToolOutput = (item: unknown) => {
-  const obj = asRecord(item);
-  const output = obj.output ?? obj.result ?? obj.content ?? obj.text ?? obj.value;
-  const parts = [] as string[];
-  const callId = getString(obj.call_id) ?? getString(obj.id) ?? getString(obj.callId);
-  if (callId) {
-    parts.push(`call_id: ${callId}`);
-  }
-  const outputText = formatJsonValue(output);
-  if (outputText) {
-    parts.push(`output:\n${outputText}`);
-  }
-  return parts.join('\n');
-};
-
-const SESSION_ID_REGEX = /\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/;
-const SESSION_ID_PREFIX_REGEX = /\b(?:sess(?:ion)?[_-])[a-zA-Z0-9_-]{6,}\b/;
-
-const normalizeSessionId = (value: string) => {
-  const trimmed = value.trim();
-  const uuidMatch = trimmed.match(SESSION_ID_REGEX);
-  if (uuidMatch) return uuidMatch[0];
-  const prefixMatch = trimmed.match(SESSION_ID_PREFIX_REGEX);
-  if (prefixMatch) return prefixMatch[0];
-  return trimmed;
-};
-
-const extractSessionIdFromPath = (value?: string | null) => {
-  if (!value) return null;
-  const normalized = value.replace(/\\/g, '/');
-  const filename = normalized.split('/').pop() || normalized;
-  const withoutExt = filename.replace(/\.jsonl$/i, '');
-  const match = withoutExt.match(SESSION_ID_REGEX);
-  if (match) return match[0];
-  const prefixMatch = withoutExt.match(SESSION_ID_PREFIX_REGEX);
-  if (prefixMatch) return prefixMatch[0];
-  return null;
-};
-
-const normalizeCwd = (value?: string | null) => {
-  if (!value) return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  try {
-    const normalized = path.normalize(trimmed);
-    return path.isAbsolute(normalized) ? path.resolve(normalized) : normalized;
-  } catch (_error) {
-    return trimmed;
-  }
-};
-
-const extractSessionIdFromObject = (value: unknown, depth = 0): string | null => {
-  if (!value || typeof value !== 'object' || depth > 2) return null;
-  const obj = value as Record<string, unknown>;
-  const direct =
-    obj.session_id ??
-    obj.sessionId ??
-    obj.conversation_id ??
-    obj.conversationId ??
-    obj.resume_session_id ??
-    obj.resumeSessionId ??
-    obj.id;
-  if (typeof direct === 'string' && direct.trim()) return normalizeSessionId(direct);
-  if (typeof obj.session === 'string' && obj.session.trim()) return normalizeSessionId(obj.session);
-  if (obj.session && typeof obj.session === 'object') {
-    const nestedId = (obj.session as Record<string, unknown>).id;
-    if (typeof nestedId === 'string' && nestedId.trim()) return normalizeSessionId(nestedId);
-    const nested = extractSessionIdFromObject(obj.session, depth + 1);
-    if (nested) return nested;
-  }
-  const containers = [obj.session_info, obj.sessionInfo, obj.metadata, obj.context, obj.payload];
-  for (const container of containers) {
-    const nested = extractSessionIdFromObject(container, depth + 1);
-    if (nested) return nested;
-  }
-  return null;
-};
-
-const parseJsonlFile = async (filePath: string) => {
-  const messages: Array<{
-    turnId: number;
-    role: string;
-    timestamp?: string;
-    content: string;
-  }> = [];
-  const metrics = createSessionMetrics();
-  let sessionMeta: {
-    cwd?: string;
-    git_branch?: string;
-    git_repo?: string;
-    git_commit_hash?: string;
-    timestamp?: string;
-    session_id?: string;
-  } = {};
-  let currentTurn = 0;
-  let sessionIdRank = 0;
-  let sessionMetaSeen = false;
-  let malformedLines = 0;
-
-  const updateSessionId = (value: unknown, rank: number) => {
-    const extracted = extractSessionIdFromObject(value);
-    if (extracted && rank > sessionIdRank) {
-      sessionMeta.session_id = extracted;
-      sessionIdRank = rank;
-    }
-  };
-
-  const stream = fs.createReadStream(filePath, { encoding: 'utf-8' });
-  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
-
-  for await (const line of rl) {
-    if (!line.trim()) continue;
-    try {
-      const entry = JSON.parse(line);
-      metrics.recordTimestamp(entry.timestamp);
-      if (entry.type === 'session_meta') {
-        metrics.recordMeta(entry.timestamp);
-        const payload = entry.payload ?? entry;
-        const gitPayload = payload?.git ?? {};
-        // Branch ancestry can append older session_meta entries; keep the first (newest) metadata canonical.
-        const nextCwd = sessionMetaSeen ? (sessionMeta.cwd ?? payload?.cwd) : (payload?.cwd ?? sessionMeta.cwd);
-        sessionMeta = {
-          cwd: nextCwd ? normalizeCwd(nextCwd) : sessionMeta.cwd,
-          git_branch: sessionMetaSeen
-            ? (sessionMeta.git_branch ?? payload?.git_branch ?? payload?.gitBranch ?? gitPayload?.branch)
-            : (payload?.git_branch ?? payload?.gitBranch ?? gitPayload?.branch ?? sessionMeta.git_branch),
-          git_repo: sessionMetaSeen
-            ? (sessionMeta.git_repo ??
-              payload?.git_repo ??
-              payload?.gitRepo ??
-              gitPayload?.repository_url ??
-              gitPayload?.repositoryUrl)
-            : (payload?.git_repo ??
-              payload?.gitRepo ??
-              gitPayload?.repository_url ??
-              gitPayload?.repositoryUrl ??
-              sessionMeta.git_repo),
-          git_commit_hash: sessionMetaSeen
-            ? (sessionMeta.git_commit_hash ??
-              payload?.git_commit_hash ??
-              payload?.gitCommitHash ??
-              gitPayload?.commit_hash ??
-              gitPayload?.commitHash)
-            : (payload?.git_commit_hash ??
-              payload?.gitCommitHash ??
-              gitPayload?.commit_hash ??
-              gitPayload?.commitHash ??
-              sessionMeta.git_commit_hash),
-          timestamp: sessionMetaSeen
-            ? (sessionMeta.timestamp ?? payload?.timestamp ?? entry.timestamp)
-            : (payload?.timestamp ?? entry.timestamp ?? sessionMeta.timestamp),
-          session_id: sessionMeta.session_id,
-        };
-        updateSessionId(payload, 2);
-        sessionMetaSeen = true;
-        continue;
-      }
-
-      if (entry.type === 'turn_context') {
-        metrics.recordMeta(entry.timestamp);
-        const payload = entry.payload ?? entry;
-        updateSessionId(payload, 1);
-        continue;
-      }
-
-      if (entry.type === 'event_msg') {
-        const payload = entry.payload ?? {};
-        if (payload.type === 'user_message') {
-          currentTurn += 1;
-          const content = String(payload.message ?? '');
-          metrics.recordUserMessage(entry.timestamp, content);
-          messages.push({
-            turnId: currentTurn,
-            role: 'user',
-            timestamp: entry.timestamp,
-            content,
-          });
-        } else if (payload.type === 'agent_message') {
-          metrics.recordAssistantMessage(entry.timestamp);
-          const content = String(payload.message ?? '');
-          messages.push({
-            turnId: currentTurn,
-            role: 'assistant',
-            timestamp: entry.timestamp,
-            content,
-          });
-        } else if (payload.type === 'agent_reasoning' && payload.text) {
-          metrics.recordThought(entry.timestamp);
-          messages.push({
-            turnId: currentTurn,
-            role: 'thought',
-            timestamp: entry.timestamp,
-            content: String(payload.text),
-          });
-        } else if (payload.type === 'token_count') {
-          metrics.recordTokenCount(entry.timestamp);
-        } else if (payload.type === 'turn_aborted') {
-          continue;
-        }
-        continue;
-      }
-
-      const isResponseItem = entry.type === 'response_item';
-      const item = isResponseItem ? (entry.item ?? entry.response_item ?? entry.payload ?? {}) : entry;
-      const itemType = isResponseItem ? item.type : entry.type;
-
-      if (['function_call', 'custom_tool_call', 'web_search_call'].includes(itemType)) {
-        metrics.recordToolCall(entry.timestamp);
-        messages.push({
-          turnId: currentTurn,
-          role: 'tool_call',
-          timestamp: entry.timestamp,
-          content: formatToolCall(item),
-        });
-        continue;
-      }
-
-      if (['function_call_output', 'custom_tool_call_output', 'web_search_call_output'].includes(itemType)) {
-        metrics.recordToolOutput(entry.timestamp);
-        messages.push({
-          turnId: currentTurn,
-          role: 'tool_output',
-          timestamp: entry.timestamp,
-          content: formatToolOutput(item),
-        });
-      }
-    } catch (error) {
-      if (malformedLines < 3) {
-        logDebug('parseJsonlFile: malformed line', { filePath, error });
-      } else if (malformedLines === 3) {
-        logDebug('parseJsonlFile: further malformed lines suppressed', { filePath });
-      }
-      malformedLines += 1;
-    }
-  }
-
-  const { firstUserMessage, ...metricValues } = metrics.finalize();
-
-  return {
-    messages,
-    firstUserMessage: firstUserMessage || '',
-    sessionMeta,
-    metrics: metricValues,
-  };
-};
-
-const readSessionIdFromFile = async (filePath: string) => {
-  let sessionId: string | null = null;
-  let sessionIdRank = 0;
-  let malformedLines = 0;
-
-  const updateSessionId = (value: unknown, rank: number) => {
-    const extracted = extractSessionIdFromObject(value);
-    if (extracted && rank > sessionIdRank) {
-      sessionId = extracted;
-      sessionIdRank = rank;
-    }
-  };
-
-  const stream = fs.createReadStream(filePath, { encoding: 'utf-8' });
-  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
-
-  try {
-    for await (const line of rl) {
-      if (!line.trim()) continue;
-      try {
-        const entry = JSON.parse(line);
-        if (entry.type === 'session_meta') {
-          const payload = entry.payload ?? entry;
-          updateSessionId(payload, 2);
-          if (sessionId && sessionIdRank >= 2) break;
-          continue;
-        }
-        if (entry.type === 'turn_context') {
-          const payload = entry.payload ?? entry;
-          updateSessionId(payload, 1);
-        }
-      } catch (error) {
-        if (malformedLines < 3) {
-          logDebug('readSessionIdFromFile: malformed line', { filePath, error });
-        } else if (malformedLines === 3) {
-          logDebug('readSessionIdFromFile: further malformed lines suppressed', { filePath });
-        }
-        malformedLines += 1;
-      }
-    }
-  } finally {
-    rl.close();
-    stream.destroy();
-  }
-
-  return sessionId;
+const readSessionIdFromFile = async (filePath: string, _sessionPath: string) => {
+  const metadata = await readSessionMetadataFromFile(filePath);
+  return metadata.sessionId;
 };
 
 const scanSessionFiles = async (root: string): Promise<FileEntry[]> => {
@@ -476,7 +152,7 @@ export const indexSessions = async (root: string) => {
   let metadataChecked = 0;
 
   const indexTransaction = database.transaction(
-    (file: FileEntry, parsed: Awaited<ReturnType<typeof parseJsonlFile>>) => {
+    (file: FileEntry, parsed: Awaited<ReturnType<typeof parseSessionFile>>) => {
       try {
         deleteMessages.run(file.relPath);
       } catch (error) {
@@ -485,42 +161,33 @@ export const indexSessions = async (root: string) => {
       }
 
       try {
-        const fileSessionId = extractSessionIdFromPath(file.relPath);
-        // Filename session ID is authoritative; session_meta is only a fallback when filename lacks an ID.
-        if (fileSessionId && parsed.sessionMeta.session_id && fileSessionId !== parsed.sessionMeta.session_id) {
-          logDebug('session:id:mismatch', {
-            path: file.relPath,
-            filenameId: fileSessionId,
-            parsedId: parsed.sessionMeta.session_id,
-          });
-        }
         insertSession.run({
           id: file.relPath,
           path: file.relPath,
-          session_id: fileSessionId ?? parsed.sessionMeta.session_id ?? null,
+          session_id: parsed.summary.sessionId ?? null,
           session_id_checked: 1,
-          timestamp: parsed.sessionMeta.timestamp ?? null,
-          cwd: parsed.sessionMeta.cwd ?? null,
-          git_branch: parsed.sessionMeta.git_branch ?? null,
-          git_repo: parsed.sessionMeta.git_repo ?? null,
-          git_commit_hash: parsed.sessionMeta.git_commit_hash ?? null,
-          first_user_message: parsed.firstUserMessage || null,
-          started_at: parsed.metrics.startedAt ?? null,
-          ended_at: parsed.metrics.endedAt ?? null,
-          turn_count: parsed.metrics.turnCount ?? null,
-          message_count: parsed.metrics.messageCount ?? null,
-          thought_count: parsed.metrics.thoughtCount ?? null,
-          tool_call_count: parsed.metrics.toolCallCount ?? null,
-          meta_count: parsed.metrics.metaCount ?? null,
-          token_count_count: parsed.metrics.tokenCountCount ?? null,
-          active_duration_ms: parsed.metrics.activeDurationMs ?? null,
+          timestamp: parsed.summary.timestamp ?? null,
+          cwd: parsed.summary.cwd ?? null,
+          git_branch: parsed.summary.gitBranch ?? null,
+          git_repo: parsed.summary.gitRepo ?? null,
+          git_commit_hash: parsed.summary.gitCommitHash ?? null,
+          first_user_message: parsed.summary.preview ?? null,
+          started_at: parsed.summary.startedAt ?? null,
+          ended_at: parsed.summary.endedAt ?? null,
+          turn_count: parsed.summary.turnCount ?? null,
+          message_count: parsed.summary.messageCount ?? null,
+          thought_count: parsed.summary.thoughtCount ?? null,
+          tool_call_count: parsed.summary.toolCallCount ?? null,
+          meta_count: parsed.summary.metaCount ?? null,
+          token_count_count: parsed.summary.tokenCountCount ?? null,
+          active_duration_ms: parsed.summary.activeDurationMs ?? null,
         });
       } catch (error) {
         console.error('[reindex] insertSession failed', file.relPath, error);
         throw error;
       }
 
-      for (const [index, message] of parsed.messages.entries()) {
+      for (const [index, message] of parsed.messagesForIndex.entries()) {
         try {
           insertMessage.run(file.relPath, message.turnId, message.role, message.timestamp ?? null, message.content);
           messageCount += 1;
@@ -557,7 +224,7 @@ export const indexSessions = async (root: string) => {
     if (sameFile && existing?.has_session && !existing.session_id_checked) {
       metadataChecked += 1;
       const filenameSessionId = extractSessionIdFromPath(file.relPath);
-      const resolvedSessionId = filenameSessionId ?? (await readSessionIdFromFile(file.absPath));
+      const resolvedSessionId = filenameSessionId ?? (await readSessionIdFromFile(file.absPath, file.relPath));
       if (resolvedSessionId) {
         updateSessionId.run(resolvedSessionId, file.relPath);
       } else {
@@ -567,10 +234,7 @@ export const indexSessions = async (root: string) => {
     }
     updated += 1;
 
-    const parsed = await parseJsonlFile(file.absPath);
-    const filename = path.basename(file.relPath);
-    parsed.sessionMeta.timestamp = parsed.sessionMeta.timestamp ?? parseTimestampFromFilename(filename) ?? undefined;
-
+    const parsed = await parseSessionFile(file.absPath, file.relPath);
     indexTransaction(file, parsed);
   }
 

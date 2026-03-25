@@ -11,6 +11,8 @@ if (!root) {
 
 ReactDOM.createRoot(root).render(
   <StrictMode>
-    <ConversationViewer />
+    <div className="root">
+      <ConversationViewer />
+    </div>
   </StrictMode>,
 );

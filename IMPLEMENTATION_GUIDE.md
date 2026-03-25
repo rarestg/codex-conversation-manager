@@ -2,12 +2,11 @@
 
 This document replaces the early-era `IMPLEMENTATION_PLAN.txt` and `DESIGN_APPENDIX.txt`.
 It is the canonical current-state behavior and invariants guide for contributors and
-maintainers: it describes what ships today and what must not break while the architecture
-changes.
+maintainers: it describes what ships today and what must not break.
 
-Target-state architecture and migration sequencing now live in:
-- `ROADMAP.md` (`## Primary Initiative`)
-- `todos/2026-03-07-2pm_session-catalog-rearchitecture-plan.txt`
+Product direction, remaining sequencing, and deferred work live in:
+- `ROADMAP.md`
+- `plans/` for active implementation plans
 
 If you are new to the codebase:
 - Start with `README.md` for setup and quick orientation.
@@ -43,6 +42,9 @@ Frontend:
 - React 19 + TypeScript (strict)
 - Vite 7
 - Tailwind CSS 4 via `@tailwindcss/vite`
+- `@base-ui/react` for headless menus, popovers, selects, and checkboxes
+- `@tanstack/react-table` for the session catalog row model
+- `react-resizable-panels` for the split-pane layout
 - `react-markdown` + `remark-gfm` + `rehype-raw` + `rehype-sanitize`
 - `react-syntax-highlighter` (Prism)
 
@@ -55,30 +57,40 @@ Backend (Vite dev server middleware):
 ## 3) Current Shipped Architecture Overview
 
 ### Frontend entry and page composition
-- `src/main.tsx` boots the app.
-- `src/features/conversation/ConversationViewer.tsx` controls layout/data hooks and switches
-  between `/`, `/canvas`, `/layouts`, and `/stickytest` without a router.
-- `src/features/conversation/ConversationMain.tsx` renders active session view.
+- `src/main.tsx` boots the app inside a `.root` wrapper (required for Base UI portals).
+- `src/features/conversation/ConversationViewer.tsx` renders a persistent resizable split-pane
+  layout via `react-resizable-panels`: session catalog on the left, conversation detail on the
+  right. It also routes to `/canvas`, `/layouts`, and `/stickytest` without a router.
+- `src/features/conversation/components/SessionCatalogPane.tsx` renders the left-pane catalog
+  powered by `@tanstack/react-table`, with Base UI facet filter popovers and select controls.
+- `src/features/conversation/ConversationMain.tsx` renders the active session view in the right
+  pane.
 - `src/features/conversation/CanvasView.tsx` renders the dev/demo variant surface.
-- `src/features/conversation/components/Sidebar.tsx` renders search + session browser.
 - `src/features/conversation/StickyTest.tsx` is a dev-only route for validating sticky behavior.
 
 ### Backend (Vite API middleware)
 - `server/apiPlugin.ts` is a thin adapter (routes all `/api/*`).
-- `server/routes/index.ts` maps method + path to handlers.
+- `server/routes/index.ts` maps method + path to handlers, including the canonical
+  `session-detail`, `session-catalog`, and `session-catalog-facets` endpoints.
 - `server/http.ts` provides `sendJson` and `readJsonBody`.
 
 ### Shared contracts and metrics
-- `shared/apiTypes.ts` defines legacy/widget-shaped endpoint types and sort unions used by the
-  current home shell during migration.
-- New domain contracts belong in `shared/sessionCatalogTypes.ts` and
-  `shared/sessionDetailTypes.ts`.
+- `shared/sessionDetailTypes.ts` defines the canonical session-detail DTO
+  (`SessionDetailResponse`, `SessionDetailTurn`, `SessionDetailItem`, etc.).
+- `shared/sessionCatalogTypes.ts` defines the catalog row, query, facet, and pagination
+  contracts (`SessionCatalogRow`, `SessionCatalogQuery`, `SessionCatalogFacetsResponse`, etc.).
+- `shared/apiTypes.ts` defines legacy/widget-shaped endpoint types for the old search panel and
+  workspace panel. New contracts should not be added here.
 - `shared/sessionMetrics.ts` keeps session metrics and active-duration calculation aligned
   between server indexing and client-side fallback parsing.
 
 ---
 
 ## 4) JSONL Parsing and Turn Grouping (Critical Invariants)
+
+The canonical parser implementation lives in `server/sessionDetail/parser.ts`. The frontend
+receives pre-parsed turns from `GET /api/session-detail` and no longer parses JSONL itself
+for its primary data path.
 
 ### Source of truth for content
 1) **Primary conversational content** comes from `event_msg`:
@@ -128,16 +140,31 @@ Backend (Vite dev server middleware):
 - DB path: `~/.codex-formatter/codex_index.db`
 - Schema is managed here; do not duplicate SQL elsewhere.
 
+### Session detail (canonical parser and service)
+- `server/sessionDetail/parser.ts`: canonical JSONL parser shared by indexing and on-demand
+  session detail. Exports `parseSessionRaw()` and `readSessionMetadataFromFile()`.
+- `server/sessionDetail/service.ts`: builds `SessionDetailResponse` from parsed data.
+
+### Session catalog
+- `server/catalog/queries.ts`: catalog query builder with exact-value facet filtering,
+  content-search integration, locator queries, sorting, and pagination.
+- `server/catalog/facets.ts`: self-excluding facet count queries for workspace, repo, and
+  branch.
+- `server/catalog/locator.ts`: shared session-resolution logic used by both the catalog
+  `locatorQuery` and `GET /api/resolve-session`.
+
 ### Indexing and session tree
-- `server/indexing/index.ts`: JSONL parsing + indexing
-- `server/indexing/tree.ts`: session tree and preview truncation
+- `server/indexing/index.ts`: incremental indexing, delegates JSONL parsing to the canonical
+  parser in `server/sessionDetail/parser.ts`.
+- `server/indexing/tree.ts`: session tree and preview truncation.
 
 ### Search
 - `server/search/normalize.ts`: FTS query normalization
 - `server/search/queries.ts`: search SQL + grouping
 
-### Workspace summaries
-- `server/workspaces.ts`: workspace summary queries and GitHub slug extraction
+### Workspace summaries (legacy)
+- `server/workspaces.ts`: workspace summary queries and GitHub slug extraction.
+  Superseded by catalog facets for the new shell but still used by legacy search endpoints.
 
 ### Logging
 - `server/logging.ts`: debug flags and log helpers
@@ -146,13 +173,59 @@ Backend (Vite dev server middleware):
 
 ### Shared cross-layer logic
 - `shared/sessionMetrics.ts`: canonical session metrics + active duration logic
+- `shared/sessionDetailTypes.ts` and `shared/sessionCatalogTypes.ts`: domain DTOs
 - `server/types.ts` and `src/features/conversation/types.ts`: tree/session/viewer data shapes
 
 ---
 
-## 6) Current Legacy Adapters And Supporting Endpoints
+## 6) API Endpoints
 
-### `GET /api/config`
+### Canonical Endpoints
+
+#### `GET /api/session-detail?id=...`
+Query params:
+- `id` (required) — `sessions.id` (relative session path)
+
+Behavior:
+- Reads the raw JSONL file from disk and parses it with the canonical server-owned parser.
+- Returns `SessionDetailResponse`: `session` (summary metadata), `turns` (normalized turn
+  array), and `parseErrors` (non-fatal).
+- Validates path safety (no traversal outside sessions root).
+- 400 if `id` is missing; 404 if the session file does not exist.
+- This is the primary session-loading contract used by the frontend.
+
+#### `GET /api/session-catalog?...`
+Query params:
+- `contentQuery` (optional) — FTS content search
+- `locatorQuery` (optional) — direct session ID/path resolution
+- `workspaces` (optional, repeated) — exact workspace filter
+- `gitRepos` (optional, repeated) — exact repo filter
+- `gitBranches` (optional, repeated) — exact branch filter
+- `workspace` (optional) — legacy single-value shortcut, mapped into `workspaces[]`
+- `sort` (optional) — `recent` | `oldest` | `turns_desc` | `messages_desc` | `duration_desc`
+- `page` (optional, default 1)
+- `pageSize` (optional, default 50, clamped to 1-200)
+
+Behavior:
+- One row per session file.
+- Deterministic ordering with `sessions.id ASC` tie-breaker.
+- Stable pagination. Out-of-range pages are clamped.
+- Optional content-search integration using existing FTS tables; when active, rows include
+  `matchCount`, `firstMatchTurnId`, and `snippet` with `[[...]]` markers.
+- Optional locator-resolution using the shared locator helper.
+- Exact facet filters combine with AND across facets, OR within a facet.
+- Returns `rows`, `totalRows`, `page`, `pageSize`, `totalPages`, `appliedQuery`,
+  and optional `contentTokens`.
+
+#### `GET /api/session-catalog-facets?...`
+Accepts the same filtering context as the catalog query. For each facet dimension, counts are
+self-excluding on that dimension (e.g., workspace counts are not filtered by selected
+workspaces). Returns `SessionCatalogFacetsResponse` with `workspaces`, `gitRepos`, and
+`gitBranches` arrays, each containing `{ value, label, count }` buckets.
+
+### Supporting Endpoints
+
+#### `GET /api/config`
 Returns `{ value, source }`, where source is `env | config | default`.
 
 ### `POST /api/config`
@@ -169,8 +242,8 @@ This is a current home-shell projection, not the target catalog contract.
 Returns raw JSONL text for a session file.
 Validates path safety (no traversal).
 404 if missing; 403 if unreadable.
-This remains the current debug/export/raw-access path while `GET /api/session-detail`
-becomes the canonical UI contract.
+This is the debug/export/raw-access path. The canonical UI contract is
+`GET /api/session-detail`.
 
 ### `POST /api/reindex`
 Rebuilds index incrementally (mtime/size checks).
@@ -195,8 +268,8 @@ Behavior:
 - Workspace summaries computed for **result workspaces only** (Option A).
 - Deterministic ordering via `sessions.id ASC` tie-breaker.
 - `Server-Timing` header included.
-This grouped response is a legacy adapter for the current search panel, not the target
-catalog/search contract.
+This grouped response is a legacy adapter for the old search panel. The session catalog
+endpoint is the current primary browsing/search contract.
 
 ### `GET /api/session-matches`
 Query params:
@@ -213,7 +286,8 @@ Behavior:
 Returns workspace summaries for the sessions table.
 Accepts `sort=last_seen|session_count`.
 Only sessions with non-empty `cwd` contribute workspace rows.
-This is a current panel feed and should collapse into catalog facets during migration.
+This is a legacy panel feed. Catalog facets (`GET /api/session-catalog-facets`) are the
+current primary source of workspace/repo/branch filtering data.
 
 ### `GET /api/resolve-session?id=...`
 Query params:
@@ -225,9 +299,8 @@ Behavior:
 - Resolves exact `session_id`, then exact `path`, then `path LIKE`.
 - Applies optional workspace filtering before choosing a match.
 - Returns `{ id }` or 404 if not found.
-- During the catalog migration, this should remain a thin adapter over the same
-  locator-resolution service used by `locatorQuery`, so Enter/UUID flows keep working
-  without duplicating lookup logic.
+- Implemented as a thin adapter over the shared locator-resolution logic in
+  `server/catalog/locator.ts`, the same service used by the catalog `locatorQuery`.
 
 ---
 
@@ -299,7 +372,8 @@ Workflow:
 2) Compare `size` + `mtime` vs `files` table.
 3) If unchanged and `session_id_checked` already done, skip.
 4) If unchanged but `session_id_checked` missing, read just session_meta/turn_context.
-5) If changed or new, parse entire JSONL:
+5) If changed or new, parse entire JSONL via `parseSessionRaw()` from
+   `server/sessionDetail/parser.ts`:
    - Build searchable messages list (`user`, `assistant`, `thought`, `tool_call`, `tool_output`)
    - Extract metadata (cwd, git info, timestamps, session-id fallbacks)
    - Count items (turns, thoughts, tools, meta, token_count)
@@ -355,32 +429,37 @@ Server-driven:
 
 ---
 
-## 10) Workspace Summaries (Current Legacy Adapter, Option A)
+## 10) Workspace Summaries (Legacy) and Catalog Facets
 
-The search endpoint collects the set of workspaces present in the results and fetches
-only those summaries. This avoids scanning the entire sessions table per search.
+The legacy search endpoint still collects workspace summaries for its grouped response using
+the Option A strategy (result-only summaries).
 
-Unknown workspace behavior:
-- If a session has `cwd` empty or null, it is grouped under `Unknown workspace`.
-- The UI displays that group with minimal metadata.
+The current primary filtering surface is `GET /api/session-catalog-facets`, which returns
+self-excluding facet counts for workspace, repo, and branch. Unknown/empty values are
+represented using a shared sentinel value (`SESSION_CATALOG_UNKNOWN_VALUE`) that round-trips
+through both facet responses and filter queries.
 
 ---
 
-## 11) Frontend Behavior and UX Contracts (Current Home Shell)
+## 11) Frontend Behavior and UX Contracts
 
-### Home view
-- Search panel + Workspaces panel + Sessions panel.
-- Search results are grouped by workspace with match counts and snippets.
-- Typing debounces FTS search (350ms) once the query has at least one searchable token.
-- Queries that normalize to no searchable tokens stay client-side in the "too short to search" state.
-- Enter attempts direct session resolution first.
-- Pasting an exact UUID attempts immediate session resolution before falling back to FTS.
-- Search sorting controls: results (relevance/matches/recent) and workspaces (last_seen/matches).
-- Opening a session clears any active workspace filter.
+### Split-pane shell
+- The root route renders a persistent resizable split layout via `react-resizable-panels`.
+- Left pane: `SessionCatalogPane` backed by `GET /api/session-catalog` and
+  `GET /api/session-catalog-facets`.
+- Right pane: `ConversationMain` backed by `GET /api/session-detail`.
+- The catalog pane stays visible while a session is loaded.
+- When no session is active, the right pane shows an empty state.
 
-This section documents the current shipped home shell. The target replacement is the
-session-catalog split-pane architecture described in `ROADMAP.md` and
-`todos/2026-03-07-2pm_session-catalog-rearchitecture-plan.txt`.
+### Catalog controls
+- Content search input debounces FTS search (350ms) once the query has at least one
+  searchable token.
+- Locator input for direct session ID/path resolution; Enter triggers resolution.
+- Base UI `Select` controls for sort order and page size.
+- Base UI `Popover` + `Checkbox` facet filter menus for workspace, repo, and branch.
+- Active filters are visible as removable chips in the catalog header.
+- Facet counts are server-driven and self-excluding on their own dimension.
+- Pagination controls at the bottom of the catalog pane.
 
 ### Session view
 - Session view is composed around `SessionOverview`, the sticky controls bar, `TurnList`, and `TurnJumpModal`.
@@ -433,10 +512,11 @@ Server indexing behavior:
 - Blank lines ignored.
 - Malformed JSON lines logged (rate-limited), parsing continues.
 
-Client parsing behavior:
-- Blank lines ignored.
-- Malformed JSON lines are collected as per-line parse errors and parsing continues.
-- UI surfaces non-blocking parse error banners when applicable.
+Session-detail error handling:
+- Parse errors are generated by the server parser and returned in the `parseErrors` field of
+  `GET /api/session-detail`.
+- Malformed JSON lines are collected as per-line errors; parsing continues.
+- The frontend surfaces non-blocking parse error banners from the server response.
 
 ---
 
@@ -472,20 +552,24 @@ Automated checks:
 CI runs the same three commands above. Formal tests are currently deferred.
 
 Manual verification flows include:
-- Search with multiple queries; confirm grouping, snippets, and navigation.
-- Direct session resolution via Enter and UUID paste.
-- Sorting by relevance/matches/recent; group sort by last_seen/matches.
-- Workspace filter applied to search and session list, then cleared when opening a session.
+- Open a session from the catalog pane; confirm turn grouping, preamble, and metadata render.
+- Use content search in the catalog; confirm match counts, snippets, and highlighting in the
+  detail pane.
+- Direct session resolution via the locator input (Enter) and UUID paste.
+- Facet filtering: select workspace/repo/branch filters and confirm rows narrow; remove filters
+  and confirm rows repopulate.
+- Sort and page-size controls change catalog ordering and row count.
 - Match navigation excludes preamble and aligns with highlighting.
 - Turn shortcuts only activate when the messages pane is focused.
 - Reindex and clear-index flows rebuild data safely.
+- Deep-link loading: `?session=...&turn=...&q=...` loads the correct session and state.
 - `/canvas`, `/layouts`, and `/stickytest` remain usable when touching layout/sticky behavior.
 
-Migration parity checks to add once session-detail and session-catalog land:
-- Compare current raw-file parsing against server `session-detail` output for representative
+Parity checks (server parser vs. legacy client parser):
+- Compare server `session-detail` output against legacy client-side parsing for representative
   sessions, including parse errors, preamble handling, and turn grouping.
-- Compare `/api/resolve-session` against locator-service / `locatorQuery` behavior so Enter
-  and UUID flows stay equivalent during migration.
+- Compare `/api/resolve-session` against catalog `locatorQuery` behavior so Enter and UUID
+  flows stay equivalent.
 
 ---
 
@@ -496,9 +580,9 @@ When modifying:
 - Don’t change snippet markers (`[[...]]`) without updating the renderer.
 - Keep `/api/search` and `/api/session-matches` aligned on preamble exclusion.
 - Keep deterministic ordering in search (tie-breaker required).
-- Update `shared/apiTypes.ts` only for current legacy/widget-shaped endpoints.
-- Put new domain contracts in `shared/sessionCatalogTypes.ts` and
-  `shared/sessionDetailTypes.ts`.
+- Update `shared/apiTypes.ts` only for legacy/widget-shaped endpoints.
+- Domain contracts live in `shared/sessionCatalogTypes.ts` and
+  `shared/sessionDetailTypes.ts`; add new domain types there, not in `apiTypes.ts`.
 - Update `shared/sessionMetrics.ts` when changing metric or active-duration definitions.
 - Update `README.md` / `AGENTS.md` when canonical doc locations or validation commands change.
 

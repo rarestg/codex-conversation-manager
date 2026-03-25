@@ -1,3 +1,5 @@
+// Legacy widget-shaped shared contracts. Session detail and catalog DTOs now live
+// in dedicated domain files under shared/ and should not be added here.
 export type SearchResultSort = 'relevance' | 'matches' | 'recent';
 export type SearchGroupSort = 'last_seen' | 'matches';
 

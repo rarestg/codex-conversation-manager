@@ -1,4 +1,10 @@
 import type {
+  SessionCatalogFacetsResponse,
+  SessionCatalogQuery,
+  SessionCatalogResponse,
+} from '../../../shared/sessionCatalogTypes';
+import type { SessionDetailResponse } from '../../../shared/sessionDetailTypes';
+import type {
   IndexSummary,
   SearchGroupSort,
   SearchResponse,
@@ -44,6 +50,95 @@ export const fetchSession = async (sessionId: string) => {
     await parseError(res, 'Unable to load session file.');
   }
   return await res.text();
+};
+
+export const fetchSessionDetail = async (sessionId: string, options?: { signal?: AbortSignal }) => {
+  const res = await fetch(`/api/session-detail?id=${encodeURIComponent(sessionId)}`, {
+    signal: options?.signal,
+  });
+  if (!res.ok) {
+    await parseError(res, 'Unable to load session.');
+  }
+  return (await res.json()) as SessionDetailResponse;
+};
+
+export const fetchSessionCatalog = async (query: SessionCatalogQuery = {}, options?: { signal?: AbortSignal }) => {
+  const appendExactFilters = (params: URLSearchParams) => {
+    for (const workspace of query.workspaces ?? []) {
+      params.append('workspaces', workspace);
+    }
+    for (const gitRepo of query.gitRepos ?? []) {
+      params.append('gitRepos', gitRepo);
+    }
+    for (const gitBranch of query.gitBranches ?? []) {
+      params.append('gitBranches', gitBranch);
+    }
+  };
+  const params = new URLSearchParams();
+  const contentQuery = query.contentQuery?.trim();
+  const locatorQuery = query.locatorQuery?.trim();
+  if (contentQuery) {
+    params.set('contentQuery', contentQuery);
+  }
+  if (locatorQuery) {
+    params.set('locatorQuery', locatorQuery);
+  }
+  if (query.workspace) {
+    params.set('workspace', query.workspace);
+  }
+  appendExactFilters(params);
+  if (query.sort) {
+    params.set('sort', query.sort);
+  }
+  if (query.page) {
+    params.set('page', String(query.page));
+  }
+  if (query.pageSize) {
+    params.set('pageSize', String(query.pageSize));
+  }
+  const queryString = params.toString();
+  const res = await fetch(queryString ? `/api/session-catalog?${queryString}` : '/api/session-catalog', {
+    signal: options?.signal,
+  });
+  if (!res.ok) {
+    await parseError(res, 'Unable to load session catalog.');
+  }
+  return (await res.json()) as SessionCatalogResponse;
+};
+
+export const fetchSessionCatalogFacets = async (
+  query: SessionCatalogQuery = {},
+  options?: { signal?: AbortSignal },
+) => {
+  const params = new URLSearchParams();
+  const contentQuery = query.contentQuery?.trim();
+  const locatorQuery = query.locatorQuery?.trim();
+  if (contentQuery) {
+    params.set('contentQuery', contentQuery);
+  }
+  if (locatorQuery) {
+    params.set('locatorQuery', locatorQuery);
+  }
+  if (query.workspace) {
+    params.set('workspace', query.workspace);
+  }
+  for (const workspace of query.workspaces ?? []) {
+    params.append('workspaces', workspace);
+  }
+  for (const gitRepo of query.gitRepos ?? []) {
+    params.append('gitRepos', gitRepo);
+  }
+  for (const gitBranch of query.gitBranches ?? []) {
+    params.append('gitBranches', gitBranch);
+  }
+  const queryString = params.toString();
+  const res = await fetch(queryString ? `/api/session-catalog-facets?${queryString}` : '/api/session-catalog-facets', {
+    signal: options?.signal,
+  });
+  if (!res.ok) {
+    await parseError(res, 'Unable to load catalog filters.');
+  }
+  return (await res.json()) as SessionCatalogFacetsResponse;
 };
 
 export const searchSessions = async (

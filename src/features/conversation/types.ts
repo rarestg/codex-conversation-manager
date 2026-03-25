@@ -1,4 +1,12 @@
-export type ParsedItemType = 'user' | 'assistant' | 'thought' | 'tool_call' | 'tool_output' | 'meta' | 'token_count';
+import type {
+  SessionDetailItem,
+  SessionDetailItemType,
+  SessionDetailResponse,
+  SessionDetailSummary,
+  SessionDetailTurn,
+} from '../../../shared/sessionDetailTypes';
+
+export type ParsedItemType = SessionDetailItemType;
 export type SearchStatus = 'idle' | 'debouncing' | 'loading' | 'success' | 'error';
 
 export type {
@@ -11,24 +19,9 @@ export type {
   WorkspaceSummary,
 } from '../../../shared/apiTypes';
 
-export interface ParsedItem {
-  id: string;
-  type: ParsedItemType;
-  content: string;
-  seq: number;
-  timestamp?: string;
-  callId?: string;
-  toolName?: string;
-  raw?: unknown;
-}
+export type ParsedItem = SessionDetailItem;
 
-export interface Turn {
-  id: number;
-  startedAt?: string;
-  items: ParsedItem[];
-  activeDurationMs?: number | null;
-  isPreamble?: boolean;
-}
+export type Turn = SessionDetailTurn;
 
 export interface SessionFileEntry {
   id: string;
@@ -69,6 +62,8 @@ export interface SessionDetails {
   sessionId?: string;
   cwd?: string;
 }
+
+export type { SessionDetailResponse, SessionDetailSummary };
 
 export interface SearchResult {
   id: number;

@@ -16,6 +16,7 @@ Codex Conversation Manager is a local web app for browsing, searching, and inspe
 - Sharp UI implementation tracking: `todos/sharp-ui/README.md`
 - Command inventory: `package.json`
 - CI truth: `.github/workflows/ci.yml`
+- Implementation plans for the rearchitecture: `plans/`
 - Active plans: `todos/`
 - Completed-plan history: `todos/_done/INDEX.txt`
 - Investigations and lessons learned: `todos/_learnings/`
@@ -24,18 +25,29 @@ Codex Conversation Manager is a local web app for browsing, searching, and inspe
 
 ## Repo Map
 
-- `ROADMAP.md`: product direction, immediate next steps, and plan sequencing
-- `src/main.tsx`: app entry
+- `ROADMAP.md`: product direction, completed rearchitecture sequence, and next steps
+- `plans/`: active implementation plans for the session-catalog rearchitecture phases
+- `src/main.tsx`: app entry, wrapped in `.root` for Base UI portals
 - `src/features/conversation/`: primary frontend feature area
-- `src/features/conversation/ConversationViewer.tsx`: top-level shell, home/session split, and manual path switching instead of a router
-- `src/features/conversation/ConversationMain.tsx`: active session view
-- `src/features/conversation/components/`: search, sidebar, session header/overview, turn/message rendering, settings, and turn-jump UI
-- `src/features/conversation/hooks/`: session loading, search, sessions tree, workspaces, URL sync, turn navigation, and render-debug hooks
+- `src/features/conversation/ConversationViewer.tsx`: top-level resizable split-pane shell (`react-resizable-panels`), catalog left / detail right, plus dev route switching
+- `src/features/conversation/ConversationMain.tsx`: active session view (right pane)
+- `src/features/conversation/components/SessionCatalogPane.tsx`: left-pane catalog powered by `@tanstack/react-table` with Base UI facet filters
+- `src/features/conversation/components/FacetFilterPopover.tsx`: Base UI `Popover` + `Checkbox` multi-select facet menu
+- `src/features/conversation/components/CatalogSelect.tsx`: Base UI `Select` wrapper for sort and page size
+- `src/features/conversation/components/`: also includes session header/overview, turn/message rendering, settings, and turn-jump UI
+- `src/features/conversation/hooks/useSessionCatalog.ts`: catalog query state, pagination, facet filter management, content debounce
+- `src/features/conversation/hooks/useSessionCatalogFacets.ts`: facet value loading from `GET /api/session-catalog-facets`
+- `src/features/conversation/hooks/`: also includes session loading, search, sessions tree, workspaces, URL sync, turn navigation, and render-debug hooks
 - `src/features/conversation/canvas/` plus `CanvasView.tsx`: dev/demo variants at `/canvas` and `/layouts`
 - `src/features/conversation/StickyTest.tsx`: dev-only sticky sandbox at `/stickytest`
-- `server/`: API adapter/routes, config/path safety, DB/schema, indexing, search, workspace summaries, logging
-- `shared/`: API types and shared session-metrics logic used by client and server
-- Exact data shapes live in `src/features/conversation/types.ts`, `shared/apiTypes.ts`, and `shared/sessionMetrics.ts`
+- `server/sessionDetail/`: canonical JSONL parser (`parser.ts`) and session-detail response builder (`service.ts`)
+- `server/catalog/`: catalog query engine (`queries.ts`), facet aggregation (`facets.ts`), and shared locator/resolve service (`locator.ts`)
+- `server/`: also includes API adapter/routes, config/path safety, DB/schema, indexing, search, workspace summaries (legacy), logging
+- `shared/sessionDetailTypes.ts`: canonical session-detail DTOs
+- `shared/sessionCatalogTypes.ts`: catalog row, query, facet, and pagination contracts
+- `shared/apiTypes.ts`: legacy/widget-shaped endpoint types (not for new domain contracts)
+- `shared/sessionMetrics.ts`: shared session metrics and active-duration logic
+- Exact data shapes live in `shared/sessionDetailTypes.ts`, `shared/sessionCatalogTypes.ts`, `src/features/conversation/types.ts`, and `shared/sessionMetrics.ts`
 - `scripts/typecheck.js`: runs both TypeScript projects
 - `todos/sharp-ui/`: implementation-slice docs for the sharp UI migration, with current status notes
 
