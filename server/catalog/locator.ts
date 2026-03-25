@@ -15,11 +15,7 @@ export const buildLocatorSql = (alias: string, query: string): LocatorSql => {
     whereClause: `(${alias}.session_id = ? OR ${alias}.path = ? OR ${alias}.path LIKE ? ESCAPE '\\')`,
     whereParams: [query, query, likePattern],
     orderClause: [
-      `CASE`,
-      `WHEN ${alias}.session_id = ? THEN 0`,
-      `WHEN ${alias}.path = ? THEN 1`,
-      `ELSE 2`,
-      `END`,
+      `CASE WHEN ${alias}.session_id = ? THEN 0 WHEN ${alias}.path = ? THEN 1 ELSE 2 END`,
       `LENGTH(${alias}.path) ASC`,
       `${alias}.path ASC`,
     ].join(', '),

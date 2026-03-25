@@ -349,25 +349,13 @@ const routes: Record<string, ApiHandler> = {
     return sendJson(res, 200, resolved);
   },
   'GET /api/session-catalog': async (_req, res, url) => {
-    const rootInfo = await resolveSessionsRoot();
-    const rootExists = await ensureRootExists(rootInfo.value);
-    if (!rootExists) {
-      return sendJson(res, 404, {
-        error: `Sessions root not found: ${rootInfo.value}. Set CODEX_SESSIONS_ROOT or update ~/.codex-formatter/config.json`,
-      });
-    }
+    if (!(await ensureAvailableRoot(res))) return;
     const database = getDb();
     const response = getSessionCatalog(database, getCatalogQueryFromUrl(url));
     return sendJson(res, 200, response);
   },
   'GET /api/session-catalog-facets': async (_req, res, url) => {
-    const rootInfo = await resolveSessionsRoot();
-    const rootExists = await ensureRootExists(rootInfo.value);
-    if (!rootExists) {
-      return sendJson(res, 404, {
-        error: `Sessions root not found: ${rootInfo.value}. Set CODEX_SESSIONS_ROOT or update ~/.codex-formatter/config.json`,
-      });
-    }
+    if (!(await ensureAvailableRoot(res))) return;
     const database = getDb();
     const response = getSessionCatalogFacets(database, getCatalogQueryFromUrl(url));
     return sendJson(res, 200, response);

@@ -333,7 +333,7 @@ Acceptance:
 Suggested verification commands:
 
 ```bash
-cd /Users/rares/GITHUB/ARTIFACTS/codex-formatter
+cd <repo-root>
 npm run check
 npm run typecheck
 rg -n "\"@base-ui/react\"|\"@tanstack/react-table\"|\"react-resizable-panels\"" package.json
@@ -357,7 +357,7 @@ Acceptance:
 Suggested verification commands:
 
 ```bash
-cd /Users/rares/GITHUB/ARTIFACTS/codex-formatter
+cd <repo-root>
 npm run check
 npm run typecheck
 rg -n "fetchSessionCatalog|useSessionCatalog|SessionCatalogPane" src
@@ -381,7 +381,7 @@ Acceptance:
 Suggested verification commands:
 
 ```bash
-cd /Users/rares/GITHUB/ARTIFACTS/codex-formatter
+cd <repo-root>
 npm run check
 npm run typecheck
 rg -n "Group|Separator|react-resizable-panels" src
@@ -403,7 +403,7 @@ Manual verification:
 Run all relevant checks before handoff or review:
 
 ```bash
-cd /Users/rares/GITHUB/ARTIFACTS/codex-formatter
+cd <repo-root>
 npm run check
 npm run typecheck
 npm run mdlint
@@ -415,7 +415,7 @@ If the package install modified lockfiles or formatting significantly, re-run
 Then confirm these structural conditions:
 
 ```bash
-cd /Users/rares/GITHUB/ARTIFACTS/codex-formatter
+cd <repo-root>
 rg -n "\"@base-ui/react\"|\"@tanstack/react-table\"|\"react-resizable-panels\"" package.json
 rg -n "fetchSessionCatalog|useSessionCatalog|SessionCatalogPane" src
 rg -n "Group|Separator" src/features/conversation

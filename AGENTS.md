@@ -16,7 +16,7 @@ Codex Conversation Manager is a local web app for browsing, searching, and inspe
 - Sharp UI implementation tracking: `todos/sharp-ui/README.md`
 - Command inventory: `package.json`
 - CI truth: `.github/workflows/ci.yml`
-- Implementation plans for the rearchitecture: `plans/`
+- Implementation plans: `plans/` (completed phases archived in `plans/_archived/`)
 - Active plans: `todos/`
 - Completed-plan history: `todos/_done/INDEX.txt`
 - Investigations and lessons learned: `todos/_learnings/`
@@ -26,7 +26,7 @@ Codex Conversation Manager is a local web app for browsing, searching, and inspe
 ## Repo Map
 
 - `ROADMAP.md`: product direction, completed rearchitecture sequence, and next steps
-- `plans/`: active implementation plans for the session-catalog rearchitecture phases
+- `plans/`: implementation plans; completed rearchitecture phases archived in `plans/_archived/`
 - `src/main.tsx`: app entry, wrapped in `.root` for Base UI portals
 - `src/features/conversation/`: primary frontend feature area
 - `src/features/conversation/ConversationViewer.tsx`: top-level resizable split-pane shell (`react-resizable-panels`), catalog left / detail right, plus dev route switching

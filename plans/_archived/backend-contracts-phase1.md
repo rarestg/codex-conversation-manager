@@ -442,7 +442,7 @@ Acceptance:
 Suggested verification commands:
 
 ```bash
-cd /Users/rares/GITHUB/ARTIFACTS/codex-formatter
+cd <repo-root>
 npm run typecheck
 rg -n "sessionDetailTypes|sessionCatalogTypes" shared src server
 ```
@@ -470,7 +470,7 @@ Acceptance:
 Suggested verification commands:
 
 ```bash
-cd /Users/rares/GITHUB/ARTIFACTS/codex-formatter
+cd <repo-root>
 npm run check
 npm run typecheck
 rg -n "parseJsonl\\(" src/features/conversation/hooks/useSession.ts
@@ -509,7 +509,7 @@ Acceptance:
 Suggested verification commands:
 
 ```bash
-cd /Users/rares/GITHUB/ARTIFACTS/codex-formatter
+cd <repo-root>
 npm run check
 npm run typecheck
 rg -n "session-catalog|locatorQuery|resolve-session" server src shared
@@ -545,7 +545,7 @@ Manual verification:
 Run all of the following before handing off or asking for review:
 
 ```bash
-cd /Users/rares/GITHUB/ARTIFACTS/codex-formatter
+cd <repo-root>
 npm run check
 npm run typecheck
 npm run mdlint
@@ -554,7 +554,7 @@ npm run mdlint
 Then verify the following code-level invariants:
 
 ```bash
-cd /Users/rares/GITHUB/ARTIFACTS/codex-formatter
+cd <repo-root>
 rg -n "shared/apiTypes" src server shared
 rg -n "sessionDetailTypes|sessionCatalogTypes" src server shared
 rg -n "parseJsonl\\(" src/features/conversation

@@ -10,7 +10,7 @@ import type {
   SessionCatalogSort,
 } from '../../../../shared/sessionCatalogTypes';
 import { SESSION_CATALOG_UNKNOWN_VALUE } from '../../../../shared/sessionCatalogTypes';
-import { resolveSession } from '../api';
+import { fetchSessionCatalog } from '../api';
 import { formatCompactCount, formatDurationMs, formatTimestamp, formatWorkspacePath } from '../format';
 import { useSessionCatalog } from '../hooks/useSessionCatalog';
 import { useSessionCatalogFacets } from '../hooks/useSessionCatalogFacets';
@@ -250,8 +250,16 @@ export const SessionCatalogPane = ({
       setResolvingLocator(true);
       setLocatorStatus(null);
       try {
-        const requestId = `catalog-resolve-${Date.now().toString(36)}`;
-        const resolved = await resolveSession(query, null, requestId);
+        const response = await fetchSessionCatalog({
+          locatorQuery: query,
+          workspaces,
+          gitRepos,
+          gitBranches,
+          sort,
+          page: 1,
+          pageSize: 1,
+        });
+        const resolved = response.rows[0]?.id ?? null;
         if (!resolved) {
           setLocatorStatus('No exact session match.');
           return;
@@ -270,7 +278,7 @@ export const SessionCatalogPane = ({
         setResolvingLocator(false);
       }
     },
-    [onLoadSession, resolvingLocator],
+    [gitBranches, gitRepos, onLoadSession, resolvingLocator, sort, workspaces],
   );
 
   const handleLocatorEnter = useCallback(

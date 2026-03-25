@@ -40,8 +40,8 @@ Legacy endpoints (`/api/sessions`, `/api/workspaces`, `/api/search`,
 
 ## Completed Rearchitecture Sequence
 
-The session-catalog rearchitecture was implemented in three phases tracked in
-`plans/`:
+The session-catalog rearchitecture was implemented in three phases (archived in
+`plans/_archived/`):
 
 1. ~~Add shared session-catalog and session-detail contract types.~~
 2. ~~Move canonical session-detail parsing ownership to the server.~~

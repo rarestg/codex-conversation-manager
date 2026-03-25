@@ -319,7 +319,7 @@ Acceptance:
 Suggested verification commands:
 
 ```bash
-cd /Users/rares/GITHUB/ARTIFACTS/codex-formatter
+cd <repo-root>
 npm run check
 npm run typecheck
 rg -n "session-catalog-facets|gitRepos|gitBranches|workspaces" server shared
@@ -355,7 +355,7 @@ Acceptance:
 Suggested verification commands:
 
 ```bash
-cd /Users/rares/GITHUB/ARTIFACTS/codex-formatter
+cd <repo-root>
 npm run check
 npm run typecheck
 rg -n "@base-ui/react/(popover|select|checkbox)" src/features/conversation
@@ -387,7 +387,7 @@ Acceptance:
 Suggested verification commands:
 
 ```bash
-cd /Users/rares/GITHUB/ARTIFACTS/codex-formatter
+cd <repo-root>
 npm run check
 npm run typecheck
 ```
@@ -404,7 +404,7 @@ Manual verification:
 Run all relevant checks before handoff or review:
 
 ```bash
-cd /Users/rares/GITHUB/ARTIFACTS/codex-formatter
+cd <repo-root>
 npm run check
 npm run typecheck
 npm run mdlint
@@ -413,7 +413,7 @@ npm run mdlint
 Then confirm the structural conditions:
 
 ```bash
-cd /Users/rares/GITHUB/ARTIFACTS/codex-formatter
+cd <repo-root>
 rg -n "session-catalog-facets|gitRepos|gitBranches|workspaces" server shared
 rg -n "@base-ui/react/(popover|select|checkbox)" src/features/conversation
 rg -n "Clear filters|active filters|Workspace|Repo|Branch" src/features/conversation/components/SessionCatalogPane.tsx
@@ -421,7 +421,7 @@ rg -n "Clear filters|active filters|Workspace|Repo|Branch" src/features/conversa
 
 Interpretation guidance:
 
-- the backend should clearly expose facet support
+- the backend should explicitly expose facet support
 - the frontend should clearly use Base UI controls for the catalog filters
 - the catalog pane should show visible active-filter affordances
 

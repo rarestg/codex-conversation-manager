@@ -1,0 +1,45 @@
+Archived Plans Index
+
+Purpose
+=======
+Quick reference for completed implementation plans.
+Each entry tells you why it existed, what shipped, and where to read more.
+
+How to extend this index
+========================
+1) Add a new entry with these fields:
+   - Plan: filename
+   - Why: 1-2 sentences on the problem or motivation
+   - Outcome: 2-4 bullets on what shipped
+   - PR: link or number
+2) Add new entries at the top (newest first).
+
+---
+
+Plan: filter-menus-phase3.md
+Why: The catalog shell used native selects and had no facet filtering.
+Outcome:
+  - Added GET /api/session-catalog-facets with self-excluding counts
+  - Replaced native selects with Base UI Select for sort and page size
+  - Added Base UI Popover+Checkbox facet menus for workspace, repo, branch
+  - Added active filter chips with clear actions
+PR: #59
+
+Plan: frontend-shell-phase2.md
+Why: The home view was split across legacy Search/Sessions/Workspaces panels.
+Outcome:
+  - Installed @base-ui/react, @tanstack/react-table, react-resizable-panels
+  - Replaced old home shell with persistent resizable split-pane layout
+  - Added SessionCatalogPane powered by TanStack Table and catalog API
+  - Legacy panel components unmounted from the primary route
+PR: #59
+
+Plan: backend-contracts-phase1.md
+Why: The browser reparsed raw JSONL and the API was widget-shaped.
+Outcome:
+  - Added canonical server-owned parser (server/sessionDetail/parser.ts)
+  - Added GET /api/session-detail and GET /api/session-catalog
+  - Added shared domain DTOs (sessionDetailTypes.ts, sessionCatalogTypes.ts)
+  - Migrated viewer off client-side JSONL parsing
+  - Unified session resolution behind server/catalog/locator.ts
+PR: #59
