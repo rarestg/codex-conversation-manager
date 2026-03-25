@@ -63,10 +63,14 @@ export const fetchSessionDetail = async (sessionId: string, options?: { signal?:
 };
 
 const appendExactFilters = (params: URLSearchParams, query: SessionCatalogQuery) => {
-  // New catalog requests send workspaces via appendExactFilters. The legacy
-  // singular workspace alias is still accepted server-side, but this client
-  // should avoid sending both workspace and workspaces together.
-  for (const workspace of query.workspaces ?? []) {
+  // Preserve the legacy workspace alias by mapping it into the repeated
+  // workspaces params, while still avoiding sending both workspace and
+  // workspaces to the catalog endpoints at the same time.
+  const workspaces = [...(query.workspaces ?? []), query.workspace]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value));
+
+  for (const workspace of workspaces) {
     params.append('workspaces', workspace);
   }
   for (const gitRepo of query.gitRepos ?? []) {
