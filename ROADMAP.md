@@ -2,74 +2,66 @@
 
 ## Vision
 
-Codex Conversation Manager should evolve from a panel-based browser into a local
-Codex session workbench:
+Codex Conversation Manager is a local Codex session workbench:
 
 - a metadata-rich session catalog on the left
 - a detailed conversation pane on the right
 - strong filtering, sorting, and content search
-- a backend that owns canonical session understanding instead of exposing
-  widget-shaped API responses
+- a backend that owns canonical session understanding
 
-The target frontend stack for that direction is:
+The current frontend stack:
 
-- `@base-ui/react` for menus, popovers, dialogs, and related headless primitives
+- `@base-ui/react` for menus, popovers, selects, and checkboxes
 - `@tanstack/react-table` for the session catalog row model
-- `@tanstack/react-virtual` for large catalog datasets
 - `react-resizable-panels` for the split layout
+- `@tanstack/react-virtual` is not yet installed; planned for large catalog datasets
 
-The target visual direction remains the sharp, scan-first system described in
+The visual direction remains the sharp, scan-first system described in
 `VISUAL_STYLE_GUIDE.txt`: border-driven hierarchy, dense but readable layout,
 and minimal decorative gloss.
 
 ## Current State
 
-The current app is stable and usable, but the home view is still split across
-legacy panels:
+The session-catalog rearchitecture has landed across three phases:
 
-- search groups in `SearchPanel`
-- session browsing in `SessionsPanel`
-- workspace browsing in `WorkspacesPanel`
+1. **Backend contracts** — the server owns a canonical JSONL parser
+   (`server/sessionDetail/parser.ts`), exposes `GET /api/session-detail` and
+   `GET /api/session-catalog`, and the frontend no longer parses raw JSONL.
+2. **Frontend shell** — the root route is a persistent resizable split layout
+   with `SessionCatalogPane` on the left and `ConversationMain` on the right.
+3. **Facet filters** — Base UI `Popover`/`Checkbox` menus let users filter by
+   workspace, repo, and branch using server-driven facet counts from
+   `GET /api/session-catalog-facets`.
 
-The backend is already strong at indexing and SQLite-backed search, but its
-public contracts still reflect those panels:
+Legacy panel components (`SearchPanel`, `SessionsPanel`, `WorkspacesPanel`,
+`Sidebar`) still exist on disk but are no longer mounted on the primary route.
+Legacy endpoints (`/api/sessions`, `/api/workspaces`, `/api/search`,
+`/api/session`) still exist for backward compatibility and debug/export use.
 
-- `/api/sessions` returns a tree
-- `/api/workspaces` returns a panel feed
-- `/api/search` returns grouped search-panel results
-- `/api/session` returns raw JSONL that the browser reparses
+## Completed Rearchitecture Sequence
 
-That means we should avoid spending major effort polishing the old home-screen
-structure unless the work clearly carries forward into the catalog/detail-pane
-architecture.
+The session-catalog rearchitecture was implemented in three phases tracked in
+`plans/`:
 
-## Primary Initiative
-
-The active architecture plan is:
-
-- `todos/2026-03-07-2pm_session-catalog-rearchitecture-plan.txt`
-
-That plan is now the main delivery track for the repo.
-
-Immediate sequence:
-
-1. Add shared session-catalog and session-detail contract types.
-2. Move canonical session-detail parsing ownership to the server.
-3. Extend the summary schema conservatively for new catalog filters and row metadata.
-4. Add `GET /api/session-detail` as the canonical session-detail contract.
-5. Migrate the viewer off raw `GET /api/session` for its primary data path.
-6. Add a minimal `session-catalog` endpoint with stable filtering, sorting, pagination,
-   and `locatorQuery`.
-7. Keep `/api/resolve-session` as a thin migration adapter over the same
-   locator-resolution service so Enter/UUID flows stay stable during the transition.
-8. Add facets once the catalog query shape is stable.
-9. Build the new split-pane UI on top of those contracts.
+1. ~~Add shared session-catalog and session-detail contract types.~~
+2. ~~Move canonical session-detail parsing ownership to the server.~~
+3. ~~Extend the summary schema conservatively for new catalog filters and row metadata.~~
+4. ~~Add `GET /api/session-detail` as the canonical session-detail contract.~~
+5. ~~Migrate the viewer off raw `GET /api/session` for its primary data path.~~
+6. ~~Add a minimal `session-catalog` endpoint with stable filtering, sorting, pagination,
+   and `locatorQuery`.~~
+7. ~~Keep `/api/resolve-session` as a thin migration adapter over the same
+   locator-resolution service so Enter/UUID flows stay stable.~~
+8. ~~Add facets once the catalog query shape is stable.~~
+9. ~~Build the new split-pane UI on top of those contracts.~~
 10. Re-scope the remaining sharp UI work onto the new layout rather than the old
     panel stack, then retire legacy adapters as the new shell takes over.
 
-## Useful Before Or During The Rearchitecture
+Items 1–9 are complete. Item 10 is the next focus area.
 
-These items still carry forward cleanly:
+## Ready To Proceed
+
+Now that the catalog foundation has shipped, these items can proceed:
 
 - `todos/2026-01-28-search-highlight-effective-tokens-plan.txt`
   - Small UX fix for in-session highlighting.
@@ -82,17 +74,16 @@ These items still carry forward cleanly:
 - `todos/sharp-ui/2026-01-29-9am_sharp-ui-pr6-conversation-content.md`
   - Still relevant for the right-hand detail pane.
 - `todos/sharp-ui/2026-01-29-9am_sharp-ui-pr7-modals-and-cleanup.md`
-  - Still relevant once the new shell exists.
+  - Still relevant for the new shell.
 
-## Useful But Should Wait
+## Lower Priority
 
-These plans are still valid, but they should not pre-empt the session-catalog
-foundation:
+These are no longer blocked by the catalog foundation but are not urgent:
 
 - `todos/2026-01-22-4pm_virtualize-message-list-plan.txt`
-  - Useful if the right pane remains slow after the new split-pane UI lands.
+  - Useful if the right pane remains slow with the new split-pane UI.
 - `todos/2026-01-23-7pm_watch-sessions-sse-plan.txt`
-  - Better after the catalog exists so auto-refresh has a cleaner target.
+  - The catalog now provides a clean target for auto-refresh.
 - `todos/2026-01-23-7pm_watch-sessions-sse-plan_addendum-index-jobs.md`
   - Same dependency as the watcher/SSE plan; richer job state can wait.
 - `todos/2026-01-26-11pm_turn-gap-summary-plan.txt`
@@ -116,7 +107,8 @@ foundation:
 ## Where To Look
 
 - Product and implementation direction: `ROADMAP.md`
-- Active rearchitecture plan:
+- Implementation plans: `plans/`
+- Original rearchitecture plan:
   `todos/2026-03-07-2pm_session-catalog-rearchitecture-plan.txt`
 - Sharp UI tracking: `todos/sharp-ui/README.md`
 - Completed history: `todos/_done/INDEX.txt`

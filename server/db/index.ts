@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 import { CONFIG_DIR } from '../config';
+import { registerGitRepoSqlFunctions } from '../gitRepo';
 import { logDebug } from '../logging';
 
 const DB_PATH = path.join(CONFIG_DIR, 'codex_index.db');
@@ -121,6 +122,7 @@ const ensureDb = () => {
   db.pragma('journal_mode = WAL');
   db.pragma('synchronous = NORMAL');
   db.pragma('trusted_schema = ON'); // Allow schema-defined triggers/virtual tables in our local DB; we control the schema and accept the trade-off.
+  registerGitRepoSqlFunctions(db);
   logDebug('db open', DB_PATH);
   initSchema(db);
   ensureSessionColumns(db);

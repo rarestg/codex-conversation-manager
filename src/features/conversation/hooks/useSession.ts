@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { SessionMetrics } from '../../../../shared/sessionMetrics';
-import { fetchSession } from '../api';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { SessionDetailSummary } from '../../../../shared/sessionDetailTypes';
+import { fetchSessionDetail } from '../api';
 import { logTurnNav } from '../debug';
-import { extractSessionIdFromPath, parseJsonl } from '../parsing';
+import { extractSessionIdFromPath } from '../parsing';
 import type {
   JumpToTurnOptions,
   LoadSessionOptions,
+  LoadSessionResult,
   SessionDetails,
   SessionFileEntry,
   SessionTree,
@@ -18,41 +19,25 @@ interface UseSessionOptions {
   onError?: (message: string | null) => void;
 }
 
-interface ParsedMeta {
-  preview?: string;
-  startedAt?: string;
-  endedAt?: string;
-  turnCount?: number;
-  activeDurationMs?: number | null;
-  filename?: string;
-}
-
 export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [activeSearchQuery, setActiveSearchQuery] = useState<string | null>(null);
-  const [parsedMeta, setParsedMeta] = useState<ParsedMeta | null>(null);
+  const [loadedSessionSummary, setLoadedSessionSummary] = useState<SessionDetailSummary | null>(null);
   const [sessionDetails, setSessionDetails] = useState<SessionDetails>({});
   const [loadingSession, setLoadingSession] = useState(false);
   const [scrollToTurnId, setScrollToTurnId] = useState<number | null>(null);
-
-  const buildParsedMeta = useCallback((sessionId: string, metrics: SessionMetrics) => {
-    const filename = sessionId.split('/').pop() || sessionId;
-    return {
-      preview: metrics.firstUserMessage ?? undefined,
-      startedAt: metrics.startedAt ?? undefined,
-      endedAt: metrics.endedAt ?? undefined,
-      turnCount: metrics.turnCount ?? undefined,
-      activeDurationMs: metrics.activeDurationMs ?? null,
-      filename,
-    };
-  }, []);
+  const latestLoadRequestId = useRef(0);
+  const activeLoadController = useRef<AbortController | null>(null);
 
   const clearSession = useCallback(() => {
+    latestLoadRequestId.current += 1;
+    activeLoadController.current?.abort();
+    activeLoadController.current = null;
     setActiveSessionId(null);
     setActiveSearchQuery(null);
-    setParsedMeta(null);
+    setLoadedSessionSummary(null);
     setTurns([]);
     setParseErrors([]);
     setSessionDetails({});
@@ -77,40 +62,56 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
   );
 
   const loadSession = useCallback(
-    async (sessionId: string, turnId?: number, options?: LoadSessionOptions) => {
+    async (sessionId: string, turnId?: number, options?: LoadSessionOptions): Promise<LoadSessionResult> => {
       const historyMode = options?.historyMode ?? 'push';
       const searchQuery = options?.searchQuery ?? null;
       updateSessionUrl(sessionId, turnId ?? null, historyMode, searchQuery);
       setActiveSearchQuery(searchQuery);
+      latestLoadRequestId.current += 1;
+      const requestId = latestLoadRequestId.current;
+      activeLoadController.current?.abort();
+      const controller = new AbortController();
+      activeLoadController.current = controller;
       try {
         setLoadingSession(true);
         onError?.(null);
-        const raw = await fetchSession(sessionId);
-        const parsed = parseJsonl(raw);
-        setTurns(parsed.turns);
-        setParseErrors(parsed.errors);
-        const derivedMeta = buildParsedMeta(sessionId, parsed.metrics);
+        const detail = await fetchSessionDetail(sessionId, { signal: controller.signal });
+        if (controller.signal.aborted || requestId !== latestLoadRequestId.current) {
+          return { ok: false, reason: 'aborted' };
+        }
+        setTurns(detail.turns);
+        setParseErrors(detail.parseErrors);
+        setLoadedSessionSummary(detail.session);
         const indexed = findSessionById(sessionId);
-        const metaFilename = indexed?.filename ?? derivedMeta.filename ?? sessionId;
+        const metaFilename = indexed?.filename ?? detail.session.filename ?? sessionId;
         const fallbackSessionId = extractSessionIdFromPath(metaFilename);
-        const resolvedSessionId = parsed.sessionInfo.sessionId || fallbackSessionId || undefined;
-        const resolvedCwd = parsed.sessionInfo.cwd || indexed?.cwd || undefined;
+        const resolvedSessionId = detail.session.sessionId || fallbackSessionId || undefined;
+        const resolvedCwd = detail.session.cwd || indexed?.cwd || undefined;
         setSessionDetails({ sessionId: resolvedSessionId, cwd: resolvedCwd });
         setActiveSessionId(sessionId);
-        setParsedMeta(derivedMeta);
         setScrollToTurnId(turnId ?? null);
+        return { ok: true };
       } catch (error: any) {
+        if (controller.signal.aborted || requestId !== latestLoadRequestId.current || error?.name === 'AbortError') {
+          return { ok: false, reason: 'aborted' };
+        }
         const status = error?.status;
         if (status === 404 || status === 400) {
           onError?.(error?.message || 'Session file not found. Please reindex.');
         } else {
           onError?.(error?.message || 'Failed to load session.');
         }
+        return { ok: false, reason: 'failed' };
       } finally {
-        setLoadingSession(false);
+        if (activeLoadController.current === controller) {
+          activeLoadController.current = null;
+        }
+        if (!controller.signal.aborted && requestId === latestLoadRequestId.current) {
+          setLoadingSession(false);
+        }
       }
     },
-    [buildParsedMeta, findSessionById, onError],
+    [findSessionById, onError],
   );
 
   const jumpToTurn = useCallback(
@@ -145,26 +146,26 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
     if (!activeSessionId) return null;
     const indexed = findSessionById(activeSessionId);
     const extractedId = extractSessionIdFromPath(activeSessionId);
-    const filename = indexed?.filename || parsedMeta?.filename || activeSessionId;
+    const filename = indexed?.filename || loadedSessionSummary?.filename || activeSessionId;
     const fallback: SessionFileEntry = {
       id: activeSessionId,
       filename,
-      preview: parsedMeta?.preview ?? null,
-      timestamp: parsedMeta?.startedAt ?? null,
-      startedAt: parsedMeta?.startedAt ?? null,
-      endedAt: parsedMeta?.endedAt ?? null,
-      turnCount: parsedMeta?.turnCount ?? null,
-      messageCount: indexed?.messageCount ?? null,
-      thoughtCount: indexed?.thoughtCount ?? null,
-      toolCallCount: indexed?.toolCallCount ?? null,
-      metaCount: indexed?.metaCount ?? null,
-      tokenCount: indexed?.tokenCount ?? null,
-      activeDurationMs: parsedMeta?.activeDurationMs ?? indexed?.activeDurationMs ?? null,
-      cwd: indexed?.cwd ?? null,
-      gitBranch: indexed?.gitBranch ?? null,
-      gitRepo: indexed?.gitRepo ?? null,
-      gitCommitHash: indexed?.gitCommitHash ?? null,
-      sessionId: indexed?.sessionId || extractedId || '',
+      preview: loadedSessionSummary?.preview ?? indexed?.preview ?? null,
+      timestamp: loadedSessionSummary?.timestamp ?? indexed?.timestamp ?? null,
+      startedAt: loadedSessionSummary?.startedAt ?? indexed?.startedAt ?? null,
+      endedAt: loadedSessionSummary?.endedAt ?? indexed?.endedAt ?? null,
+      turnCount: loadedSessionSummary?.turnCount ?? indexed?.turnCount ?? null,
+      messageCount: loadedSessionSummary?.messageCount ?? indexed?.messageCount ?? null,
+      thoughtCount: loadedSessionSummary?.thoughtCount ?? indexed?.thoughtCount ?? null,
+      toolCallCount: loadedSessionSummary?.toolCallCount ?? indexed?.toolCallCount ?? null,
+      metaCount: loadedSessionSummary?.metaCount ?? indexed?.metaCount ?? null,
+      tokenCount: loadedSessionSummary?.tokenCountCount ?? indexed?.tokenCount ?? null,
+      activeDurationMs: loadedSessionSummary?.activeDurationMs ?? indexed?.activeDurationMs ?? null,
+      cwd: loadedSessionSummary?.cwd ?? indexed?.cwd ?? null,
+      gitBranch: loadedSessionSummary?.gitBranch ?? indexed?.gitBranch ?? null,
+      gitRepo: loadedSessionSummary?.gitRepo ?? indexed?.gitRepo ?? null,
+      gitCommitHash: loadedSessionSummary?.gitCommitHash ?? indexed?.gitCommitHash ?? null,
+      sessionId: loadedSessionSummary?.sessionId ?? indexed?.sessionId ?? extractedId ?? '',
     };
 
     if (!indexed) return fallback;
@@ -172,21 +173,25 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
     return {
       ...fallback,
       ...indexed,
-      preview: indexed.preview || fallback.preview,
-      timestamp: indexed.timestamp || fallback.timestamp,
-      startedAt: indexed.startedAt ?? fallback.startedAt,
-      endedAt: indexed.endedAt ?? fallback.endedAt,
-      turnCount: indexed.turnCount ?? fallback.turnCount,
-      messageCount: indexed.messageCount ?? fallback.messageCount,
-      thoughtCount: indexed.thoughtCount ?? fallback.thoughtCount,
-      toolCallCount: indexed.toolCallCount ?? fallback.toolCallCount,
-      metaCount: indexed.metaCount ?? fallback.metaCount,
-      tokenCount: indexed.tokenCount ?? fallback.tokenCount,
-      activeDurationMs: indexed.activeDurationMs ?? fallback.activeDurationMs,
-      filename: indexed.filename || fallback.filename,
-      sessionId: indexed.sessionId || fallback.sessionId,
+      preview: loadedSessionSummary?.preview ?? indexed.preview ?? fallback.preview,
+      timestamp: loadedSessionSummary?.timestamp ?? indexed.timestamp ?? fallback.timestamp,
+      startedAt: loadedSessionSummary?.startedAt ?? indexed.startedAt ?? fallback.startedAt,
+      endedAt: loadedSessionSummary?.endedAt ?? indexed.endedAt ?? fallback.endedAt,
+      turnCount: loadedSessionSummary?.turnCount ?? indexed.turnCount ?? fallback.turnCount,
+      messageCount: loadedSessionSummary?.messageCount ?? indexed.messageCount ?? fallback.messageCount,
+      thoughtCount: loadedSessionSummary?.thoughtCount ?? indexed.thoughtCount ?? fallback.thoughtCount,
+      toolCallCount: loadedSessionSummary?.toolCallCount ?? indexed.toolCallCount ?? fallback.toolCallCount,
+      metaCount: loadedSessionSummary?.metaCount ?? indexed.metaCount ?? fallback.metaCount,
+      tokenCount: loadedSessionSummary?.tokenCountCount ?? indexed.tokenCount ?? fallback.tokenCount,
+      activeDurationMs: loadedSessionSummary?.activeDurationMs ?? indexed.activeDurationMs ?? fallback.activeDurationMs,
+      filename: loadedSessionSummary?.filename ?? indexed.filename ?? fallback.filename,
+      cwd: loadedSessionSummary?.cwd ?? indexed.cwd ?? fallback.cwd,
+      gitBranch: loadedSessionSummary?.gitBranch ?? indexed.gitBranch ?? fallback.gitBranch,
+      gitRepo: loadedSessionSummary?.gitRepo ?? indexed.gitRepo ?? fallback.gitRepo,
+      gitCommitHash: loadedSessionSummary?.gitCommitHash ?? indexed.gitCommitHash ?? fallback.gitCommitHash,
+      sessionId: loadedSessionSummary?.sessionId ?? indexed.sessionId ?? fallback.sessionId,
     };
-  }, [activeSessionId, findSessionById, parsedMeta]);
+  }, [activeSessionId, findSessionById, loadedSessionSummary]);
 
   useEffect(() => {
     if (scrollToTurnId === null) return;
@@ -196,6 +201,13 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
     }
     setScrollToTurnId(null);
   }, [scrollToTurnId]);
+
+  useEffect(
+    () => () => {
+      activeLoadController.current?.abort();
+    },
+    [],
+  );
 
   return {
     turns,

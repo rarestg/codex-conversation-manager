@@ -1,24 +1,22 @@
 import { Home, Settings } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { Group, Panel, Separator } from 'react-resizable-panels';
 import { CanvasView } from './CanvasView';
 import { ConversationMain } from './ConversationMain';
-import { SearchPanel } from './components/SearchPanel';
-import { SessionsPanel } from './components/SessionsPanel';
+import { SessionCatalogPane } from './components/SessionCatalogPane';
 import { SettingsModal } from './components/SettingsModal';
-import { Sidebar } from './components/Sidebar';
-import { WorkspacesPanel } from './components/WorkspacesPanel';
 import { useRenderDebug } from './hooks/useRenderDebug';
-import { useSearch } from './hooks/useSearch';
 import { useSession } from './hooks/useSession';
 import { useSessions } from './hooks/useSessions';
 import { useUrlSync } from './hooks/useUrlSync';
-import { useWorkspaces } from './hooks/useWorkspaces';
 import { StickyTest } from './StickyTest';
+
+const bumpRefreshKey = (value: number) => value + 1;
 
 export default function ConversationViewer() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [activeWorkspace, setActiveWorkspace] = useState<string | null>(null);
+  const [catalogRefreshKey, setCatalogRefreshKey] = useState(0);
 
   const {
     sessionsTree,
@@ -33,7 +31,7 @@ export default function ConversationViewer() {
     reindexing,
     clearingIndex,
     indexSummary,
-  } = useSessions({ onError: setApiError, workspace: activeWorkspace });
+  } = useSessions({ onError: setApiError });
 
   const {
     turns,
@@ -51,85 +49,43 @@ export default function ConversationViewer() {
     onError: setApiError,
   });
 
-  const {
-    searchQuery,
-    setSearchQuery,
-    clearSearch,
-    searchGroups,
-    searchStatus,
-    searchError,
-    searchTooShort,
-    resultSort,
-    setResultSort,
-    groupSort,
-    setGroupSort,
-    handleSearchKeyDown,
-    handleSearchPasteUuid,
-  } = useSearch({
-    onError: setApiError,
-    onLoadSession: loadSession,
-    workspace: activeWorkspace,
-  });
-
-  const {
-    workspaces,
-    loading: workspacesLoading,
-    sort: workspacesSort,
-    setSort: setWorkspacesSort,
-    loadWorkspaces,
-  } = useWorkspaces({ onError: setApiError });
-
   useUrlSync(loadSession, clearSession);
 
   useRenderDebug('ConversationViewer', {
     activeSessionId: activeSession?.id ?? null,
-    activeWorkspace,
     settingsOpen,
     loadingSessions,
     loadingSession,
-    workspacesLoading,
-    workspacesSort,
-    searchQuery,
-    resultSort,
-    groupSort,
     sessionsTreeRoot: sessionsTree?.root ?? null,
+    catalogRefreshKey,
   });
 
-  useEffect(() => {
-    if (!activeSession || !activeWorkspace) return;
-    setActiveWorkspace(null);
-  }, [activeSession, activeWorkspace]);
+  const refreshCatalog = useCallback(() => {
+    setCatalogRefreshKey(bumpRefreshKey);
+  }, []);
 
   const handleClearIndex = useCallback(async () => {
     const confirmed = window.confirm('This will clear the index and rebuild it from scratch. Continue?');
     if (!confirmed) return;
     await rebuildIndex();
-    await loadWorkspaces();
-  }, [loadWorkspaces, rebuildIndex]);
+    refreshCatalog();
+  }, [rebuildIndex, refreshCatalog]);
 
   const handleSaveRoot = useCallback(async () => {
     await saveRoot();
-    setActiveWorkspace(null);
-    await loadWorkspaces();
-  }, [loadWorkspaces, saveRoot]);
+    clearSession();
+    refreshCatalog();
+  }, [clearSession, refreshCatalog, saveRoot]);
 
   const handleReindex = useCallback(async () => {
     await reindex();
-    await loadWorkspaces();
-  }, [loadWorkspaces, reindex]);
-
-  const handleSelectWorkspace = useCallback((workspace: string) => {
-    setActiveWorkspace((current) => (current === workspace ? null : workspace));
-  }, []);
-
-  const handleClearWorkspace = useCallback(() => {
-    setActiveWorkspace(null);
-  }, []);
+    refreshCatalog();
+  }, [refreshCatalog, reindex]);
 
   const locationPath = window.location.pathname.replace(/\/+$/, '') || '/';
   const isCanvas = locationPath === '/canvas' || locationPath === '/layouts';
-  // Dev/QA route: keep /stickytest available for sticky behavior sanity checks.
   const isStickyTest = locationPath === '/stickytest';
+  const isPrimaryShell = !isCanvas && !isStickyTest;
 
   const handleGoHome = useCallback(() => {
     clearSession();
@@ -137,53 +93,38 @@ export default function ConversationViewer() {
     window.history.pushState(null, '', `${targetPath}${window.location.hash || ''}`);
   }, [clearSession, isCanvas, locationPath]);
 
-  const showHome = !activeSession && !loadingSession && !isCanvas && !isStickyTest;
-
-  const headerClassName = showHome
-    ? 'flex flex-col gap-3 rounded-3xl border border-white/70 bg-white/70 px-6 py-5 shadow-soft backdrop-blur'
-    : 'flex flex-col gap-1 rounded-3xl border border-white/70 bg-white/70 px-5 py-3 shadow-soft backdrop-blur';
-
-  const headerRowClassName = showHome
-    ? 'flex flex-wrap items-center justify-between gap-4'
-    : 'flex flex-wrap items-center justify-between gap-3';
+  const title = isStickyTest ? 'Sticky sandbox' : isCanvas ? 'Layout canvas' : 'Session Catalog & Conversation Viewer';
+  const subtitle = isStickyTest
+    ? 'Sticky positioning and overflow test surface.'
+    : isCanvas
+      ? 'Dev-only comparison routes and layout experiments.'
+      : 'Browse indexed Codex sessions on the left and inspect the active conversation on the right.';
 
   return (
     <div className="min-h-screen px-4 py-8 sm:px-8">
-      <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
-        <header className={headerClassName}>
-          <div className={headerRowClassName}>
+      <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-[1600px] flex-col gap-6">
+        <header className="flex flex-col gap-3 rounded-3xl border border-white/70 bg-white/70 px-6 py-5 shadow-soft backdrop-blur">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <p
-                className={
-                  showHome
-                    ? 'text-xs font-semibold uppercase tracking-[0.35em] text-teal-700'
-                    : 'text-sm font-semibold uppercase tracking-[0.3em] text-teal-700'
-                }
-              >
+              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-teal-700">
                 Codex Conversation Manager
               </p>
-              {showHome && (
-                <>
-                  <h1 className="mt-2 text-3xl text-slate-900">Session Explorer & Conversation Viewer</h1>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Browse local Codex JSONL sessions, inspect turns, and search across your own history.
-                  </p>
-                </>
-              )}
+              <h1 className="mt-2 text-3xl text-slate-900">{title}</h1>
+              <p className="mt-1 text-sm text-slate-600">{subtitle}</p>
             </div>
             <div className="flex items-center gap-2">
-              {!showHome && (
+              {isPrimaryShell && (activeSession || loadingSession) ? (
                 <button
                   type="button"
                   onClick={handleGoHome}
-                  title="Home (Cmd/Ctrl+Shift+H)"
-                  aria-label="Home (Cmd/Ctrl+Shift+H)"
+                  title="Back to catalog (Cmd/Ctrl+Shift+H)"
+                  aria-label="Back to catalog (Cmd/Ctrl+Shift+H)"
                   className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
                 >
                   <Home className="h-4 w-4" />
-                  Home
+                  Catalog
                 </button>
-              )}
+              ) : null}
               <button
                 type="button"
                 onClick={() => setSettingsOpen(true)}
@@ -195,11 +136,11 @@ export default function ConversationViewer() {
               </button>
             </div>
           </div>
-          {apiError && (
+          {apiError ? (
             <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
               {apiError}
             </div>
-          )}
+          ) : null}
         </header>
 
         {isStickyTest ? (
@@ -215,90 +156,52 @@ export default function ConversationViewer() {
             sessionDetails={sessionDetails}
             turns={turns}
           />
-        ) : showHome ? (
-          <div className="flex flex-col gap-6">
-            <SearchPanel
-              searchQuery={searchQuery}
-              onSearchQueryChange={setSearchQuery}
-              onClearSearch={clearSearch}
-              onSearchKeyDown={handleSearchKeyDown}
-              onSearchPasteUuid={handleSearchPasteUuid}
-              activeWorkspace={activeWorkspace}
-              onClearWorkspace={handleClearWorkspace}
-              showWorkspaceFilter
-              searchGroups={searchGroups}
-              searchStatus={searchStatus}
-              searchError={searchError}
-              searchTooShort={searchTooShort}
-              resultSort={resultSort}
-              groupSort={groupSort}
-              onResultSortChange={setResultSort}
-              onGroupSortChange={setGroupSort}
-              onLoadSession={loadSession}
-            />
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <WorkspacesPanel
-                className="min-w-0"
-                workspaces={workspaces}
-                loading={workspacesLoading}
-                sort={workspacesSort}
-                onSortChange={setWorkspacesSort}
-                activeWorkspace={activeWorkspace}
-                onSelectWorkspace={handleSelectWorkspace}
-                onClearWorkspace={handleClearWorkspace}
-              />
-              <SessionsPanel
-                className="min-w-0"
-                sessionsTree={sessionsTree}
-                sessionsRoot={sessionsRoot}
-                loading={loadingSessions}
-                onRefreshSessions={loadSessions}
-                onLoadSession={loadSession}
-                activeSession={activeSession}
-                activeWorkspace={activeWorkspace}
-                onClearWorkspace={handleClearWorkspace}
-                showWorkspaceFilter
-              />
-            </div>
-          </div>
         ) : (
-          <div className="flex flex-col gap-6 lg:flex-row-reverse">
-            <Sidebar
-              sessionsTree={sessionsTree}
-              sessionsRoot={sessionsRoot}
-              sessionsLoading={loadingSessions}
-              searchQuery={searchQuery}
-              onSearchQueryChange={setSearchQuery}
-              onClearSearch={clearSearch}
-              onSearchKeyDown={handleSearchKeyDown}
-              onSearchPasteUuid={handleSearchPasteUuid}
-              searchGroups={searchGroups}
-              searchStatus={searchStatus}
-              searchError={searchError}
-              searchTooShort={searchTooShort}
-              resultSort={resultSort}
-              groupSort={groupSort}
-              onResultSortChange={setResultSort}
-              onGroupSortChange={setGroupSort}
-              onLoadSession={loadSession}
-              activeSession={activeSession}
-              onRefreshSessions={loadSessions}
-              activeWorkspace={activeWorkspace}
-              onClearWorkspace={handleClearWorkspace}
-            />
+          <div className="min-h-0 flex-1">
+            <Group orientation="horizontal" id="conversation-shell-layout" className="h-full min-h-0">
+              <Panel id="catalog-pane" defaultSize="42%" minSize="28%" className="min-w-0">
+                <SessionCatalogPane
+                  activeSessionId={activeSession?.id ?? null}
+                  loadingSession={loadingSession}
+                  onLoadSession={loadSession}
+                  refreshKey={catalogRefreshKey}
+                />
+              </Panel>
 
-            <ConversationMain
-              turns={turns}
-              parseErrors={parseErrors}
-              activeSession={activeSession}
-              sessionDetails={sessionDetails}
-              sessionsRoot={sessionsTree?.root || sessionsRoot}
-              loadingSession={loadingSession}
-              activeSearchQuery={activeSearchQuery}
-              jumpToTurn={jumpToTurn}
-              setSessionSearchQuery={setSessionSearchQuery}
-              onGoHome={handleGoHome}
-            />
+              <Separator className="group relative mx-2 w-2 shrink-0 focus:outline-none focus-visible:outline-none">
+                <div className="absolute inset-y-2 left-1/2 w-px -translate-x-1/2 rounded-full bg-slate-300 transition group-hover:bg-teal-400 group-data-[resize-handle-state=drag]:bg-teal-500" />
+              </Separator>
+
+              <Panel id="detail-pane" defaultSize="58%" minSize="32%" className="min-w-0">
+                <div className="h-full overflow-auto rounded-3xl border border-white/70 bg-white/80 px-4 py-4 shadow-card backdrop-blur sm:px-5 sm:py-5">
+                  {activeSession || loadingSession ? (
+                    <ConversationMain
+                      turns={turns}
+                      parseErrors={parseErrors}
+                      activeSession={activeSession}
+                      sessionDetails={sessionDetails}
+                      sessionsRoot={sessionsTree?.root || sessionsRoot}
+                      loadingSession={loadingSession}
+                      activeSearchQuery={activeSearchQuery}
+                      jumpToTurn={jumpToTurn}
+                      setSessionSearchQuery={setSessionSearchQuery}
+                      onGoHome={handleGoHome}
+                    />
+                  ) : (
+                    <div className="flex h-full min-h-[560px] items-center justify-center">
+                      <div className="max-w-xl rounded-3xl border border-dashed border-slate-200 bg-white/60 px-8 py-10 text-center">
+                        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-teal-700">Ready</p>
+                        <h2 className="mt-3 text-2xl text-slate-900">Select a session from the catalog</h2>
+                        <p className="mt-3 text-sm leading-6 text-slate-600">
+                          The catalog pane stays visible on the left. Use content search, locator lookup, sorting, and
+                          paging to narrow the list, then open any session on the right without leaving the shell.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </Panel>
+            </Group>
           </div>
         )}
       </div>

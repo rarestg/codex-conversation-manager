@@ -1,5 +1,6 @@
 import path from 'node:path';
 import type Database from 'better-sqlite3';
+import { buildSanitizedGitRepoSql } from '../gitRepo';
 import type { SessionTreeEntry } from '../types';
 
 type SessionFileInfo = SessionTreeEntry;
@@ -31,7 +32,7 @@ export const getSessionsForTree = (database: Database.Database, workspace?: stri
         sessions.timestamp AS timestamp,
         sessions.cwd AS cwd,
         sessions.git_branch AS git_branch,
-        sessions.git_repo AS git_repo,
+        ${buildSanitizedGitRepoSql('sessions.git_repo')} AS git_repo,
         sessions.git_commit_hash AS git_commit_hash,
         sessions.session_id AS session_id,
         sessions.turn_count AS turn_count,
