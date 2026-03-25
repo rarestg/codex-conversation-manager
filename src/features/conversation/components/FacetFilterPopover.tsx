@@ -68,7 +68,7 @@ export const FacetFilterPopover = ({
                   const selected = selectedValues.includes(optionValue);
                   return (
                     <Checkbox.Root
-                      key={`${optionValue}:${option.count}`}
+                      key={optionValue}
                       checked={selected}
                       onCheckedChange={() => {
                         onToggle(optionValue);

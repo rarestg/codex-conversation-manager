@@ -1,11 +1,8 @@
 import { useEffect, useRef } from 'react';
-import type { LoadSessionOptions } from '../types';
+import type { LoadSessionHandler } from '../types';
 import { getSessionParamsFromLocation } from '../url';
 
-export const useUrlSync = (
-  loadSession: (sessionId: string, turnId?: number, options?: LoadSessionOptions) => void,
-  clearSession: () => void,
-) => {
+export const useUrlSync = (loadSession: LoadSessionHandler, clearSession: () => void) => {
   const initialLoadRef = useRef(false);
 
   useEffect(() => {

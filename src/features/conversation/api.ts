@@ -62,18 +62,26 @@ export const fetchSessionDetail = async (sessionId: string, options?: { signal?:
   return (await res.json()) as SessionDetailResponse;
 };
 
+const appendExactFilters = (params: URLSearchParams, query: SessionCatalogQuery) => {
+  // Preserve the legacy workspace alias by mapping it into the repeated
+  // workspaces params, while still avoiding sending both workspace and
+  // workspaces to the catalog endpoints at the same time.
+  const workspaces = [...(query.workspaces ?? []), query.workspace]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value));
+
+  for (const workspace of workspaces) {
+    params.append('workspaces', workspace);
+  }
+  for (const gitRepo of query.gitRepos ?? []) {
+    params.append('gitRepos', gitRepo);
+  }
+  for (const gitBranch of query.gitBranches ?? []) {
+    params.append('gitBranches', gitBranch);
+  }
+};
+
 export const fetchSessionCatalog = async (query: SessionCatalogQuery = {}, options?: { signal?: AbortSignal }) => {
-  const appendExactFilters = (params: URLSearchParams) => {
-    for (const workspace of query.workspaces ?? []) {
-      params.append('workspaces', workspace);
-    }
-    for (const gitRepo of query.gitRepos ?? []) {
-      params.append('gitRepos', gitRepo);
-    }
-    for (const gitBranch of query.gitBranches ?? []) {
-      params.append('gitBranches', gitBranch);
-    }
-  };
   const params = new URLSearchParams();
   const contentQuery = query.contentQuery?.trim();
   const locatorQuery = query.locatorQuery?.trim();
@@ -83,10 +91,7 @@ export const fetchSessionCatalog = async (query: SessionCatalogQuery = {}, optio
   if (locatorQuery) {
     params.set('locatorQuery', locatorQuery);
   }
-  if (query.workspace) {
-    params.set('workspace', query.workspace);
-  }
-  appendExactFilters(params);
+  appendExactFilters(params, query);
   if (query.sort) {
     params.set('sort', query.sort);
   }
@@ -119,18 +124,7 @@ export const fetchSessionCatalogFacets = async (
   if (locatorQuery) {
     params.set('locatorQuery', locatorQuery);
   }
-  if (query.workspace) {
-    params.set('workspace', query.workspace);
-  }
-  for (const workspace of query.workspaces ?? []) {
-    params.append('workspaces', workspace);
-  }
-  for (const gitRepo of query.gitRepos ?? []) {
-    params.append('gitRepos', gitRepo);
-  }
-  for (const gitBranch of query.gitBranches ?? []) {
-    params.append('gitBranches', gitBranch);
-  }
+  appendExactFilters(params, query);
   const queryString = params.toString();
   const res = await fetch(queryString ? `/api/session-catalog-facets?${queryString}` : '/api/session-catalog-facets', {
     signal: options?.signal,

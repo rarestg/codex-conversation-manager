@@ -12,7 +12,7 @@ const parseSessionFile = async (filePath: string, sessionPath: string) => {
   return parseSessionRaw({ raw, sessionPath });
 };
 
-const readSessionIdFromFile = async (filePath: string, _sessionPath: string) => {
+const readSessionIdFromFile = async (filePath: string) => {
   const metadata = await readSessionMetadataFromFile(filePath);
   return metadata.sessionId;
 };
@@ -224,7 +224,7 @@ export const indexSessions = async (root: string) => {
     if (sameFile && existing?.has_session && !existing.session_id_checked) {
       metadataChecked += 1;
       const filenameSessionId = extractSessionIdFromPath(file.relPath);
-      const resolvedSessionId = filenameSessionId ?? (await readSessionIdFromFile(file.absPath, file.relPath));
+      const resolvedSessionId = filenameSessionId ?? (await readSessionIdFromFile(file.absPath));
       if (resolvedSessionId) {
         updateSessionId.run(resolvedSessionId, file.relPath);
       } else {

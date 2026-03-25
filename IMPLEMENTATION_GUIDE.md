@@ -6,7 +6,7 @@ maintainers: it describes what ships today and what must not break.
 
 Product direction, remaining sequencing, and deferred work live in:
 - `ROADMAP.md`
-- `plans/` for active implementation plans
+- `plans/` for implementation plans (completed phases in `plans/_archived/`)
 
 If you are new to the codebase:
 - Start with `README.md` for setup and quick orientation.
