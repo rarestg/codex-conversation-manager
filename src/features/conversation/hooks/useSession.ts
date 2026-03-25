@@ -6,6 +6,7 @@ import { extractSessionIdFromPath } from '../parsing';
 import type {
   JumpToTurnOptions,
   LoadSessionOptions,
+  LoadSessionResult,
   SessionDetails,
   SessionFileEntry,
   SessionTree,
@@ -61,7 +62,7 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
   );
 
   const loadSession = useCallback(
-    async (sessionId: string, turnId?: number, options?: LoadSessionOptions) => {
+    async (sessionId: string, turnId?: number, options?: LoadSessionOptions): Promise<LoadSessionResult> => {
       const historyMode = options?.historyMode ?? 'push';
       const searchQuery = options?.searchQuery ?? null;
       updateSessionUrl(sessionId, turnId ?? null, historyMode, searchQuery);
@@ -75,7 +76,9 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
         setLoadingSession(true);
         onError?.(null);
         const detail = await fetchSessionDetail(sessionId, { signal: controller.signal });
-        if (controller.signal.aborted || requestId !== latestLoadRequestId.current) return;
+        if (controller.signal.aborted || requestId !== latestLoadRequestId.current) {
+          return { ok: false, reason: 'aborted' };
+        }
         setTurns(detail.turns);
         setParseErrors(detail.parseErrors);
         setLoadedSessionSummary(detail.session);
@@ -87,9 +90,10 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
         setSessionDetails({ sessionId: resolvedSessionId, cwd: resolvedCwd });
         setActiveSessionId(sessionId);
         setScrollToTurnId(turnId ?? null);
+        return { ok: true };
       } catch (error: any) {
         if (controller.signal.aborted || requestId !== latestLoadRequestId.current || error?.name === 'AbortError') {
-          return;
+          return { ok: false, reason: 'aborted' };
         }
         const status = error?.status;
         if (status === 404 || status === 400) {
@@ -97,6 +101,7 @@ export const useSession = ({ sessionsTree, onError }: UseSessionOptions) => {
         } else {
           onError?.(error?.message || 'Failed to load session.');
         }
+        return { ok: false, reason: 'failed' };
       } finally {
         if (activeLoadController.current === controller) {
           activeLoadController.current = null;

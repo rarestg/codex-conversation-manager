@@ -3,6 +3,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import type { SessionDetailItem, SessionDetailSummary, SessionDetailTurn } from '../../shared/sessionDetailTypes';
 import { createSessionMetrics, createTurnDurationTracker } from '../../shared/sessionMetrics';
+import { sanitizeGitRepo, sanitizeGitRepoFields } from '../gitRepo';
 
 const MAX_PREVIEW_CHARS = 1000;
 const MAX_PREVIEW_LINES = 50;
@@ -124,11 +125,12 @@ const extractGitFields = (value: unknown): Partial<GitFields> => {
   const obj = asRecord(value);
   const gitPayload = asRecord(obj.git);
   const gitBranch = getString(obj.git_branch) ?? getString(obj.gitBranch) ?? getString(gitPayload.branch);
-  const gitRepo =
+  const gitRepo = sanitizeGitRepo(
     getString(obj.git_repo) ??
-    getString(obj.gitRepo) ??
-    getString(gitPayload.repository_url) ??
-    getString(gitPayload.repositoryUrl);
+      getString(obj.gitRepo) ??
+      getString(gitPayload.repository_url) ??
+      getString(gitPayload.repositoryUrl),
+  );
   const gitCommitHash =
     getString(obj.git_commit_hash) ??
     getString(obj.gitCommitHash) ??
@@ -273,7 +275,7 @@ export const parseSessionRaw = ({ raw, sessionPath }: ParseSessionOptions): Pars
     if (!line.trim()) continue;
     seq += 1;
     try {
-      const entry = JSON.parse(line);
+      const entry = sanitizeGitRepoFields(JSON.parse(line));
       metrics.recordTimestamp(entry.timestamp);
 
       if (entry.type === 'event_msg') {
@@ -464,7 +466,7 @@ export const readSessionMetadataFromFile = async (filePath: string): Promise<Ses
     for await (const line of rl) {
       if (!line.trim()) continue;
       try {
-        const entry = JSON.parse(line);
+        const entry = sanitizeGitRepoFields(JSON.parse(line));
         if (entry.type !== 'session_meta' && entry.type !== 'turn_context') {
           continue;
         }

@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
 import type { SessionDetailResponse, SessionDetailSummary } from '../../shared/sessionDetailTypes';
+import { buildSanitizedGitRepoSql } from '../gitRepo';
 import { parseSessionRaw } from './parser';
 
 type IndexedSessionRow = {
@@ -35,7 +36,7 @@ const getIndexedSessionSummary = (database: Database.Database, id: string): Sess
           timestamp,
           cwd,
           git_branch,
-          git_repo,
+          ${buildSanitizedGitRepoSql('git_repo')} AS git_repo,
           git_commit_hash,
           started_at,
           ended_at,

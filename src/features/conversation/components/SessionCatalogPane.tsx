@@ -1,7 +1,7 @@
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import { RefreshCw, Search, X } from 'lucide-react';
-import type { KeyboardEvent } from 'react';
+import type { ClipboardEvent, KeyboardEvent } from 'react';
 import { useCallback, useMemo, useState } from 'react';
 import type {
   SessionCatalogExactFacetKey,
@@ -14,14 +14,14 @@ import { resolveSession } from '../api';
 import { formatCompactCount, formatDurationMs, formatTimestamp, formatWorkspacePath } from '../format';
 import { useSessionCatalog } from '../hooks/useSessionCatalog';
 import { useSessionCatalogFacets } from '../hooks/useSessionCatalogFacets';
-import type { LoadSessionOptions } from '../types';
+import type { LoadSessionHandler } from '../types';
 import { CatalogSelect } from './CatalogSelect';
 import { FacetFilterPopover } from './FacetFilterPopover';
 
 interface SessionCatalogPaneProps {
   activeSessionId: string | null;
   loadingSession: boolean;
-  onLoadSession: (sessionId: string, turnId?: number, options?: LoadSessionOptions) => Promise<void> | void;
+  onLoadSession: LoadSessionHandler;
   refreshKey?: number;
 }
 
@@ -51,6 +51,7 @@ const SORT_OPTIONS: Array<{ value: SessionCatalogSort; label: string }> = [
 ];
 
 const EMPTY_ROW_SELECTION: Record<string, boolean> = {};
+const UUID_EXACT_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 const sortToSorting = (sort: SessionCatalogSort): SortingState => {
   switch (sort) {
@@ -243,12 +244,9 @@ export const SessionCatalogPane = ({
   const lastRowIndex = totalRows === 0 ? 0 : Math.min(totalRows, firstRowIndex + rows.length - 1);
   const isContentPending = contentQuery.trim() !== debouncedContentQuery;
 
-  const handleLocatorEnter = useCallback(
-    async (event: KeyboardEvent<HTMLInputElement>) => {
-      if (event.key !== 'Enter') return;
-      const query = locatorQuery.trim();
+  const resolveLocatorQuery = useCallback(
+    async (query: string) => {
       if (!query || resolvingLocator) return;
-      event.preventDefault();
       setResolvingLocator(true);
       setLocatorStatus(null);
       try {
@@ -258,15 +256,43 @@ export const SessionCatalogPane = ({
           setLocatorStatus('No exact session match.');
           return;
         }
-        setLocatorStatus(`Opened ${resolved}`);
-        await onLoadSession(resolved);
+        const loadResult = await onLoadSession(resolved);
+        if (loadResult.ok) {
+          setLocatorStatus(`Opened ${resolved}`);
+          return;
+        }
+        if (loadResult.reason === 'failed') {
+          setLocatorStatus(`Failed to load ${resolved}`);
+        }
       } catch (nextError: any) {
         setLocatorStatus(nextError?.message || 'Unable to resolve session.');
       } finally {
         setResolvingLocator(false);
       }
     },
-    [locatorQuery, onLoadSession, resolvingLocator],
+    [onLoadSession, resolvingLocator],
+  );
+
+  const handleLocatorEnter = useCallback(
+    async (event: KeyboardEvent<HTMLInputElement>) => {
+      if (event.key !== 'Enter') return;
+      const query = locatorQuery.trim();
+      if (!query || resolvingLocator) return;
+      event.preventDefault();
+      await resolveLocatorQuery(query);
+    },
+    [locatorQuery, resolveLocatorQuery, resolvingLocator],
+  );
+
+  const handleLocatorPaste = useCallback(
+    async (event: ClipboardEvent<HTMLInputElement>) => {
+      const pasted = event.clipboardData?.getData('text')?.trim() ?? '';
+      if (!pasted || !UUID_EXACT_REGEX.test(pasted) || resolvingLocator) return;
+      event.preventDefault();
+      setLocatorQuery(pasted);
+      await resolveLocatorQuery(pasted);
+    },
+    [resolveLocatorQuery, resolvingLocator, setLocatorQuery],
   );
 
   const handleRowActivate = useCallback(
@@ -342,6 +368,7 @@ export const SessionCatalogPane = ({
                 setLocatorQuery(event.target.value);
                 setLocatorStatus(null);
               }}
+              onPaste={handleLocatorPaste}
               onKeyDown={handleLocatorEnter}
               placeholder="Session id, filename, or path"
               className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm focus:border-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-200"

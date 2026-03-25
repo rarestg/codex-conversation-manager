@@ -6,6 +6,7 @@ import type {
   SessionCatalogQuery,
 } from '../../shared/sessionCatalogTypes';
 import { SESSION_CATALOG_UNKNOWN_VALUE } from '../../shared/sessionCatalogTypes';
+import { buildSanitizedGitRepoSql } from '../gitRepo';
 import { buildAppliedSessionCatalogQuery, buildSessionCatalogScope, normalizeSessionCatalogQuery } from './queries';
 
 const FACET_LABELS: Record<SessionCatalogExactFacetKey, string> = {
@@ -16,7 +17,7 @@ const FACET_LABELS: Record<SessionCatalogExactFacetKey, string> = {
 
 const FACET_COLUMNS: Record<SessionCatalogExactFacetKey, string> = {
   workspaces: 'sessions.cwd',
-  gitRepos: 'sessions.git_repo',
+  gitRepos: buildSanitizedGitRepoSql('sessions.git_repo'),
   gitBranches: 'sessions.git_branch',
 };
 

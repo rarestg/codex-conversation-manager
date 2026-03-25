@@ -1,4 +1,5 @@
-import fsp from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
+import fsp, { type FileHandle } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
@@ -7,7 +8,7 @@ import type { SessionCatalogQuery, SessionCatalogSort } from '../../shared/sessi
 import { getSessionCatalogFacets } from '../catalog/facets';
 import { resolveSessionId } from '../catalog/locator';
 import { getSessionCatalog } from '../catalog/queries';
-import { ensurePathSafe, ensureRootExists, resolveSessionsRoot, setSessionsRoot } from '../config';
+import { ensurePathSafe, ensureRootExists, isPathInsideRoot, resolveSessionsRoot, setSessionsRoot } from '../config';
 import { getDb, resetDb } from '../db';
 import { readJsonBody, sendJson } from '../http';
 import { indexSessions } from '../indexing';
@@ -18,6 +19,8 @@ import { buildSessionDetailResponse } from '../sessionDetail/service';
 import { getWorkspaceSummaries } from '../workspaces';
 
 type ApiHandler = (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<void>;
+
+const READ_ONLY_NONBLOCK = fsConstants.O_RDONLY | fsConstants.O_NONBLOCK;
 
 const parseCatalogSort = (value: string | null): SessionCatalogSort | undefined => {
   if (
@@ -63,6 +66,11 @@ const ensureAvailableRoot = async (res: ServerResponse) => {
   return rootInfo;
 };
 
+const isSameFile = (
+  left: { dev: number | bigint; ino: number | bigint },
+  right: { dev: number | bigint; ino: number | bigint },
+) => left.dev === right.dev && left.ino === right.ino;
+
 const readSessionFile = async (
   root: string,
   sessionId: string,
@@ -71,17 +79,53 @@ const readSessionFile = async (
   if (!resolvedPath) {
     return { ok: false, status: 400, error: 'Invalid session path.' };
   }
+
+  let fileHandle: FileHandle;
   try {
-    const raw = await fsp.readFile(resolvedPath, 'utf-8');
-    return { ok: true, raw };
+    fileHandle = await fsp.open(resolvedPath, READ_ONLY_NONBLOCK);
   } catch (error: any) {
-    if (error?.code === 'ENOENT') {
+    if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') {
       return { ok: false, status: 404, error: 'Session file not found. Please reindex.' };
     }
     if (error?.code === 'EACCES') {
       return { ok: false, status: 403, error: 'Unable to read session file.' };
     }
+    if (error?.code === 'ELOOP') {
+      return { ok: false, status: 400, error: 'Invalid session path.' };
+    }
     throw error;
+  }
+
+  try {
+    const openedStat = await fileHandle.stat();
+    if (!openedStat.isFile()) {
+      return { ok: false, status: 400, error: 'Invalid session path.' };
+    }
+
+    const [realRoot, realPath] = await Promise.all([fsp.realpath(root), fsp.realpath(resolvedPath)]);
+    const realPathStat = await fsp.stat(realPath);
+    if (!isSameFile(openedStat, realPathStat) || !isPathInsideRoot(realRoot, realPath)) {
+      return { ok: false, status: 400, error: 'Invalid session path.' };
+    }
+
+    const raw = await fileHandle.readFile({ encoding: 'utf-8' });
+    return { ok: true, raw };
+  } catch (error: any) {
+    if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') {
+      return { ok: false, status: 404, error: 'Session file not found. Please reindex.' };
+    }
+    if (error?.code === 'EACCES') {
+      return { ok: false, status: 403, error: 'Unable to read session file.' };
+    }
+    if (error?.code === 'EISDIR') {
+      return { ok: false, status: 400, error: 'Invalid session path.' };
+    }
+    if (error?.code === 'ELOOP') {
+      return { ok: false, status: 400, error: 'Invalid session path.' };
+    }
+    throw error;
+  } finally {
+    await fileHandle.close().catch(() => undefined);
   }
 };
 
@@ -294,6 +338,7 @@ const routes: Record<string, ApiHandler> = {
     return sendJson(res, 200, { ok: true, summary });
   },
   'GET /api/resolve-session': async (_req, res, url) => {
+    if (!(await ensureAvailableRoot(res))) return;
     const id = url.searchParams.get('id')?.trim();
     if (!id) return sendJson(res, 400, { error: 'id is required.' });
     const requestId = url.searchParams.get('requestId')?.trim() || null;

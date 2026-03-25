@@ -15,6 +15,11 @@ const DEFAULT_SESSIONS_ROOT = path.join(os.homedir(), '.codex', 'sessions');
 let cachedConfig: ConfigFile | null = null;
 let cachedRoot: SessionsRootInfo | null = null;
 
+export const isPathInsideRoot = (root: string, candidate: string) => {
+  const relative = path.relative(root, candidate);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+};
+
 const ensureDir = async (dir: string) => {
   await fsp.mkdir(dir, { recursive: true });
 };
@@ -75,8 +80,6 @@ export const ensurePathSafe = (root: string, relativePath: string) => {
   if (normalized.split(path.sep).includes('..')) return null;
   const resolvedRoot = path.resolve(root);
   const resolvedPath = path.resolve(root, normalized);
-  if (!resolvedPath.startsWith(resolvedRoot + path.sep) && resolvedPath !== resolvedRoot) {
-    return null;
-  }
+  if (!isPathInsideRoot(resolvedRoot, resolvedPath)) return null;
   return resolvedPath;
 };

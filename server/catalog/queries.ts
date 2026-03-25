@@ -9,6 +9,7 @@ import type {
   SessionCatalogSort,
 } from '../../shared/sessionCatalogTypes';
 import { SESSION_CATALOG_UNKNOWN_VALUE } from '../../shared/sessionCatalogTypes';
+import { buildSanitizedGitRepoSql, sanitizeGitRepo } from '../gitRepo';
 import { normalizeFtsQuery } from '../search/normalize';
 import { buildLocatorSql } from './locator';
 
@@ -18,7 +19,7 @@ const MAX_PAGE_SIZE = 200;
 
 const EXACT_FACET_COLUMNS: Record<SessionCatalogExactFacetKey, string> = {
   workspaces: 'sessions.cwd',
-  gitRepos: 'sessions.git_repo',
+  gitRepos: buildSanitizedGitRepoSql('sessions.git_repo'),
   gitBranches: 'sessions.git_branch',
 };
 
@@ -44,11 +45,12 @@ const normalizeText = (value?: string | null) => {
   return trimmed ? trimmed : null;
 };
 
-const normalizeTextArray = (values: Array<string | null | undefined>) => {
+const normalizeTextArray = (values: Array<string | null | undefined>, transform?: (value: string) => string | null) => {
   const normalized: string[] = [];
   const seen = new Set<string>();
   for (const value of values) {
-    const text = normalizeText(value);
+    const rawText = normalizeText(value);
+    const text = rawText ? normalizeText(transform ? transform(rawText) : rawText) : null;
     if (!text) continue;
     if (text === SESSION_CATALOG_UNKNOWN_VALUE) {
       if (!seen.has(SESSION_CATALOG_UNKNOWN_VALUE)) {
@@ -89,7 +91,7 @@ export const normalizeSessionCatalogQuery = (query: SessionCatalogQuery): Normal
   const contentQuery = normalizeText(query.contentQuery);
   const locatorQuery = normalizeText(query.locatorQuery);
   const workspaces = normalizeTextArray([...(query.workspaces ?? []), query.workspace]);
-  const gitRepos = normalizeTextArray(query.gitRepos ?? []);
+  const gitRepos = normalizeTextArray(query.gitRepos ?? [], sanitizeGitRepo);
   const gitBranches = normalizeTextArray(query.gitBranches ?? []);
   const sort: SessionCatalogSort =
     query.sort === 'oldest' ||
@@ -178,7 +180,7 @@ const mapRow = (row: {
   timestamp: row.timestamp ?? null,
   cwd: row.cwd ?? null,
   gitBranch: row.git_branch ?? null,
-  gitRepo: row.git_repo ?? null,
+  gitRepo: sanitizeGitRepo(row.git_repo) ?? null,
   gitCommitHash: row.git_commit_hash ?? null,
   startedAt: row.started_at ?? null,
   endedAt: row.ended_at ?? null,
@@ -242,6 +244,7 @@ export const buildSessionCatalogScope = (
     withClauses.push(`
       matches AS (
         SELECT
+          messages.id AS message_id,
           messages_fts.session_id AS session_id,
           messages_fts.turn_id AS turn_id,
           bm25(messages_fts) AS score,
@@ -258,7 +261,7 @@ export const buildSessionCatalogScope = (
           turn_id,
           score,
           snippet,
-          ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY score ASC) AS rn
+          ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY score ASC, turn_id ASC, message_id ASC) AS rn
         FROM matches
       )
     `);
@@ -347,7 +350,7 @@ export const getSessionCatalog = (database: Database.Database, query: SessionCat
           sessions.timestamp AS timestamp,
           sessions.cwd AS cwd,
           sessions.git_branch AS git_branch,
-          sessions.git_repo AS git_repo,
+          ${buildSanitizedGitRepoSql('sessions.git_repo')} AS git_repo,
           sessions.git_commit_hash AS git_commit_hash,
           sessions.started_at AS started_at,
           sessions.ended_at AS ended_at,

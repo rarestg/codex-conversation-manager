@@ -220,7 +220,23 @@ export const resolveSession = async (query: string, workspace?: string | null, r
   }
   const res = await fetch(`/api/resolve-session?${params.toString()}`);
   if (!res.ok) {
-    if (res.status === 404) return null;
+    if (res.status === 404) {
+      let message = 'Unable to resolve session.';
+      try {
+        const data = await res.json();
+        if (data?.error === 'Session not found.') {
+          return null;
+        }
+        if (data?.error) {
+          message = data.error;
+        }
+      } catch (_error) {
+        // ignore json parse failures
+      }
+      const error = new Error(message) as Error & { status?: number };
+      error.status = res.status;
+      throw error;
+    }
     await parseError(res, 'Unable to resolve session.');
   }
   const data = await res.json();

@@ -8,6 +8,7 @@ import type {
   SessionSearchResult,
   WorkspaceSearchGroup,
 } from '../../shared/apiTypes';
+import { buildSanitizedGitRepoSql } from '../gitRepo';
 import { logDebug, logSearchDebug } from '../logging';
 import { extractGithubSlug, type WorkspaceSummary } from '../workspaces';
 import { normalizeFtsQuery } from './normalize';
@@ -95,6 +96,7 @@ export const searchSessions = (database: Database.Database, options: SearchSessi
     const stmt = database.prepare(`
       WITH matches AS (
         SELECT
+          messages.id AS message_id,
           messages_fts.session_id AS session_id,
           messages_fts.turn_id AS turn_id,
           bm25(messages_fts) AS score,
@@ -112,7 +114,7 @@ export const searchSessions = (database: Database.Database, options: SearchSessi
           turn_id,
           score,
           snippet,
-          ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY score ASC) AS rn
+          ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY score ASC, turn_id ASC, message_id ASC) AS rn
         FROM matches
       ),
       aggregated AS (
@@ -136,7 +138,7 @@ export const searchSessions = (database: Database.Database, options: SearchSessi
         sessions.timestamp AS session_timestamp,
         sessions.cwd AS cwd,
         sessions.git_branch AS git_branch,
-        sessions.git_repo AS git_repo,
+        ${buildSanitizedGitRepoSql('sessions.git_repo')} AS git_repo,
         sessions.git_commit_hash AS git_commit_hash,
         sessions.turn_count AS turn_count,
         sessions.started_at AS started_at,

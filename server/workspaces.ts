@@ -1,11 +1,13 @@
 import type Database from 'better-sqlite3';
 import type { WorkspaceSummary } from '../shared/apiTypes';
+import { buildSanitizedGitRepoSql, sanitizeGitRepo } from './gitRepo';
 
 export type { WorkspaceSummary };
 
 export const extractGithubSlug = (value?: string | null) => {
-  if (!value) return null;
-  const trimmed = value.trim();
+  const sanitized = sanitizeGitRepo(value);
+  if (!sanitized) return null;
+  const trimmed = sanitized.trim();
   if (!trimmed) return null;
   const sshMatch = trimmed.match(/^git@github\.com:([^/]+\/[^/]+?)(?:\.git)?$/i);
   if (sshMatch) return sshMatch[1];
@@ -36,7 +38,7 @@ export const getWorkspaceSummaries = (database: Database.Database, workspaces?: 
           SELECT
             cwd,
             git_branch,
-            git_repo,
+            ${buildSanitizedGitRepoSql('git_repo')} AS git_repo,
             git_commit_hash,
             timestamp,
             ROW_NUMBER() OVER (PARTITION BY cwd ORDER BY timestamp DESC) AS rn

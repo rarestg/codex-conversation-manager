@@ -87,6 +87,19 @@ export interface LoadSessionOptions {
   searchQuery?: string | null;
 }
 
+export type LoadSessionResult =
+  | { ok: true }
+  | {
+      ok: false;
+      reason: 'aborted' | 'failed';
+    };
+
+export type LoadSessionHandler = (
+  sessionId: string,
+  turnId?: number,
+  options?: LoadSessionOptions,
+) => Promise<LoadSessionResult> | LoadSessionResult;
+
 export interface JumpToTurnOptions {
   historyMode?: HistoryMode;
   scroll?: boolean;

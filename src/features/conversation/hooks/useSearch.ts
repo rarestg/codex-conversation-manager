@@ -2,7 +2,7 @@ import { type ClipboardEvent, type KeyboardEvent, useCallback, useEffect, useRef
 import { resolveSession, searchSessions } from '../api';
 import { logSearch } from '../debug';
 import type {
-  LoadSessionOptions,
+  LoadSessionHandler,
   SearchGroupSort,
   SearchResultSort,
   SearchStatus,
@@ -11,7 +11,7 @@ import type {
 
 interface UseSearchOptions {
   onError?: (message: string | null) => void;
-  onLoadSession: (sessionId: string, turnId?: number, options?: LoadSessionOptions) => Promise<void> | void;
+  onLoadSession: LoadSessionHandler;
   workspace?: string | null;
 }
 
