@@ -42,18 +42,24 @@ Repeat that loop until the implementation plan says only final verification or c
 
 Then use Prompt C.
 
-## Dispatch Readiness
+## Current Status
 
-This plan set is ready to dispatch for implementation.
+Codex Session CLI v1 is closed out locally.
 
-The only known non-blocking gap is live fork or resume lineage. The parser should keep best-effort support for `resume_session_id` and `conversation_id`, but v1 acceptance does not depend on a confirmed fork fixture.
+The only known non-blocking gaps are live `wait_agent` `timed_out: true` samples and live fork or resume lineage samples. The parser keeps best-effort support for `resume_session_id` and `conversation_id`, but v1 acceptance does not depend on a confirmed fixture for those shapes.
+
+No additional worker is needed for the current v1 scope. Reuse the prompt loop in this folder only if future follow-up work resumes.
 
 Implementation workers should read the docs in this folder first, then inspect the relevant code paths for the milestone they are taking. The default starting set is:
 
+- `scripts/codex-session-cli.ts`
+- `shared/codex-session/types.ts`
+- `shared/codex-session/parseCore.ts`
+- `shared/codex-session/sessionGraph.ts`
+- `shared/codex-session/locator.ts`
 - `server/sessionDetail/parser.ts`
 - `src/features/conversation/parsing.ts`
 - `shared/sessionMetrics.ts`
-- `server/indexing/index.ts`
 - `package.json`
 
 If workers add committed fixtures, they should use minimized or redacted data rather than raw personal session logs from `~/.codex/sessions`.

@@ -15,13 +15,17 @@ The end-user proof is observable behavior:
 ## Progress
 
 - [x] (2026-03-25) Wrote `SPEC.md`, `JSONL_RECON_GUIDE.md`, and the worker-loop doc set in `plans/codex-session-cli/`.
-- [ ] Choose the CLI entrypoint and package-script shape, then record that decision in this file and `SHARED_HANDOFF.md`.
-- [ ] Extract a reusable shared parser core from the existing session parser.
-- [ ] Add a session-graph layer for root and subagent relationships.
-- [ ] Implement CLI commands for `overview` and `show`.
-- [ ] Implement CLI commands for `subagents` and `parent`.
-- [ ] Add JSON output mode and polish message-filter semantics.
-- [ ] Validate against real sample sessions and complete closeout.
+- [x] (2026-03-25) Chose the CLI entrypoint: `scripts/codex-session-cli.ts`, exposed via `npm run codex-session -- <command> [args]`, with `tsx` as the TypeScript runtime.
+- [x] (2026-03-25) Extracted a reusable shared parser core under `shared/codex-session/` and refactored the server parser, frontend fallback parser, and shared session-ID helpers to consume it while preserving current canonical parsing behavior.
+- [x] (2026-03-25) Added a shared session-graph layer under `shared/codex-session/` that classifies root vs subagent sessions, parses `spawn_agent` and `wait_agent` joins, parses parent-side `<subagent_notification>` records, and adds a lightweight locator for session ID/path and parent-child resolution.
+- [x] (2026-03-25) Hardened and simplified the session-graph layer after dedicated review cycles: lineage classification is now structural, the high-level child graph unions spawn/wait/notification evidence without duplicate rows, and the locator scan avoids unbounded file-handle fanout.
+- [x] (2026-03-26) Implemented real CLI commands for `overview` and `show`, including shared-locator resolution by session ID or direct path, canonical role filtering from `event_msg`, assistant phase filtering, negative index support, and human-readable output.
+- [x] (2026-03-26) Validated the Milestone 3 sample workflows against the real parent/child sessions, including child overview, last assistant retrieval, last `final_answer` retrieval, direct-path resolution, and unchanged parent/child tool-call counts of `113` and `77`.
+- [x] (2026-03-26) Implemented real CLI commands for `subagents` and `parent`, reusing the shared locator plus session-graph layer for parent-child resolution and enriching resolvable child sessions with canonical `event_msg`-derived assistant and `final_answer` output.
+- [x] (2026-03-26) Validated the Milestone 4 sample workflows against the real parent/child sessions, including both spawned child IDs, the `Poincare` nickname, two parent-side notifications, child latest assistant and latest `final_answer` output surfacing, parent lookup back to `019d2221-1ba5-75b2-b4f1-efd4440b08a4`, and unchanged sample tool-call counts of `113` and `77`.
+- [x] (2026-03-27) Tightened the execplan retrospective wording so Milestones 1-3 read explicitly as historical snapshots and Milestone 4 remains the live current-state section.
+- [x] (2026-03-27) Added JSON output mode across `overview`, `show`, `subagents`, and `parent`, kept the existing human-readable output intact, and polished the help/output surface for real terminal use.
+- [x] (2026-03-27) Completed the final hardening/review pass: exact path/ID resolution remained intact, `show` JSON output preserved canonical `event_msg` sourcing, `subagents` child enrichment was made sequential to avoid unbounded full-session fanout, and the sample workflows passed in both human and JSON modes.
 
 ## Context and Orientation
 
@@ -40,13 +44,9 @@ What the current parser already gets right:
 - turns start at `event_msg.user_message`
 - `toolCallCount` counts `function_call`, `custom_tool_call`, and `web_search_call`
 
-What the current parser does not model:
+What the current implementation still does not provide:
 
-- root vs subagent classification
-- parent-child session graph
-- `spawn_agent` and `wait_agent` semantics
-- parent-side `<subagent_notification>` messages
-- CLI-oriented message retrieval and filtering
+- confirmed fork or resume lineage beyond provisional field extraction
 
 What v1 does not need to overbuild:
 
@@ -151,7 +151,6 @@ Required behavior:
 - resolve session by ID or direct path
 - filter canonical messages by role and phase
 - support negative indices
-- support JSON output mode
 - keep parent-side notification handling scoped to `<subagent_notification>` rather than treating all `response_item.message role="user"` records as chat messages
 
 ### 5. Harden and validate
@@ -248,7 +247,7 @@ Expected result:
   - parent `019d2221-1ba5-75b2-b4f1-efd4440b08a4`
   - nickname `Poincare`
   - tool-call count `77`
-- last final answer output contains `No findings in the reviewed target files.`
+- last final answer output matches the child's latest recorded `assistant` message where `phase == "final_answer"` rather than assuming a fixed findings or no-findings payload
 
 ### Milestone 4: `subagents` and `parent` commands work
 
@@ -321,6 +320,9 @@ The work is complete when all of the following are true:
 - Recon also showed that a single session can contain multiple `final_answer` assistant messages across turns.
 - The current repo has no explicit code for subagent lineage yet, so this must be added as a new graph layer rather than assumed to exist.
 - Historical session versions can vary in tool names, so record type should drive classification more than tool name.
+- The server and frontend parsers were already slightly different in metadata handling: the server treats same-rank metadata as non-authoritative and normalizes `cwd`, while the frontend fallback parser replaced same-rank metadata and only trimmed `cwd`. The shared core now preserves those differences via wrapper options instead of flattening them accidentally.
+- Most `function_call_output` records are ordinary tool text, not embedded JSON. The graph layer should only JSON-decode outputs for matched `spawn_agent` and `wait_agent` calls instead of treating every tool output as structured.
+- For the real Milestone 4 samples, the latest canonical assistant message and the latest canonical `final_answer` can be the same `event_msg.agent_message`, so the CLI should surface both fields independently instead of assuming they differ.
 
 ## Decision Log
 
@@ -340,17 +342,143 @@ The work is complete when all of the following are true:
   Rationale: The work spans parser extraction, graph modeling, CLI ergonomics, and review cycles.
   Date: 2026-03-25
 
+- Decision: Use `scripts/codex-session-cli.ts` with a package script `codex-session` backed by `tsx`.
+  Rationale: The repo is TypeScript-first, and a TS entrypoint can import the shared parser modules directly without forcing a separate JavaScript parser path or a build-only workflow.
+  Date: 2026-03-25
+
+- Decision: Keep the shared parser core runtime-agnostic and preserve server-vs-frontend metadata differences with wrapper options.
+  Rationale: The extraction needs one shared core, but the server remains the canonical parser and the existing frontend fallback behavior should not silently change.
+  Date: 2026-03-25
+
+- Decision: Include `scripts/**/*.ts` in the server TypeScript project so the CLI entrypoint is covered by `npm run typecheck`.
+  Rationale: The new CLI entrypoint is Node-side TypeScript and should be validated by the existing server typecheck pass from day one.
+  Date: 2026-03-25
+
+- Decision: Keep the session graph in separate `shared/codex-session/sessionGraph.ts` and `locator.ts` modules instead of widening the canonical chat parser surface first.
+  Rationale: This preserves the formatter's existing `event_msg`-first conversation rules while still exposing the parent-child and subagent ledger data the CLI needs.
+  Date: 2026-03-25
+
+- Decision: Only JSON-decode matched `spawn_agent` and `wait_agent` outputs, not every `function_call_output`.
+  Rationale: Real sessions contain many plain-text tool outputs such as terminal command logs; eager JSON parsing creates misleading graph parse errors for normal sessions.
+  Date: 2026-03-25
+
+- Decision: Expose a small `canonicalMessages` list from the shared parser core instead of teaching the CLI to re-parse raw JSONL or inspect duplicate `response_item.message` records.
+  Rationale: This keeps `show` phase-aware while preserving the formatter's `event_msg`-first chat contract and avoids a second parser path in the CLI.
+  Date: 2026-03-26
+
+- Decision: Add `--json` as a command-wide output modifier while preserving the existing human-readable output and warning flow.
+  Rationale: The CLI needs a scriptable machine-readable mode for Milestone 5, but the default terminal experience should stay concise and unchanged for interactive use.
+  Date: 2026-03-27
+
 ## Outcomes & Retrospective
 
-Initial state:
+Initial state before implementation:
 
 - spec written
 - recon guide written
 - implementation not started yet
 - worker-loop docs prepared
 
-Update this section at major milestones and at final completion with:
+Historical state after Milestone 1:
 
-- what shipped
-- what remains
-- lessons learned
+- shipped:
+  - shared parser modules in `shared/codex-session/`
+  - server parser refactored to delegate to the shared core
+  - frontend fallback parser refactored to delegate to the shared core
+  - shared session-ID helpers moved out of the browser URL module
+  - CLI entrypoint scaffold added at `scripts/codex-session-cli.ts`
+  - package script `npm run codex-session -- ...` wired through `tsx`
+- remains:
+  - session graph and subagent lineage
+  - real CLI commands beyond `--help`
+  - JSON output modes and closeout validation
+- lessons learned:
+  - the right extraction seam was the canonical parse loop plus identity helpers, not the server wrapper
+  - preserving existing wrapper-level differences explicitly is safer than assuming the two current parsers were fully aligned
+  - review-driven edge-case checks mattered: the shared extraction initially regressed blank `git_repo` fallback behavior and non-string `agent_reasoning.text` rendering, and both needed targeted follow-up fixes
+
+Historical state after Milestone 2:
+
+- shipped:
+  - shared session-graph parsing in `shared/codex-session/sessionGraph.ts`
+  - lightweight session locator and parent-child metadata scan in `shared/codex-session/locator.ts`
+  - root vs subagent classification from child-side `session_meta.payload.source.subagent.thread_spawn`
+  - parent-side `spawn_agent` and `wait_agent` reconstruction keyed by `call_id`
+  - parent-side `<subagent_notification>` parsing as a special graph event rather than canonical chat
+- validated:
+  - sample child `019d222b-f7a3-7160-8f05-775a9121935a` resolves to parent `019d2221-1ba5-75b2-b4f1-efd4440b08a4`
+  - child nickname `Poincare` is recovered from child metadata
+  - sample parent reconstructs both spawned children and both parent-side notifications
+  - existing tool-call counts remain `113` for the parent and `77` for the child
+- remains:
+  - CLI commands `overview`, `show`, `subagents`, and `parent`
+  - phase-aware assistant retrieval surface for `show --phase final_answer`
+  - JSON output mode and closeout validation
+  - unvalidated `timed_out: true` and resume/fork lineage shapes
+- lessons learned:
+  - the first working graph surface still needed a correctness pass around structural lineage and child aggregation edge cases
+  - a small amount of follow-up simplification was worth doing, but only after the behavior was covered by real-session validation
+
+Historical state after Milestone 3:
+
+- shipped:
+  - real `overview` and `show` command implementations in `scripts/codex-session-cli.ts`
+  - locator-backed session resolution by exact session ID or direct path without adding a second resolver
+  - shared `canonicalMessages` extraction in `shared/codex-session/parseCore.ts` so the CLI can filter canonical `event_msg` messages by role and assistant phase
+  - human-readable CLI output for session overview and message retrieval, while leaving `subagents`, `parent`, and JSON output for later milestones
+- validated:
+  - child overview for `019d222b-f7a3-7160-8f05-775a9121935a` reports parent `019d2221-1ba5-75b2-b4f1-efd4440b08a4`, nickname `Poincare`, and tool-call count `77`
+  - `show 019d222b-f7a3-7160-8f05-775a9121935a --role assistant --index -1` returns the latest canonical assistant message from `event_msg`
+  - `show 019d222b-f7a3-7160-8f05-775a9121935a --role assistant --phase final_answer --index -1` returns the latest canonical assistant `final_answer`
+  - direct-path resolution works for the child sample session file
+  - parent and child overview output still report tool-call counts `113` and `77`
+- remains:
+  - CLI commands `subagents` and `parent`
+  - JSON output mode
+  - final closeout validation and any remaining review-driven fixes
+  - unvalidated `timed_out: true` and resume/fork lineage shapes
+- lessons learned:
+  - the smallest durable seam for Milestone 3 was a shared canonical-message list, not CLI-side raw-entry inspection
+  - direct-path resolution can still go through the shared locator cleanly, which keeps ID/path lookup behavior in one place
+
+Current state after Milestone 4:
+
+- shipped:
+  - real `subagents` and `parent` command implementations in `scripts/codex-session-cli.ts`
+  - `subagents` output built from parent-side `parsedGraph.spawnedChildren` and enriched through locator-resolved child sessions
+  - child latest assistant and latest `final_answer` retrieval still sourced from shared canonical `event_msg` messages rather than duplicated `response_item.message`
+  - parent lookup resolved through the shared locator and rendered with parent metadata instead of a second lineage path
+- validated:
+  - `subagents 019d2221-1ba5-75b2-b4f1-efd4440b08a4` lists child `019d222b-f7a3-7160-8f05-775a9121935a` with nickname `Poincare` plus child `019d2235-bd83-7a51-b4cc-05d7d3050c7f`
+  - the parent-side subagent view surfaces notification count `2`
+  - each resolvable child includes its latest canonical assistant message and latest canonical `final_answer`
+  - `parent 019d222b-f7a3-7160-8f05-775a9121935a` resolves back to `019d2221-1ba5-75b2-b4f1-efd4440b08a4`
+  - sample tool-call counts remain `113` for the parent and `77` for the child
+- remains:
+  - JSON output mode
+  - final closeout review and any review-driven fixes
+  - unvalidated `timed_out: true` and resume/fork lineage shapes
+- lessons learned:
+  - the graph layer already carried the right parent-side facts for Milestone 4, so the CLI only needed enrichment glue rather than new lineage semantics
+  - for the sample child review session, the latest assistant message and latest `final_answer` are the same canonical `event_msg`, so the command surface should expose both fields independently
+
+Current state after Milestone 5:
+
+- shipped:
+  - `--json` output mode across `overview`, `show`, `subagents`, and `parent`
+  - structured JSON payloads that preserve canonical `event_msg` message sourcing and keep parent-side `<subagent_notification>` data on the graph-aware surfaces only
+  - clearer command help text, global `--json` documentation, and JSON-formatted error output when `--json` is requested
+  - stricter unknown-option handling for `overview`, `subagents`, and `parent`
+  - sequential child-session enrichment inside `subagents` to avoid unbounded parallel full-session loads during large parent-session inspection
+- validated:
+  - the sample parent and child sessions still pass the human-readable workflows for `overview`, `show`, `subagents`, and `parent`
+  - the same workflows now pass in JSON mode
+  - tool-call counts remain `113` for the parent and `77` for the child
+  - `show --role assistant --phase final_answer --index -1 --json` reports `source: "event_msg"` and matches the last raw `event_msg.agent_message` `final_answer` in the sample child file
+  - exact direct-path resolution still works, and arbitrary strings containing a valid session ID still fail cleanly instead of resolving
+- remains:
+  - unvalidated `wait_agent` `timed_out: true` samples
+  - unvalidated live resume/fork lineage samples
+- lessons learned:
+  - the machine-readable CLI mode was easiest to keep trustworthy by building JSON from the same already-validated command data instead of adding a second code path
+  - the final review pass was still valuable after Milestone 4 because it caught two closeout-quality issues: inconsistent unknown-option errors and unbounded child-session fanout during `subagents` enrichment

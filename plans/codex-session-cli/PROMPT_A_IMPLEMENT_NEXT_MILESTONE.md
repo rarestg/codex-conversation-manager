@@ -18,10 +18,14 @@ Read these first:
 - `/Users/rares/GITHUB/ARTIFACTS/codex-formatter/plans/codex-session-cli/SHARED_HANDOFF.md`
 
 Then inspect only the code paths relevant to the milestone you are taking. The default starting set is:
+- `/Users/rares/GITHUB/ARTIFACTS/codex-formatter/scripts/codex-session-cli.ts`
+- `/Users/rares/GITHUB/ARTIFACTS/codex-formatter/shared/codex-session/types.ts`
+- `/Users/rares/GITHUB/ARTIFACTS/codex-formatter/shared/codex-session/parseCore.ts`
+- `/Users/rares/GITHUB/ARTIFACTS/codex-formatter/shared/codex-session/sessionGraph.ts`
+- `/Users/rares/GITHUB/ARTIFACTS/codex-formatter/shared/codex-session/locator.ts`
 - `/Users/rares/GITHUB/ARTIFACTS/codex-formatter/server/sessionDetail/parser.ts`
 - `/Users/rares/GITHUB/ARTIFACTS/codex-formatter/src/features/conversation/parsing.ts`
 - `/Users/rares/GITHUB/ARTIFACTS/codex-formatter/shared/sessionMetrics.ts`
-- `/Users/rares/GITHUB/ARTIFACTS/codex-formatter/server/indexing/index.ts`
 - `/Users/rares/GITHUB/ARTIFACTS/codex-formatter/package.json`
 
 Goal:
