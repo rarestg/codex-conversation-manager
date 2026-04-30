@@ -264,76 +264,76 @@ Existing delegated recon work:
 
 - 2026-03-25: Bacon
   - purpose: read large JSONL files directly and summarize identity, role, tool, and subagent patterns
-  - model: `gpt-5.4-mini`
+  - model: `gpt-5.5-mini`
   - reasoning: `medium`
   - mode: read-only
   - result summary: confirmed `session_meta` identity, `spawn_agent` and `wait_agent` linkage, and parent-side `<subagent_notification>` shape
 - 2026-03-25 17:53 PDT: Herschel
   - purpose: read-only review of the Milestone 1 parser extraction risks before final validation
-  - model: `gpt-5.4`
+  - model: `gpt-5.5`
   - reasoning: `xhigh`
   - mode: read-only
   - scope: `server/sessionDetail/parser.ts`, `src/features/conversation/parsing.ts`, `src/features/conversation/url.ts`, `server/indexing/index.ts`, `shared/sessionMetrics.ts`, `shared/codex-session/`, `package.json`
   - result summary: flagged the need to preserve the server/frontend metadata differences explicitly, keep `event_msg` and tool-ledger asymmetry intact, and validate the unchanged-file metadata path plus CLI script wiring
 - 2026-03-25 18:02 PDT: Volta
   - purpose: read-only review of the landed Milestone 1 extraction
-  - model: `gpt-5.4`
+  - model: `gpt-5.5`
   - reasoning: `xhigh`
   - mode: read-only
   - scope: codex-session-cli docs plus the changed parser, URL helper, CLI scaffold, package, and tsconfig files
   - result summary: found two edge-case regressions in `shared/codex-session/parseCore.ts` around blank `git_repo` handling and non-string `agent_reasoning.text`; both were patched and revalidated in the same pass
 - 2026-03-25 18:44 PDT: Confucius
   - purpose: read-only review of the Milestone 2 session-graph implementation
-  - model: `gpt-5.4`
+  - model: `gpt-5.5`
   - reasoning: `xhigh`
   - mode: read-only
   - scope: `shared/codex-session/types.ts`, `shared/codex-session/sessionGraph.ts`, `shared/codex-session/locator.ts`, `plans/codex-session-cli/IMPLEMENTATION_EXECPLAN.md`, `plans/codex-session-cli/SHARED_HANDOFF.md`
   - result summary: no findings; parent/child classification, `spawn_agent` and `wait_agent` joins, notification special-casing, and session-ID precedence looked consistent, with only the already-known unvalidated gap around `timed_out: true` and resume/fork lineage
 - 2026-03-25 22:20 PDT: Plato
   - purpose: implement the first post-Milestone-2 review findings
-  - model: `gpt-5.4`
+  - model: `gpt-5.5`
   - reasoning: `xhigh`
   - mode: implementation
   - scope: `shared/codex-session/sessionGraph.ts`, `shared/codex-session/locator.ts`
   - result summary: fixed structural lineage classification, widened the high-level child union to include wait/notification-only children, made the locator scan sequential, and revalidated against the sample sessions plus a small synthetic wait-only-child case
 - 2026-03-25 22:27 PDT: Noether
   - purpose: review the correctness-fix patch and patch anything real that remained
-  - model: `gpt-5.4`
+  - model: `gpt-5.5`
   - reasoning: `xhigh`
   - mode: review with targeted implementation
   - scope: `shared/codex-session/sessionGraph.ts`, `shared/codex-session/locator.ts`
   - result summary: found and patched one duplicate-child edge case where missing spawn output could split spawn metadata from later wait/notification state; revalidated successfully
 - 2026-03-25 22:36 PDT: Curie
   - purpose: simplify the graph implementation without changing validated behavior
-  - model: `gpt-5.4`
+  - model: `gpt-5.5`
   - reasoning: `xhigh`
   - mode: implementation
   - scope: `shared/codex-session/sessionGraph.ts`, `shared/codex-session/locator.ts`
   - result summary: simplified lineage merging, child aggregation state, and single-pass locator map construction while preserving the real-session and edge-case validation coverage
 - 2026-03-25 22:43 PDT: Jason
   - purpose: review the simplification patch and patch anything real that remained
-  - model: `gpt-5.4`
+  - model: `gpt-5.5`
   - reasoning: `xhigh`
   - mode: review with targeted implementation
   - scope: `shared/codex-session/sessionGraph.ts`, `shared/codex-session/locator.ts`
   - result summary: no findings; the simplifications stayed behaviorally consistent and did not over-simplify the graph surface
 - 2026-03-26 22:46 PDT: Kepler
   - purpose: read-only review of the Milestone 3 CLI implementation
-  - model: `gpt-5.4`
+  - model: `gpt-5.5`
   - reasoning: `xhigh`
   - mode: read-only
   - scope: `scripts/codex-session-cli.ts`, `shared/codex-session/types.ts`, `shared/codex-session/parseCore.ts`
   - result summary: found two issues: session resolution was too permissive because arbitrary strings containing a valid session ID could resolve, and the CLI silently ignored parse warnings; both were patched and revalidated in the same pass
 - 2026-03-26 23:24 PDT: Erdos
   - purpose: read-only review of the Milestone 4 CLI implementation and doc sync
-  - model: `gpt-5.4`
+  - model: `gpt-5.5`
   - reasoning: `xhigh`
   - mode: read-only
   - scope: `scripts/codex-session-cli.ts`, `shared/codex-session/types.ts`, `shared/codex-session/parseCore.ts`, `shared/codex-session/sessionGraph.ts`, `shared/codex-session/locator.ts`, `plans/codex-session-cli/IMPLEMENTATION_EXECPLAN.md`, `plans/codex-session-cli/SHARED_HANDOFF.md`
   - result summary: found one real issue: the Milestone 4 plan/handoff docs still contained stale intermediate wording that described `subagents` and `parent` as pending; the docs were patched in the same pass and markdownlint was rerun successfully
 - 2026-03-27 13:02 PDT: Lagrange
   - purpose: independent final read-only review of the Milestone 5 closeout state
-  - model: `gpt-5.4`
+  - model: `gpt-5.5`
   - reasoning: `xhigh`
   - mode: read-only
   - scope: `scripts/codex-session-cli.ts`, `shared/codex-session/types.ts`, `shared/codex-session/parseCore.ts`, `shared/codex-session/sessionGraph.ts`, `shared/codex-session/locator.ts`, and the `plans/codex-session-cli/` docs

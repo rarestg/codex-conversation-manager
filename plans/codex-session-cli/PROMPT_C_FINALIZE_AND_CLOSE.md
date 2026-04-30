@@ -38,9 +38,9 @@ Required delegation:
 - If that review surfaces meaningful issues, dispatch an implementation subagent for any approved fixes when useful.
 - Every delegated subagent must use:
   - `fork_context: false`
-  - model: `gpt-5.4`
+  - model: `gpt-5.5`
   - reasoning_effort: `xhigh`
-- If you wait on a delegated `gpt-5.4` `xhigh` subagent, use at least a 30-minute wait:
+- If you wait on a delegated `gpt-5.5` `xhigh` subagent, use at least a 30-minute wait:
   - `timeout_ms >= 1800000`
 - Give every subagent ample context. Include:
   - the purpose of Codex Session CLI
