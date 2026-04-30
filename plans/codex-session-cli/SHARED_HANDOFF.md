@@ -264,7 +264,7 @@ Existing delegated recon work:
 
 - 2026-03-25: Bacon
   - purpose: read large JSONL files directly and summarize identity, role, tool, and subagent patterns
-  - model: `gpt-5.5-mini`
+  - model: `gpt-5.4-mini`
   - reasoning: `medium`
   - mode: read-only
   - result summary: confirmed `session_meta` identity, `spawn_agent` and `wait_agent` linkage, and parent-side `<subagent_notification>` shape
