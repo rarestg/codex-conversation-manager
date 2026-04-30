@@ -800,18 +800,16 @@ const runParent = async (args: string[], options: CommandOptions) => {
   const { locator, loaded: childLoaded } = await loadSession(session);
   maybePrintParseWarnings(childLoaded, options);
 
-  const childSessionId = getResolvedSessionId(childLoaded) ?? childLoaded.locatorEntry.sessionId;
+  const childSessionLabel =
+    getResolvedSessionId(childLoaded) ?? childLoaded.locatorEntry.sessionId ?? childLoaded.locatorEntry.path;
   const parentSessionId = getResolvedParentSessionId(childLoaded);
-  if (!childSessionId) {
-    throw new CliError(`Session ${childLoaded.locatorEntry.path} does not declare a session ID.`);
-  }
   if (!parentSessionId) {
-    throw new CliError(`Session ${childSessionId} does not declare a parent session.`);
+    throw new CliError(`Session ${childSessionLabel} does not declare a parent session.`);
   }
 
   const parentEntry = getSessionEntryById(locator, parentSessionId);
   if (!parentEntry) {
-    throw new CliError(`Parent session ${parentSessionId} for child session ${childSessionId} was not found.`);
+    throw new CliError(`Parent session ${parentSessionId} for child session ${childSessionLabel} was not found.`);
   }
 
   const parentLoaded = await loadSessionFromEntry(parentEntry);
