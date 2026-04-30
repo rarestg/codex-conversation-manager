@@ -6,6 +6,11 @@ import { extractSessionIdFromObject, extractSessionIdFromPath, normalizeSessionI
 import { extractSessionLineage, mergeSessionLineage } from './sessionGraph';
 import type { SessionGraphLocator, SessionGraphLocatorEntry } from './types';
 
+const formatAmbiguousSessionIdMessage = (sessionId: string, entries: SessionGraphLocatorEntry[]) => {
+  const paths = entries.map((entry) => `- ${entry.path}`).join('\n');
+  return `Ambiguous session ID ${sessionId} matches ${entries.length} files:\n${paths}`;
+};
+
 const walkJsonlFiles = async (root: string): Promise<string[]> => {
   const output: string[] = [];
   const walk = async (dir: string) => {
@@ -24,7 +29,7 @@ const walkJsonlFiles = async (root: string): Promise<string[]> => {
   return output;
 };
 
-export const readSessionGraphMetadataFromFile = async (filePath: string): Promise<SessionGraphLocatorEntry | null> => {
+export const readSessionGraphMetadataFromFile = async (filePath: string): Promise<SessionGraphLocatorEntry> => {
   const stream = fs.createReadStream(filePath, { encoding: 'utf-8' });
   const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
   let sessionId = extractSessionIdFromPath(filePath);
@@ -65,8 +70,6 @@ export const readSessionGraphMetadataFromFile = async (filePath: string): Promis
     stream.destroy();
   }
 
-  if (!sessionId) return null;
-
   return {
     sessionId,
     path: filePath,
@@ -78,12 +81,25 @@ export const buildSessionGraphLocator = async (root: string): Promise<SessionGra
   const files = await walkJsonlFiles(root);
   const entries: SessionGraphLocatorEntry[] = [];
   const bySessionId = new Map<string, SessionGraphLocatorEntry>();
+  const duplicateSessionIds = new Map<string, SessionGraphLocatorEntry[]>();
   const childrenByParentSessionId = new Map<string, SessionGraphLocatorEntry[]>();
   for (const filePath of files) {
     const entry = await readSessionGraphMetadataFromFile(filePath);
-    if (!entry) continue;
     entries.push(entry);
-    bySessionId.set(entry.sessionId, entry);
+    if (entry.sessionId) {
+      const duplicateEntries = duplicateSessionIds.get(entry.sessionId);
+      if (duplicateEntries) {
+        duplicateEntries.push(entry);
+      } else {
+        const existing = bySessionId.get(entry.sessionId);
+        if (existing) {
+          bySessionId.delete(entry.sessionId);
+          duplicateSessionIds.set(entry.sessionId, [existing, entry]);
+        } else {
+          bySessionId.set(entry.sessionId, entry);
+        }
+      }
+    }
     if (!entry.parentSessionId) continue;
     const existing = childrenByParentSessionId.get(entry.parentSessionId) ?? [];
     existing.push(entry);
@@ -94,6 +110,7 @@ export const buildSessionGraphLocator = async (root: string): Promise<SessionGra
     root,
     entries,
     bySessionId,
+    duplicateSessionIds,
     childrenByParentSessionId,
   };
 };
@@ -106,21 +123,33 @@ export const resolveSessionSpecifier = (
   if (!trimmed) return null;
 
   if (trimmed === normalizeSessionId(trimmed)) {
-    const byId = locator.bySessionId.get(trimmed);
+    const byId = getSessionEntryById(locator, trimmed);
     if (byId) return byId;
   }
 
-  const resolvedPath = path.resolve(trimmed);
+  const resolvedPath = path.isAbsolute(trimmed) ? path.resolve(trimmed) : path.resolve(locator.root, trimmed);
   return locator.entries.find((entry) => entry.path === trimmed || path.resolve(entry.path) === resolvedPath) ?? null;
+};
+
+export const getSessionEntryById = (
+  locator: SessionGraphLocator,
+  sessionId: string,
+): SessionGraphLocatorEntry | null => {
+  const normalizedSessionId = normalizeSessionId(sessionId);
+  const duplicates = locator.duplicateSessionIds.get(normalizedSessionId);
+  if (duplicates) {
+    throw new Error(formatAmbiguousSessionIdMessage(normalizedSessionId, duplicates));
+  }
+  return locator.bySessionId.get(normalizedSessionId) ?? null;
 };
 
 export const getParentSessionEntry = (
   locator: SessionGraphLocator,
   childSessionId: string,
 ): SessionGraphLocatorEntry | null => {
-  const child = locator.bySessionId.get(normalizeSessionId(childSessionId));
+  const child = getSessionEntryById(locator, childSessionId);
   if (!child?.parentSessionId) return null;
-  return locator.bySessionId.get(child.parentSessionId) ?? null;
+  return getSessionEntryById(locator, child.parentSessionId);
 };
 
 export const getChildSessionEntries = (

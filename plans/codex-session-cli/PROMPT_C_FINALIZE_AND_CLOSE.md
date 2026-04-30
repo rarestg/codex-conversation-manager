@@ -40,7 +40,7 @@ Required delegation:
   - `fork_context: false`
   - model: `gpt-5.4`
   - reasoning_effort: `xhigh`
-- If you wait on a delegated `gpt-5.4` `xhigh` subagent, use at least a 30 minute wait:
+- If you wait on a delegated `gpt-5.4` `xhigh` subagent, use at least a 30-minute wait:
   - `timeout_ms >= 1800000`
 - Give every subagent ample context. Include:
   - the purpose of Codex Session CLI
@@ -76,6 +76,6 @@ Validation baseline:
 
 - `npm run typecheck`
 - `npm run check`
-- `npm run mdlint -- plans/codex-session-cli/*.md`
+- `npm run mdlint -- README.md plans/codex-session-cli/*.md`
 - run the chosen CLI entrypoint against the real sample parent and child sessions in both normal and JSON output modes
 ```

@@ -4,7 +4,7 @@ Date: 2026-03-25
 
 This document captures the JSONL reconnaissance work done for the Codex Session CLI investigation. It turns the `jq` probing, raw findings, and Bacon's research summary into a reusable field guide for engineers inspecting other Codex session files.
 
-This is not the product spec. Use [SPEC.md](/Users/rares/GITHUB/ARTIFACTS/codex-formatter/plans/codex-session-cli/SPEC.md) for the product and architecture definition. Use this file when you need to inspect raw session files and answer questions like:
+This is not the product spec. Use [SPEC.md](./SPEC.md) for the product and architecture definition. Use this file when you need to inspect raw session files and answer questions like:
 
 - What is the real session ID here?
 - Is this a root thread or a spawned subagent?

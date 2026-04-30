@@ -12,7 +12,6 @@ pnpm-debug.log*
 *.tsbuildinfo
 .claude/
 .agents/
-skills-lock.json
 GitHub Reviews/
 task_plan.md
 findings.md
