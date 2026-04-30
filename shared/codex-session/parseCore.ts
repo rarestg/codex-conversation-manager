@@ -86,9 +86,9 @@ export const extractSessionIdFromObject = (value: unknown, depth = 0): string | 
     obj.sessionId ??
     obj.conversation_id ??
     obj.conversationId ??
+    obj.id ??
     obj.resume_session_id ??
-    obj.resumeSessionId ??
-    obj.id;
+    obj.resumeSessionId;
   if (typeof direct === 'string' && direct.trim()) return normalizeSessionId(direct);
   if (typeof obj.session === 'string' && obj.session.trim()) return normalizeSessionId(obj.session);
   if (obj.session && typeof obj.session === 'object') {
