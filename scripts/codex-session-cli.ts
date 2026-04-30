@@ -801,7 +801,7 @@ const runParent = async (args: string[], options: CommandOptions) => {
   maybePrintParseWarnings(childLoaded, options);
 
   const childSessionLabel =
-    getResolvedSessionId(childLoaded) ?? childLoaded.locatorEntry.sessionId ?? childLoaded.locatorEntry.path;
+    childLoaded.locatorEntry.sessionId ?? getResolvedSessionId(childLoaded) ?? childLoaded.locatorEntry.path;
   const parentSessionId = getResolvedParentSessionId(childLoaded);
   if (!parentSessionId) {
     throw new CliError(`Session ${childSessionLabel} does not declare a parent session.`);
