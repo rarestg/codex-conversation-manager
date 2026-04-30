@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "codex-session": "tsx scripts/codex-session-cli.ts",
     "typecheck": "node scripts/typecheck.js",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
@@ -46,6 +47,7 @@
     "@vitejs/plugin-react": "^5.1.2",
     "markdownlint-cli2": "0.20.0",
     "tailwindcss": "^4.1.18",
+    "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "vite": "^7.3.1"
   }

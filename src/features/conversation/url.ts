@@ -1,16 +1,7 @@
+import { normalizeSessionId, SESSION_ID_PREFIX_REGEX, SESSION_ID_REGEX } from '../../../shared/codex-session/parseCore';
 import type { HistoryMode } from './types';
 
-export const SESSION_ID_REGEX = /\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/;
-export const SESSION_ID_PREFIX_REGEX = /\b(?:sess(?:ion)?[_-])[a-zA-Z0-9_-]{6,}\b/;
-
-export const normalizeSessionId = (value: string) => {
-  const trimmed = value.trim();
-  const uuidMatch = trimmed.match(SESSION_ID_REGEX);
-  if (uuidMatch) return uuidMatch[0];
-  const prefixMatch = trimmed.match(SESSION_ID_PREFIX_REGEX);
-  if (prefixMatch) return prefixMatch[0];
-  return trimmed;
-};
+export { normalizeSessionId, SESSION_ID_PREFIX_REGEX, SESSION_ID_REGEX };
 
 const safeDecode = (value: string) => {
   try {

@@ -28,6 +28,16 @@ Local web app for browsing, searching, and inspecting Codex JSONL session logs. 
 - Navigate turns and in-session matches with sticky controls and focus-gated keyboard shortcuts
 - Use dev-only demo routes for layout experiments and sticky-behavior checks
 
+## Codex Session CLI
+
+For terminal inspection workflows, use `npm run codex-session -- <command>`.
+
+- `overview <session>` reports session identity, lineage, timestamps, and tool-call counts
+- `show <session>` retrieves canonical `event_msg` messages with optional role, phase, and negative-index filters
+- `subagents <session>` inspects spawned child sessions from the parent-side graph
+- `parent <session>` resolves a child session back to its parent
+- add `--json` to any command for machine-readable output
+
 ## Quick Start
 
 CI runs on Node 20, so use a current Node 20.x install locally as well.
