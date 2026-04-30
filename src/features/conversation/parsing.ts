@@ -31,6 +31,7 @@ export const parseJsonl = (raw: string) => {
       metaCount: parsed.summary.metaCount,
       tokenCountCount: parsed.summary.tokenCountCount,
       activeDurationMs: parsed.summary.activeDurationMs,
+      preview: parsed.summary.preview,
       firstUserMessage: parsed.summary.preview,
     },
   };

@@ -75,9 +75,9 @@ All workers using this plan set should follow these rules:
 - Delegate when useful instead of doing everything serially.
 - Any delegated subagent must use:
   - `fork_context: false`
-  - model: `gpt-5.4`
+  - model: `gpt-5.5`
   - reasoning: `xhigh`
-- If a worker waits on a delegated `gpt-5.4` `xhigh` subagent, use at least a 30 minute wait window:
+- If a worker waits on a delegated `gpt-5.5` `xhigh` subagent, use at least a 30-minute wait window:
   - `timeout_ms >= 1800000`
 - Every subagent must receive explicit scope, file ownership or review scope, expected output, and relevant context from the docs in this folder.
 

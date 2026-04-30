@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 
 import fsp from 'node:fs/promises';
-import path from 'node:path';
 import { ensureRootExists, resolveSessionsRoot } from '../server/config';
 import { sanitizeGitRepoFields } from '../server/gitRepo';
 import {
   buildSessionGraphLocator,
   getChildSessionEntries,
-  getParentSessionEntry,
+  getSessionEntryById,
   resolveSessionSpecifier,
 } from '../shared/codex-session/locator';
 import { formatJsonValue, parseSessionCore } from '../shared/codex-session/parseCore';
+import { normalizeCwd } from '../shared/codex-session/path';
 import { parseSessionGraph } from '../shared/codex-session/sessionGraph';
 import type {
   CanonicalSessionMessage,
@@ -93,6 +93,7 @@ type SubagentCommandRow = {
   link: SessionGraphChildLink;
   childEntry: SessionGraphLocatorEntry | null;
   childLoaded: LoadedSession | null;
+  childLoadError: string | null;
   latestWaitEvent: SessionGraphWaitEvent | null;
   latestAssistantMessage: CanonicalSessionMessage | null;
   latestFinalAnswer: CanonicalSessionMessage | null;
@@ -114,18 +115,6 @@ class CliUsageError extends CliError {
     this.name = 'CliUsageError';
   }
 }
-
-const normalizeCwd = (value?: string | null) => {
-  if (!value) return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  try {
-    const normalized = path.normalize(trimmed);
-    return path.isAbsolute(normalized) ? path.resolve(normalized) : normalized;
-  } catch (_error) {
-    return trimmed;
-  }
-};
 
 const getOptionValue = (arg: string, name: string) => {
   if (arg === name) return { matched: true, inlineValue: null as string | null };
@@ -583,12 +572,22 @@ const loadSubagentCommandRows = async (
 ): Promise<SubagentCommandRow[]> => {
   const rows: SubagentCommandRow[] = [];
   for (const link of loaded.parsedGraph.spawnedChildren) {
-    const childEntry = link.agentId ? (locator.bySessionId.get(link.agentId) ?? null) : null;
-    const childLoaded = childEntry ? await loadSessionFromEntry(childEntry) : null;
+    let childEntry: SessionGraphLocatorEntry | null = null;
+    let childLoaded: LoadedSession | null = null;
+    let childLoadError: string | null = null;
+    if (link.agentId) {
+      try {
+        childEntry = getSessionEntryById(locator, link.agentId);
+        childLoaded = childEntry ? await loadSessionFromEntry(childEntry) : null;
+      } catch (error) {
+        childLoadError = error instanceof Error ? error.message : String(error);
+      }
+    }
     rows.push({
       link,
       childEntry,
       childLoaded,
+      childLoadError,
       latestWaitEvent: getLatestWaitEvent(loaded.parsedGraph, link.agentId),
       latestAssistantMessage: childLoaded
         ? selectLatestCanonicalMessage(childLoaded.parsedCore, 'assistant', null)
@@ -617,6 +616,7 @@ const buildSubagentRowResult = (row: SubagentCommandRow) => ({
   latestWaitStatus: row.link.latestWaitStatus,
   latestWaitEvent: buildWaitEventRecord(row.latestWaitEvent),
   latestNotification: buildNotificationRecord(row.link.latestNotification),
+  childLoadError: row.childLoadError,
   childSession: row.childLoaded
     ? buildSessionRecord(row.childLoaded)
     : row.childEntry
@@ -643,7 +643,7 @@ const buildSubagentsResult = (locator: SessionGraphLocator, loaded: LoadedSessio
     counts: {
       spawnCalls: loaded.parsedGraph.spawnCalls.length,
       spawnedChildren: loaded.parsedGraph.spawnedChildren.length,
-      resolvableChildSessions: getChildSessionEntries(locator, sessionId).length,
+      resolvableChildSessions: sessionId ? getChildSessionEntries(locator, sessionId).length : 0,
       parentSideNotifications: loaded.parsedGraph.notifications.length,
     },
     subagents: rows.map(buildSubagentRowResult),
@@ -652,7 +652,7 @@ const buildSubagentsResult = (locator: SessionGraphLocator, loaded: LoadedSessio
 
 const printSubagents = (locator: SessionGraphLocator, loaded: LoadedSession, rows: SubagentCommandRow[]) => {
   const sessionId = getResolvedSessionId(loaded) ?? loaded.locatorEntry.sessionId;
-  const resolvableChildren = getChildSessionEntries(locator, sessionId);
+  const resolvableChildren = sessionId ? getChildSessionEntries(locator, sessionId) : [];
   const lines = [
     `Session ID: ${formatOptional(sessionId)}`,
     `Path: ${loaded.locatorEntry.path}`,
@@ -697,6 +697,7 @@ const printSubagents = (locator: SessionGraphLocator, loaded: LoadedSession, row
       `  Child Session Path: ${formatOptional(row.childEntry?.path)}`,
       `  Child Source: ${formatOptional(childSource)}`,
       `  Child Parent Session ID: ${formatOptional(childParentSessionId)}`,
+      `  Child Load Error: ${formatOptional(row.childLoadError)}`,
       `  Latest Wait Timestamp: ${formatOptional(row.latestWaitEvent?.timestamp)}`,
       `  Latest Wait Timed Out: ${formatOptional(row.latestWaitEvent?.timedOut)}`,
       `  Latest Notification Timestamp: ${formatOptional(row.link.latestNotification?.timestamp)}`,
@@ -801,11 +802,14 @@ const runParent = async (args: string[], options: CommandOptions) => {
 
   const childSessionId = getResolvedSessionId(childLoaded) ?? childLoaded.locatorEntry.sessionId;
   const parentSessionId = getResolvedParentSessionId(childLoaded);
+  if (!childSessionId) {
+    throw new CliError(`Session ${childLoaded.locatorEntry.path} does not declare a session ID.`);
+  }
   if (!parentSessionId) {
     throw new CliError(`Session ${childSessionId} does not declare a parent session.`);
   }
 
-  const parentEntry = getParentSessionEntry(locator, childSessionId);
+  const parentEntry = getSessionEntryById(locator, parentSessionId);
   if (!parentEntry) {
     throw new CliError(`Parent session ${parentSessionId} for child session ${childSessionId} was not found.`);
   }
@@ -819,8 +823,11 @@ const runParent = async (args: string[], options: CommandOptions) => {
   printParent(childLoaded, parentLoaded);
 };
 
+const rawProcessArgs = process.argv.slice(2);
+const parsedProcessArgs = extractJsonFlag(rawProcessArgs);
+
 const main = async () => {
-  const parsedArgs = extractJsonFlag(process.argv.slice(2));
+  const parsedArgs = parsedProcessArgs;
   const args = parsedArgs.args;
   const options: CommandOptions = { json: parsedArgs.json };
 
@@ -854,7 +861,7 @@ const main = async () => {
   throw new CliUsageError(`Unknown command: ${command}`);
 };
 
-const { json: jsonOutput } = extractJsonFlag(process.argv.slice(2));
+const { json: jsonOutput } = parsedProcessArgs;
 
 try {
   await main();

@@ -1,7 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
-import { extractSessionDetails, parseSessionCore } from '../../shared/codex-session/parseCore';
+import {
+  extractSessionDetails,
+  extractSessionIdFromPath,
+  parseSessionCore,
+} from '../../shared/codex-session/parseCore';
+import { normalizeCwd } from '../../shared/codex-session/path';
 import type { IndexedMessage as CoreIndexedMessage } from '../../shared/codex-session/types';
 import type { SessionDetailSummary, SessionDetailTurn } from '../../shared/sessionDetailTypes';
 import { sanitizeGitRepoFields } from '../gitRepo';
@@ -11,18 +16,6 @@ export {
   extractSessionIdFromPath,
   normalizeSessionId,
 } from '../../shared/codex-session/parseCore';
-
-const normalizeCwd = (value?: string | null) => {
-  if (!value) return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  try {
-    const normalized = path.normalize(trimmed);
-    return path.isAbsolute(normalized) ? path.resolve(normalized) : normalized;
-  } catch (_error) {
-    return trimmed;
-  }
-};
 
 export interface IndexedMessage {
   turnId: number;
@@ -92,9 +85,9 @@ export const parseSessionRaw = ({ raw, sessionPath }: ParseSessionOptions): Pars
 export const readSessionMetadataFromFile = async (filePath: string): Promise<SessionMetadataResult> => {
   const stream = fs.createReadStream(filePath, { encoding: 'utf-8' });
   const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
-  let sessionId: string | null = null;
+  let sessionId: string | null = extractSessionIdFromPath(filePath);
   let cwd: string | null = null;
-  let sessionIdRank = 0;
+  let sessionIdRank = sessionId ? 4 : 0;
   let cwdRank = 0;
 
   try {

@@ -166,7 +166,7 @@ export interface ParsedSessionGraphResult {
 }
 
 export interface SessionGraphLocatorEntry {
-  sessionId: string;
+  sessionId: string | null;
   path: string;
   sourceKind: SessionGraphSourceKind;
   parentSessionId: string | null;
@@ -179,5 +179,6 @@ export interface SessionGraphLocator {
   root: string;
   entries: SessionGraphLocatorEntry[];
   bySessionId: Map<string, SessionGraphLocatorEntry>;
+  duplicateSessionIds: Map<string, SessionGraphLocatorEntry[]>;
   childrenByParentSessionId: Map<string, SessionGraphLocatorEntry[]>;
 }

@@ -81,14 +81,7 @@ const normalizeCwdValue = (value: string, normalizeCwd?: (value: string) => stri
 export const extractSessionIdFromObject = (value: unknown, depth = 0): string | null => {
   if (!value || typeof value !== 'object' || depth > 2) return null;
   const obj = value as Record<string, unknown>;
-  const direct =
-    obj.session_id ??
-    obj.sessionId ??
-    obj.conversation_id ??
-    obj.conversationId ??
-    obj.resume_session_id ??
-    obj.resumeSessionId ??
-    obj.id;
+  const direct = obj.session_id ?? obj.sessionId ?? obj.conversation_id ?? obj.conversationId ?? obj.id;
   if (typeof direct === 'string' && direct.trim()) return normalizeSessionId(direct);
   if (typeof obj.session === 'string' && obj.session.trim()) return normalizeSessionId(obj.session);
   if (obj.session && typeof obj.session === 'object') {
